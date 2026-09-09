@@ -40,23 +40,9 @@
 - `src/cli.ts`: 지금은 `#!/usr/bin/env node` 셔뱅과 `console.log("mam " + SERVER_VERSION)` 만. 이후 step에서 채운다.
 - `test/smoke.test.ts`: `@mam/protocol`에서 `PROTOCOL_VERSION`을 import해 1인지 확인 (크로스 패키지 해석 검증).
 
-### 4. `scripts/test.sh`
+### 4. `scripts/test.sh` (이미 존재함)
 
-`.harness.json`의 `test_command`가 이 스크립트다. 모든 세션 종료 시 실행되므로 실패 원인이 명확해야 한다.
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")/.."
-npm run typecheck
-npm test
-if [ -f ios/project.yml ] && [ "${MAM_TEST_SKIP_IOS:-0}" != "1" ]; then
-  (cd ios && xcodegen generate --quiet && xcodebuild test -scheme MacAgent \
-     -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -quiet)
-fi
-```
-
-실행 권한(`chmod +x`)을 준다. iOS 블록은 Phase 1이 `ios/project.yml`을 만들기 전까지 자동으로 건너뛴다.
+`.harness.json`의 `test_command`가 이 스크립트다. 계획 단계에서 이미 만들어져 있고, `package.json`이 없으면 통과, 있으면 `npm ci`(node_modules 없을 때) → `npm run typecheck --if-present` → `npm run test --if-present` → (`ios/project.yml`이 있으면) iOS 빌드·테스트 순으로 돈다. 모든 세션 종료 시 실행되므로 이 step이 `package.json`을 만드는 순간부터 `typecheck`와 `test` 스크립트가 실제로 존재하고 통과해야 한다. 스크립트 내용은 읽고 필요한 최소 수정만 하되, `--if-present` 가드와 iOS 블록의 조건은 유지한다.
 
 ### 5. 설치와 락파일
 
