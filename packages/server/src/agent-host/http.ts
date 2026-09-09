@@ -4,6 +4,7 @@ import type { AgentKind } from "@mam/protocol";
 import type { AgentAdapter } from "../agents/types.js";
 import { InternalError, InvalidRequestError } from "../errors.js";
 import type { SessionManager } from "../sessions/manager.js";
+import type { FlowRegistry, LoginStarter } from "./auth/flows.js";
 
 export interface AgentHostContext {
   /** `os.userInfo().username` 과 같아야 한다. `X-MAM-User` 는 이 값과 비교만 한다. */
@@ -20,6 +21,8 @@ export interface AgentHostContext {
   logger?: FastifyBaseLogger | FastifyServerOptions["logger"];
   /** 응답을 프로토콜 스키마로 검증한다. 기본 `NODE_ENV !== 'production'`. */
   validateResponses?: boolean;
+  /** 로그인 플로우(PROTOCOL 1절). 테스트 주입용. 기본은 실제 `claude setup-token` / codex device code. */
+  login?: { registry?: FlowRegistry; starters?: Partial<Record<AgentKind, LoginStarter>> };
 }
 
 /** 라우트가 받는 컨텍스트. `validateResponses` 가 확정돼 있다. */

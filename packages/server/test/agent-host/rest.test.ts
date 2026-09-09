@@ -168,12 +168,11 @@ describe("fs and git", () => {
 });
 
 describe("auth stubs and response validation", () => {
-  it("auth routes are 501 stubs", async () => {
-    const res = await post("/api/v1/auth/claude/login");
-    expect(res.statusCode).toBe(501);
-    expect(res.json()).toEqual({ error: { code: "internal", message: "login flow not available; use ssh" } });
-    expect((await post("/api/v1/auth/claude/login/flw_1/code", { code: "x" })).statusCode).toBe(501);
-    expect((await get("/api/v1/auth/claude/login/flw_1")).statusCode).toBe(501);
+  it("auth routes: unknown flow is 404, real flows are covered in test/agent-host/auth", async () => {
+    expect((await post("/api/v1/auth/claude/login/flw_01J8ZQ4K5N7P9R3S6T8V0W2XZZ/code", { code: "x" })).statusCode).toBe(404);
+    const res = await get("/api/v1/auth/claude/login/flw_01J8ZQ4K5N7P9R3S6T8V0W2XZZ");
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe("not_found");
   });
 
   it("dev-mode response validation turns a contract violation into 500", async () => {

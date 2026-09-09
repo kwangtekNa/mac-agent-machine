@@ -49,6 +49,28 @@ authorized_keys 에 공개키 추가
 4. Codex 로그인: SSH에서 `codex login`(출력된 URL을 브라우저에서 열기) 또는 앱의 device code 흐름.
 5. MacAgent 앱에 `https://<hostname>`을 입력한다. 로그인 화면은 없다. 접속 기기의 Tailscale 신원으로 자동 매핑된다.
 
+
+### 앱 로그인 플로우 수동 확인 (step 9, 사람이 브라우저로 끝낸다)
+
+개발 모드에서 확인한다. `MAM_FAKE_AGENT` 없이 gateway 를 띄우고 다른 터미널에서:
+
+```bash
+npm run dev -w @mam/server -- gateway --dev
+curl -s -X POST -H 'X-MAM-Protocol: 1' http://127.0.0.1:7777/api/v1/auth/claude/login
+# → {"flowId":"flw_...","url":"https://claude.com/cai/oauth/authorize?...","instructions":"...","needsCode":true}
+# 폰/브라우저에서 url 을 열어 로그인하고 표시되는 코드를 복사한 뒤:
+curl -s -X POST -H 'X-MAM-Protocol: 1' -H 'Content-Type: application/json' \
+  -d '{"code":"<붙여넣은 코드>"}' http://127.0.0.1:7777/api/v1/auth/claude/login/<flowId>/code
+curl -s -H 'X-MAM-Protocol: 1' http://127.0.0.1:7777/api/v1/auth/claude/login/<flowId>
+# → {"status":"done","message":"로그인 완료"} 이면 ~/.mam/secrets/claude-oauth-token(0600) 이 생겼고 GET /api/v1/me 의 claude.loggedIn 이 true 다.
+```
+
+Codex 는 `POST /api/v1/auth/codex/login` 이 `{ url, instructions: "링크를 열고 코드 XXXX-XXXX 를 입력하세요", needsCode: false }` 를 주며, 브라우저에서 코드를 입력하면 상태가 `done` 이 된다. 코드 제출 엔드포인트는 쓰지 않는다.
+
+- 바이너리가 없으면 501 `agent_unavailable` 과 SSH 안내가 온다. 플로우는 에이전트당 1개, 15분 뒤 만료, 10분 안에 끝나지 않으면 `error`.
+- 성공 화면의 토큰 접두어(`sk-ant-oat01-`)는 아직 실측 전이다. `status` 가 `done` 으로 안 바뀌면 `packages/server/src/agent-host/auth/README.md` 의 관찰 기록과 `TOKEN_RE` 를 확인한다.
+- 계정을 바꾸려면 `~/.mam/secrets/claude-oauth-token` 을 삭제한다(이 파일이 `/login` 자격증명보다 우선한다).
+
 ## 4. 운영
 
 - 로그: gateway `/var/log/mam/gateway.log`, 인증서 갱신 `/var/log/mam/certrenew.log`, 사용자별 agent-host `~<user>/.mam/agent-host.log`.

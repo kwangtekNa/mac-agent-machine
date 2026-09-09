@@ -69,6 +69,8 @@ fi
 log "배포: $FROM_DIR → $INSTALL_DIR"; mkdir -p "$INSTALL_DIR"
 rsync -a --delete --exclude node_modules --exclude .git --exclude phases --exclude ios --exclude .worktrees --exclude apps "$FROM_DIR/" "$INSTALL_DIR/"
 (cd "$INSTALL_DIR" && export PATH="$BREW_PREFIX/bin:$PATH" && npm ci --no-audit --no-fund && npm run build && npm prune --omit=dev)
+# node-pty prebuild 의 spawn-helper 는 npm 설치 후 실행 비트가 없다(packages/server/src/agent-host/auth/README.md)
+chmod 755 "$INSTALL_DIR"/node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true
 [ -f "$CLI" ] || { echo "빌드 산출물이 없습니다: $CLI" >&2; exit 1; }
 
 # 6. 디렉토리 + config
