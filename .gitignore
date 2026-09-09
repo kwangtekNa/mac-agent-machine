@@ -1,0 +1,28 @@
+# harness runtime artifacts
+phases/**/logs/
+phases/**/.lock
+phases/**/step*-output.json
+.worktrees/
+
+# node
+node_modules/
+dist/
+*.tsbuildinfo
+.npm/
+
+# ios / xcode
+ios/*.xcodeproj/
+ios/*.xcworkspace/
+ios/DerivedData/
+ios/build/
+xcuserdata/
+*.xcuserstate
+.build/
+Packages/
+
+# env / local
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
