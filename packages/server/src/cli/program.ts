@@ -4,7 +4,7 @@ import { Command } from "commander";
 import { defaultAdapters, installSignalHandlers, startAgentHost } from "../agent-host/server.js";
 import type { AgentKind } from "@mam/protocol";
 import type { AgentProbe } from "../agents/types.js";
-import { devConfig, loadConfig } from "../config.js";
+import { devConfig, loadConfig, type ConfigInput } from "../config.js";
 import { findTailscaleBin, StaticIdentityResolver, TailscaleIdentityResolver, type IdentityResolver } from "../gateway/identity.js";
 import { installGatewaySignalHandlers, startGateway } from "../gateway/server.js";
 import { AgentHostSupervisor } from "../gateway/supervisor.js";
@@ -29,6 +29,14 @@ function makeLogger(): Pick<Console, "info" | "warn" | "error"> {
     warn: (...a: unknown[]) => console.warn(ts(), "WARN", ...a),
     error: (...a: unknown[]) => console.error(ts(), "ERROR", ...a),
   };
+}
+
+/** `MAM_DEV_PORT` (scripts/dev-smoke.sh 가 포트 충돌을 피할 때 씀). 없거나 정수가 아니면 devConfig 기본값(7777)을 쓴다. */
+export function devPortOverride(env: NodeJS.ProcessEnv): Partial<ConfigInput> {
+  const raw = env.MAM_DEV_PORT;
+  if (raw === undefined) return {};
+  const port = Number(raw);
+  return Number.isInteger(port) ? { port } : {};
 }
 
 /** 어댑터 probe 결과를 JSON 으로 stdout 에 쓴다(`mam doctor` 가 sudo -u 로 호출). */
@@ -89,7 +97,7 @@ export function createProgram(io: CliIo = processIo()): Command {
         io.err("gateway 는 root 로 실행해야 합니다 (개발 모드는 --dev)");
         io.exit(1);
       }
-      const config = dev ? devConfig() : await loadConfig(o.config);
+      const config = dev ? devConfig(devPortOverride(process.env)) : await loadConfig(o.config);
       const logger = makeLogger();
       const users = new UserDirectory(config.users);
       let identity: IdentityResolver;

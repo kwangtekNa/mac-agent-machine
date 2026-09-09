@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createProgram } from "../../src/cli/program.js";
+import { createProgram, devPortOverride } from "../../src/cli/program.js";
 import type { CliIo } from "../../src/cli/common.js";
 
 class ExitError extends Error { constructor(readonly code: number) { super(`exit ${code}`); } }
@@ -42,5 +42,10 @@ describe("mam cli", () => {
     const json = JSON.parse(r.out);
     expect(json.ok).toBe(false);
     expect(json.checks.find((c: { name: string }) => c.name === "config").status).toBe("fail");
+  });
+  it("devPortOverride reads MAM_DEV_PORT for `gateway --dev` (scripts/dev-smoke.sh 포트 충돌 회피)", () => {
+    expect(devPortOverride({})).toEqual({});
+    expect(devPortOverride({ MAM_DEV_PORT: "8080" })).toEqual({ port: 8080 });
+    expect(devPortOverride({ MAM_DEV_PORT: "not-a-number" })).toEqual({});
   });
 });
