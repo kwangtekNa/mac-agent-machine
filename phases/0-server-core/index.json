@@ -65,10 +65,37 @@
     {
       "step": 2,
       "name": "session-manager",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         1
-      ]
+      ],
+      "started_at": "2026-09-09T20:28:52+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "c8365d91-b6c7-4f79-b87a-7fe24bade1eb",
+          "cost_usd": null,
+          "duration_s": 633.8,
+          "num_turns": null,
+          "exit_code": 1,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "106d5612-81de-450f-ad11-0000bc413c90",
+          "cost_usd": 3.4536977500000003,
+          "duration_s": 256.5,
+          "num_turns": 22,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 3.453698,
+      "duration_s": 890.3,
+      "retries": 1,
+      "session_id": "106d5612-81de-450f-ad11-0000bc413c90",
+      "summary": "세션 코어 완성: packages/server/src/agents/types.ts(AgentAdapter/AgentSession/AgentEvent, ItemDraft=DistributiveOmit<TimelineItem,'seq'>), src/ids.ts(newId ULID), src/errors.ts(MamError + code별 서브클래스, SessionBusyError/ApprovalAlreadyResolvedError 등), src/agents/fake/(FakeAdapter·FakeSession·defaultScript·AsyncQueue; autoApprove/delayMs/script 옵션, 승인 옵션 allow/allow_session/deny/abort, \"fail\" 텍스트→error, interrupt→status idle, resumeNativeId 재사용, startCalls/sessions 이력 노출), src/sessions/event-log.ts(JSONL append/readSince/tail, 손상 줄 건너뜀), src/sessions/manager.ts(레지스트리·seq 발급·링버퍼·팬아웃·pending 승인 first-wins·상태기계·유휴 종료·tmp+rename 영속화·open() 복구). 테스트 12개(manager 9, event-log 3) 추가, 전체 133 passed. 결정: 유휴 시계는 lastActivityAt(이벤트 발행 또는 마지막 구독자 이탈) 기준; 승인 자동 만료 없음; create 실패 세션은 error 상태로 남김. 이전 시도 실패 원인은 stale한 packages/protocol/dist 때문에 서버 typecheck가 step1 타입을 못 본 것 → packages/server/package.json typecheck를 \"tsc -b ../protocol && tsc --noEmit\"으로 변경(새 의존성 없음). AC 전부 통과: npm ci, typecheck 0 errors, npm test 133 passed, build OK, scripts/test.sh OK. @mam/protocol·phases/ 미수정.",
+      "completed_at": "2026-09-09T20:43:42+0900"
     },
     {
       "step": 3,
