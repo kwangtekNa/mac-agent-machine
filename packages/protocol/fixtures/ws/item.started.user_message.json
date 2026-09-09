@@ -1,0 +1,11 @@
+{
+  "type": "item.started",
+  "seq": 34,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:00Z",
+  "item": {
+    "id": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD1", "seq": 34, "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC1", "kind": "user_message", "status": "completed",
+    "createdAt": "2026-09-09T10:10:00Z", "completedAt": "2026-09-09T10:10:00Z",
+    "payload": { "text": "로그인 버그를 고치고 테스트를 돌려줘", "attachments": [] }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "type": "error",
+  "seq": 47,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:11:31Z",
+  "message": "turn already running",
+  "recoverable": true
+}

@@ -1,0 +1,11 @@
+{
+  "type": "item.started",
+  "seq": 42,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:30Z",
+  "item": {
+    "id": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD9", "seq": 42, "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC1", "kind": "turn_summary", "status": "completed",
+    "createdAt": "2026-09-09T10:10:30Z", "completedAt": "2026-09-09T10:10:30Z",
+    "payload": { "durationMs": 30412, "usage": { "inputTokens": 18420, "outputTokens": 1275, "cacheReadTokens": 16000 }, "costUsd": 0.12, "stopReason": "end_turn" }
+  }
+}

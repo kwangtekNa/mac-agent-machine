@@ -10,6 +10,8 @@
 - 오류: `{ "error": { "code": "not_found" | "forbidden" | "invalid_request" | "conflict" | "agent_unavailable" | "internal", "message": "..." } }`와 대응 HTTP 상태.
 - ID: `ses_<ulid>`, `itm_<ulid>`, `apr_<ulid>`, `trn_<ulid>`, `flw_<ulid>`.
 - 시각: ISO-8601 UTC 문자열. 경로: 절대 경로. 클라이언트가 `~/`로 시작하는 경로를 보내면 서버가 홈으로 치환한다.
+- 알 수 없는 키: 클라이언트는 모르는 키를 거부하지 않고 무시한다(서버가 필드를 추가해도 구 클라이언트가 깨지지 않는다). 단 판별자(`kind`, `type`)가 모르는 값이면 실패한다.
+- `null`: 값이 없을 수 있는 필드는 키를 생략하지 않고 `null`을 보낸다. 해당 필드: `Session.model|nativeId|preview`, `agents[].version|account`, `projects[].lastSessionAt`, `fs/list.parent`(홈 루트), `entries[].size|gitStatus`, `git/status.branch`, `TimelineItem.turnId`(턴 밖 아이템, 예: `system`)`|completedAt`, `tool_call.exitCode`, `Approval.detail|diff`. `?`가 붙은 필드는 키 자체가 생략될 수 있다.
 
 ## 1. REST
 
@@ -178,7 +180,7 @@ WS 없이도 응답할 수 있는 REST 경로. 본문은 WS `approval.respond`�
 | `file_change` | `{ "files": [ { "path": "src/a.ts", "kind": "add" | "modify" | "delete" | "rename", "additions": 10, "deletions": 2 } ], "patch": "diff --git ..." }` |
 | `plan` | `{ "steps": [ { "text": "...", "status": "pending" | "in_progress" | "completed" } ] }` |
 | `approval` | `<Approval>` (아래) + `"resolution"?: { "optionId": "...", "by": "...", "at": "..." }` |
-| `turn_summary` | `{ "durationMs": 1234, "usage": {...}, "costUsd": 0.12, "stopReason": "end_turn" }` |
+| `turn_summary` | `{ "durationMs": 1234, "usage": {...}, "costUsd"?: 0.12, "stopReason": "end_turn" }` |
 | `error` | `{ "message": "...", "recoverable": true }` |
 | `system` | `{ "text": "컨텍스트가 압축되었습니다" }` |
 

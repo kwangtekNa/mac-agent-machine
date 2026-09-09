@@ -1,0 +1,26 @@
+{
+  "user": "alice",
+  "email": "alice@example.com",
+  "home": "/Users/alice",
+  "workspaceRoot": "/Users/alice/work",
+  "agents": [
+    {
+      "kind": "claude",
+      "available": true,
+      "version": "2.1.266",
+      "loggedIn": true,
+      "account": "alice@example.com"
+    },
+    {
+      "kind": "codex",
+      "available": true,
+      "version": "0.153.4",
+      "loggedIn": false,
+      "account": null
+    }
+  ],
+  "server": {
+    "version": "0.1.0",
+    "protocolVersion": 1
+  }
+}

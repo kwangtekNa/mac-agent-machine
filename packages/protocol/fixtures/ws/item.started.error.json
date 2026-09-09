@@ -1,0 +1,11 @@
+{
+  "type": "item.started",
+  "seq": 43,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:11:00Z",
+  "item": {
+    "id": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XDA", "seq": 43, "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC1", "kind": "error", "status": "completed",
+    "createdAt": "2026-09-09T10:11:00Z", "completedAt": "2026-09-09T10:11:00Z",
+    "payload": { "message": "API 요청이 실패했습니다 (429 rate_limit). 잠시 후 다시 시도하세요.", "recoverable": true }
+  }
+}

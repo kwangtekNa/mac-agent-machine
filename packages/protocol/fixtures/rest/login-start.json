@@ -1,0 +1,6 @@
+{
+  "flowId": "flw_01J8ZQ4K5N7P9R3S6T8V0W2XF1",
+  "url": "https://claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code",
+  "instructions": "브라우저에서 열고 코드를 붙여넣으세요",
+  "needsCode": true
+}

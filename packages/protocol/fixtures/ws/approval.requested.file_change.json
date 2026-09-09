@@ -1,0 +1,18 @@
+{
+  "type": "approval.requested",
+  "seq": 39,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:22Z",
+  "approval": {
+    "approvalId": "apr_01J8ZQ4K5N7P9R3S6T8V0W2XE2", "itemId": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD6", "kind": "file_change",
+    "title": "src/login.ts 수정", "prompt": "Claude wants to edit src/login.ts",
+    "detail": "/Users/alice/work/app/src/login.ts",
+    "diff": "diff --git a/src/login.ts b/src/login.ts\n--- a/src/login.ts\n+++ b/src/login.ts\n@@ -10,3 +10,5 @@\n-  return token;\n+  if (token.expiresAt < Date.now()) {\n+    throw new Error(\"token expired\");\n+  }\n+  return token;\n",
+    "options": [
+      { "id": "allow", "label": "허용", "style": "primary" },
+      { "id": "allow_session", "label": "이 세션에서 항상 허용", "style": "secondary" },
+      { "id": "deny", "label": "거절", "style": "destructive" }
+    ],
+    "inputFields": [], "requestedAt": "2026-09-09T10:10:22Z"
+  }
+}

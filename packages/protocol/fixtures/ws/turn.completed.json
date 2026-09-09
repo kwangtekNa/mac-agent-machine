@@ -1,0 +1,11 @@
+{
+  "type": "turn.completed",
+  "seq": 43,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:30Z",
+  "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC1",
+  "durationMs": 30412,
+  "usage": { "inputTokens": 18420, "outputTokens": 1275, "cacheReadTokens": 16000 },
+  "costUsd": 0.12,
+  "stopReason": "end_turn"
+}

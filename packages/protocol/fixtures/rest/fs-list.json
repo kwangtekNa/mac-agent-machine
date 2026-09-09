@@ -1,0 +1,16 @@
+{
+  "path": "/Users/alice/work/app",
+  "parent": "/Users/alice/work",
+  "isGitRepo": true,
+  "entries": [
+    { "name": ".git", "path": "/Users/alice/work/app/.git", "type": "dir", "size": null, "mtime": "2026-09-09T10:10:22Z", "isHidden": true, "gitStatus": null },
+    { "name": "src", "path": "/Users/alice/work/app/src", "type": "dir", "size": null, "mtime": "2026-09-09T10:10:22Z", "isHidden": false, "gitStatus": null },
+    { "name": ".env", "path": "/Users/alice/work/app/.env", "type": "file", "size": 84, "mtime": "2026-09-01T08:00:00Z", "isHidden": true, "gitStatus": "!" },
+    { "name": ".gitignore", "path": "/Users/alice/work/app/.gitignore", "type": "file", "size": 22, "mtime": "2026-09-01T08:00:00Z", "isHidden": true, "gitStatus": null },
+    { "name": "current", "path": "/Users/alice/work/app/current", "type": "symlink", "size": null, "mtime": "2026-09-02T09:00:00Z", "isHidden": false, "gitStatus": null },
+    { "name": "index.ts", "path": "/Users/alice/work/app/index.ts", "type": "file", "size": 1240, "mtime": "2026-09-09T10:10:22Z", "isHidden": false, "gitStatus": "M" },
+    { "name": "notes.txt", "path": "/Users/alice/work/app/notes.txt", "type": "file", "size": 310, "mtime": "2026-09-09T09:30:00Z", "isHidden": false, "gitStatus": "?" },
+    { "name": "package.json", "path": "/Users/alice/work/app/package.json", "type": "file", "size": 512, "mtime": "2026-09-08T12:00:00Z", "isHidden": false, "gitStatus": "A" },
+    { "name": "app.sock", "path": "/Users/alice/work/app/app.sock", "type": "other", "size": null, "mtime": "2026-09-09T10:00:00Z", "isHidden": false, "gitStatus": null }
+  ]
+}

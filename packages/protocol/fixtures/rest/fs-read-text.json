@@ -1,0 +1,10 @@
+{
+  "path": "/Users/alice/work/app/src/index.ts",
+  "size": 59,
+  "mtime": "2026-09-09T10:10:22Z",
+  "isBinary": false,
+  "encoding": "utf8",
+  "content": "import { hello } from \"./hello.js\";\n\nconsole.log(hello());\n",
+  "truncated": false,
+  "language": "typescript"
+}

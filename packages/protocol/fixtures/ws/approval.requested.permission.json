@@ -1,0 +1,17 @@
+{
+  "type": "approval.requested",
+  "seq": 44,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:11:10Z",
+  "approval": {
+    "approvalId": "apr_01J8ZQ4K5N7P9R3S6T8V0W2XE3", "itemId": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XDB", "kind": "permission",
+    "title": "네트워크 접근 허용", "prompt": "Codex wants network access to fetch https://registry.npmjs.org",
+    "detail": null, "diff": null,
+    "options": [
+      { "id": "allow", "label": "허용", "style": "primary" },
+      { "id": "allow_session", "label": "이 세션에서 항상 허용", "style": "secondary" },
+      { "id": "deny", "label": "거절", "style": "destructive" }
+    ],
+    "inputFields": [], "requestedAt": "2026-09-09T10:11:10Z"
+  }
+}

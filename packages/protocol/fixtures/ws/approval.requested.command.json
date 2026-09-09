@@ -1,0 +1,17 @@
+{
+  "type": "approval.requested",
+  "seq": 38,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:04Z",
+  "approval": {
+    "approvalId": "apr_01J8ZQ4K5N7P9R3S6T8V0W2XE1", "itemId": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD5", "kind": "command",
+    "title": "npm test 실행", "prompt": "Claude wants to run: npm test",
+    "detail": "cwd: /Users/alice/work/app\n$ npm test", "diff": null,
+    "options": [
+      { "id": "allow", "label": "허용", "style": "primary" },
+      { "id": "allow_session", "label": "이 세션에서 항상 허용", "style": "secondary" },
+      { "id": "deny", "label": "거절", "style": "destructive" }
+    ],
+    "inputFields": [], "requestedAt": "2026-09-09T10:10:04Z"
+  }
+}

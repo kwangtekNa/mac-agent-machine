@@ -1,0 +1,21 @@
+{
+  "type": "approval.requested",
+  "seq": 45,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:11:20Z",
+  "approval": {
+    "approvalId": "apr_01J8ZQ4K5N7P9R3S6T8V0W2XE4", "itemId": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XDC", "kind": "user_input",
+    "title": "브랜치 설정", "prompt": "작업 브랜치 이름과 병합 방식을 알려주세요",
+    "detail": null, "diff": null,
+    "options": [
+      { "id": "submit", "label": "제출", "style": "primary" },
+      { "id": "cancel", "label": "취소", "style": "secondary" }
+    ],
+    "inputFields": [
+      { "id": "branch", "label": "브랜치 이름", "type": "text" },
+      { "id": "token", "label": "배포 토큰", "type": "secret" },
+      { "id": "strategy", "label": "병합 방식", "type": "choice", "choices": ["merge", "rebase", "squash"] }
+    ],
+    "requestedAt": "2026-09-09T10:11:20Z"
+  }
+}

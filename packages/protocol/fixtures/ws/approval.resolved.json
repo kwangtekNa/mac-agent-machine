@@ -1,0 +1,9 @@
+{
+  "type": "approval.resolved",
+  "seq": 39,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:15Z",
+  "approvalId": "apr_01J8ZQ4K5N7P9R3S6T8V0W2XE1",
+  "optionId": "allow_session",
+  "by": "client"
+}

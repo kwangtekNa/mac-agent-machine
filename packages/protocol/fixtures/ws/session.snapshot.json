@@ -1,0 +1,47 @@
+{
+  "type": "session.snapshot",
+  "seq": 0,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:05Z",
+  "session": {
+    "id": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB", "agent": "claude", "cwd": "/Users/alice/work/app", "title": "로그인 버그 수정",
+    "mode": "ask", "model": null, "status": "waiting_approval", "nativeId": "7f3c2a1e-9b4d-4c6f-8e2a-1d5b7c9e3f00",
+    "createdAt": "2026-09-09T10:00:00Z", "updatedAt": "2026-09-09T10:10:04Z",
+    "lastSeq": 38, "pendingApprovals": 1, "preview": null
+  },
+  "items": [
+    {
+    "id": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD4", "seq": 37, "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC1", "kind": "tool_call", "status": "running",
+    "createdAt": "2026-09-09T10:10:04Z", "completedAt": null,
+    "payload": { "tool": "bash", "name": "Bash", "title": "npm test", "input": { "command": "npm test", "timeout": 120000 }, "output": "", "exitCode": null, "truncated": false }
+  },
+    {
+      "id": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD5", "seq": 38, "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC1", "kind": "approval", "status": "running",
+      "createdAt": "2026-09-09T10:10:04Z", "completedAt": null,
+      "payload": {
+    "approvalId": "apr_01J8ZQ4K5N7P9R3S6T8V0W2XE1", "itemId": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD5", "kind": "command",
+    "title": "npm test 실행", "prompt": "Claude wants to run: npm test",
+    "detail": "cwd: /Users/alice/work/app\n$ npm test", "diff": null,
+    "options": [
+      { "id": "allow", "label": "허용", "style": "primary" },
+      { "id": "allow_session", "label": "이 세션에서 항상 허용", "style": "secondary" },
+      { "id": "deny", "label": "거절", "style": "destructive" }
+    ],
+    "inputFields": [], "requestedAt": "2026-09-09T10:10:04Z"
+  }
+    }
+  ],
+  "pendingApprovals": [ {
+    "approvalId": "apr_01J8ZQ4K5N7P9R3S6T8V0W2XE1", "itemId": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD5", "kind": "command",
+    "title": "npm test 실행", "prompt": "Claude wants to run: npm test",
+    "detail": "cwd: /Users/alice/work/app\n$ npm test", "diff": null,
+    "options": [
+      { "id": "allow", "label": "허용", "style": "primary" },
+      { "id": "allow_session", "label": "이 세션에서 항상 허용", "style": "secondary" },
+      { "id": "deny", "label": "거절", "style": "destructive" }
+    ],
+    "inputFields": [], "requestedAt": "2026-09-09T10:10:04Z"
+  } ],
+  "replayFrom": 36,
+  "truncated": false
+}

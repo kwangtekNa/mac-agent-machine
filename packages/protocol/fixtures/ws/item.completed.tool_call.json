@@ -1,0 +1,11 @@
+{
+  "type": "item.completed",
+  "seq": 37,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:21Z",
+  "item": {
+    "id": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD4", "seq": 37, "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC1", "kind": "tool_call", "status": "completed",
+    "createdAt": "2026-09-09T10:10:04Z", "completedAt": "2026-09-09T10:10:21Z",
+    "payload": { "tool": "bash", "name": "Bash", "title": "npm test", "input": { "command": "npm test", "timeout": 120000 }, "output": "> app@1.0.0 test\n> vitest run\n\n ✓ src/login.test.ts (3 tests) 12ms\n\n Test Files  1 passed (1)\n      Tests  3 passed (3)\n", "exitCode": 0, "truncated": false }
+  }
+}

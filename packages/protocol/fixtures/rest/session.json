@@ -1,0 +1,15 @@
+{
+  "id": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "agent": "claude",
+  "cwd": "/Users/alice/work/app",
+  "title": "로그인 버그 수정",
+  "mode": "ask",
+  "model": null,
+  "status": "idle",
+  "nativeId": "7f3c2a1e-9b4d-4c6f-8e2a-1d5b7c9e3f00",
+  "createdAt": "2026-09-09T10:00:00Z",
+  "updatedAt": "2026-09-09T10:12:00Z",
+  "lastSeq": 42,
+  "pendingApprovals": 0,
+  "preview": "테스트가 통과했습니다."
+}

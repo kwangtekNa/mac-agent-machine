@@ -1,0 +1,7 @@
+{
+  "type": "turn.start",
+  "text": "이 스크린샷의 버튼 정렬을 고쳐줘",
+  "attachments": [
+    { "kind": "image", "mediaType": "image/png", "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" }
+  ]
+}

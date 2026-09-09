@@ -1,0 +1,6 @@
+{
+  "projects": [
+    { "path": "/Users/alice/work/app", "name": "app", "isGitRepo": true, "lastSessionAt": "2026-09-09T10:00:00Z", "sessionCount": 3 },
+    { "path": "/Users/alice/work/notes", "name": "notes", "isGitRepo": false, "lastSessionAt": null, "sessionCount": 0 }
+  ]
+}

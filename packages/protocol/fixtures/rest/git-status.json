@@ -1,0 +1,12 @@
+{
+  "isRepo": true,
+  "branch": "main",
+  "ahead": 0,
+  "behind": 2,
+  "entries": [
+    { "path": "src/index.ts", "index": " ", "worktree": "M" },
+    { "path": "package.json", "index": "A", "worktree": " " },
+    { "path": "src/old.ts", "index": "D", "worktree": " " },
+    { "path": "notes.txt", "index": "?", "worktree": "?" }
+  ]
+}

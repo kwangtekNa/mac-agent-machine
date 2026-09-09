@@ -1,0 +1,11 @@
+{
+  "type": "item.started",
+  "seq": 36,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:03Z",
+  "item": {
+    "id": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD3", "seq": 36, "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC1", "kind": "assistant_message", "status": "running",
+    "createdAt": "2026-09-09T10:10:03Z", "completedAt": null,
+    "payload": { "text": "", "phase": "commentary" }
+  }
+}

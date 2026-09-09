@@ -1,0 +1,9 @@
+{
+  "type": "item.delta",
+  "seq": 36,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:03Z",
+  "itemId": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD3",
+  "field": "text",
+  "delta": "`src/login.ts`에 만료 검사를 "
+}

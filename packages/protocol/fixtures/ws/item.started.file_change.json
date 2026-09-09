@@ -1,0 +1,17 @@
+{
+  "type": "item.started",
+  "seq": 39,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:22Z",
+  "item": {
+    "id": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD6", "seq": 39, "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC1", "kind": "file_change", "status": "completed",
+    "createdAt": "2026-09-09T10:10:22Z", "completedAt": "2026-09-09T10:10:22Z",
+    "payload": {
+      "files": [
+        { "path": "src/login.ts", "kind": "modify", "additions": 3, "deletions": 1 },
+        { "path": "src/login.test.ts", "kind": "add", "additions": 12, "deletions": 0 }
+      ],
+      "patch": "diff --git a/src/login.ts b/src/login.ts\n--- a/src/login.ts\n+++ b/src/login.ts\n@@ -10,3 +10,5 @@\n-  return token;\n+  if (token.expiresAt < Date.now()) {\n+    throw new Error(\"token expired\");\n+  }\n+  return token;\n"
+    }
+  }
+}

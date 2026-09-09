@@ -1,0 +1,6 @@
+{
+  "type": "approval.respond",
+  "approvalId": "apr_01J8ZQ4K5N7P9R3S6T8V0W2XE1",
+  "optionId": "deny",
+  "message": "테스트는 CI에서 돌립니다. 로컬에서 실행하지 마세요."
+}

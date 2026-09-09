@@ -1,0 +1,15 @@
+{
+  "type": "item.started",
+  "seq": 40,
+  "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB",
+  "ts": "2026-09-09T10:10:23Z",
+  "item": {
+    "id": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XD7", "seq": 40, "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC1", "kind": "plan", "status": "running",
+    "createdAt": "2026-09-09T10:10:23Z", "completedAt": null,
+    "payload": { "steps": [
+      { "text": "만료 검사 추가", "status": "in_progress" },
+      { "text": "테스트 실행", "status": "pending" },
+      { "text": "결과 요약", "status": "pending" }
+    ] }
+  }
+}
