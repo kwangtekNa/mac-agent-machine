@@ -197,11 +197,55 @@
     {
       "step": 6,
       "name": "codex-adapter",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         2,
         5
-      ]
+      ],
+      "started_at": "2026-09-09T21:23:42+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "7a7afcb0-8db5-4685-a5f1-c822fb920808",
+          "cost_usd": 4.75775825,
+          "duration_s": 501.5,
+          "num_turns": 15,
+          "exit_code": 0,
+          "timeout": false,
+          "interview": true
+        },
+        {
+          "attempt": 1,
+          "session_id": "70f689f4-9351-4a81-ab42-54e8d29797a1",
+          "cost_usd": 4.7867362500000015,
+          "duration_s": 443.4,
+          "num_turns": 13,
+          "exit_code": 0,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "5c891814-e544-44e6-b20a-2abb56ed6dcf",
+          "cost_usd": 2.7680779999999996,
+          "duration_s": 290.2,
+          "num_turns": 33,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 12.312573,
+      "duration_s": 1235.1,
+      "retries": 1,
+      "session_id": "5c891814-e544-44e6-b20a-2abb56ed6dcf",
+      "interviews": [
+        {
+          "question": "ts-rs 생성 바인딩(packages/server/src/agents/codex/generated/)의 확장자 없는 상대 import(`from \"./X\"`)가 base tsconfig의 `moduleResolution: NodeNext`에서 TS2835로 실패합니다. 어느 방식으로 해결할까요?",
+          "answer": "B",
+          "at": "2026-09-09T22:38:43+0900"
+        }
+      ],
+      "summary": "Codex 어댑터 완성(이전 시도 산출물 검증 후 보정): packages/server/src/agents/codex/{jsonrpc,process,mapping,adapter,index}.ts + generated/(codex app-server generate-ts, codex-cli 0.153.4, 706개 .ts, README에 생성 명령·버전 기록), agent-host/server.ts defaultAdapters()에 codex: new CodexAdapter() 등록, tsconfig.base.json을 인터뷰 답변 B대로 module ESNext + moduleResolution Bundler로 변경(생성 바인딩의 확장자 없는 import TS2835 해결, 생성물 import는 전부 import type). 이번 시도 수정: (1) 프로토콜 스키마가 turnId를 trn_<ULID>로 강제(TimelineItemSchema regex)하므로 Codex turn id를 그대로 쓰지 않고 CodexEventMapper가 beginTurn(codexTurnId)마다 newId(\"trn\")을 발급해 1:1 대응(currentTurnId=우리 id, currentCodexTurnId=turn/interrupt 등 Codex 회신용) — packages/protocol 미수정; (2) 프로세스 예기치 않은 종료 시 대기 승인 cancel 회신이 마이크로태스크로 써진 뒤 peer.close()하도록 setImmediate 지연; (3) process.ts에 child.stdin error 핸들러 추가(EPIPE 크래시 방지); (4) 테스트 (a) turnId 기대를 trn_ 패턴+모든 아이템 동일 turnId로, (g) 초기 native_id/idle 이벤트 선소비로 보정. 테스트 test/agents/codex/{jsonrpc(7), adapter(10: 모드 매핑+시나리오 a~h+readCodexAuth), integration(MAM_IT_CODEX=1)}.test.ts. AC 전부 통과: npm ci OK, npm run typecheck 0 에러, npm test 264 passed(2 skipped=IT), MAM_IT_CODEX=1 codex 디렉토리 18 passed, bash scripts/test.sh OK, generated/v2/TurnStartParams.ts 존재. 통합 스모크 실측: 실제 codex app-server(codex-cli 0.153.4), 계정 kwangteakna@gmail.com(auth.json id_token 감지), plan 모드(on-request/read-only) \"pong\" 응답+turn.completed까지 4.8초(재실행 5.5초), 이벤트 순서 native_id→status→user_message→status running→assistant_message started/delta/completed→turn_summary→turn.completed. 아키텍처 체크: 모드 매핑 PROTOCOL 4절 일치, spawn(bin,['app-server']) 인자 배열·shell/exec 없음, codex src에 seq 발급 없음, 생성 바인딩 타입 import 사용. 참고: 미지원 알림(mcpServer/startupStatus/updated, thread/status/changed, account/rateLimits/updated)은 info 로그 후 무시. phases/·packages/protocol 미수정, 새 의존성 없음.",
+      "completed_at": "2026-09-09T22:50:56+0900"
     },
     {
       "step": 7,
