@@ -285,11 +285,38 @@
     {
       "step": 8,
       "name": "cli-and-install",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         4,
         7
-      ]
+      ],
+      "started_at": "2026-09-09T23:04:57+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "cd87cdc4-fd5e-4a5c-add2-39e3c7bb0458",
+          "cost_usd": null,
+          "duration_s": 589.3,
+          "num_turns": null,
+          "exit_code": 1,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "deb2f16f-cda3-41d5-8409-ab3d8dc9ee51",
+          "cost_usd": 2.8362267500000002,
+          "duration_s": 200.1,
+          "num_turns": 20,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 2.836227,
+      "duration_s": 789.4,
+      "retries": 1,
+      "session_id": "deb2f16f-cda3-41d5-8409-ab3d8dc9ee51",
+      "summary": "관리자 CLI·설치 스크립트·운영 문서 완성(이전 시도 산출물 전수 검증·통과, 실패 원인은 구조화 출력 미반환): packages/server/src/admin/{exec(Exec 인터페이스+spawnExec spawn 기반·타임아웃, AdminDeps에 paths/uid 테스트 주입), config-store(읽기·tmp+rename 원자적 쓰기), users(addUser 멱등: dscl 존재확인→sysadminctl -addUser 무작위 32자 비밀번호(비관리자, /bin/zsh, /Users/<name>, 어디에도 미기록)→createhomedir→authorized_keys 0600 중복방지→~/work·~/.mam 0700→chown -R <name>:staff 해당 경로만→/var/run/mam/<name> 0700→config users[] 갱신(이메일 소문자)→nextSteps(Tailscale 공유/ssh <name>@<hostname>/claude·codex 로그인); 이름 ^[a-z_][a-z0-9_-]{0,30}$·zod email 검증; listUsers 계정·소켓 상태; removeUser --delete-account는 --yes 필수, -keepHome), doctor(독립 검사 함수: root/config/tailscale Running·IPv4·DNSName/tls 존재+openssl enddate 14일 미만 warn/paths/sshd launchctl/sshd_config.d mam.conf/runRoot 권한/사용자별 계정·홈·워크스페이스·소켓 dir/agents probe(sudo -u … agent-host --probe)/gateway launchd; formatDoctorTable, fail 있으면 exit 1), config-init(hostname 미지정 시 tailscale status Self.DNSName, --force 시 users[] 보존), plist(renderPlist XML 이스케이프·미치환 플레이스홀더 거부)}, src/cli/{program(createProgram(io) 주입형, agent-host --probe JSON stdout), common(requireRoot 친절한 오류), user, doctor(--json), config}.ts, cli.ts는 createProgram 위임. scripts/launchd/{dev.mam.gateway,dev.mam.certrenew}.plist.tmpl(일요일 04:00), scripts/renew-cert.sh(tailscale cert→chmod 0600→launchctl kickstart -k), scripts/setup-server.sh(set -euo pipefail 멱등 9단계: root/SUDO_USER→brew tailscale·node24→brew services start tailscale+tailscale up 대기(--skip-tailscale-up)→authorized_keys 비어있으면 중단(--skip-ssh-hardening)+sshd_config.d/mam.conf+kickstart→rsync --delete /opt/mam+npm ci/build/prune→/etc/mam/tls·/var/log/mam·/var/run/mam 0755+config init→tailscale cert(30일 이상 남으면 건너뜀) 0600→plist 렌더·plutil -lint·bootout/bootstrap→doctor; rm -rf 없음). docs/RUNBOOK.md(설치·사용자 추가·온보딩(SSH claude login 파일 폴백, ~/.mam/secrets/claude-oauth-token 우선·1년 만료, codex login)·운영·문제 해결·보안 노트). /var/run/mam은 supervisor.prepareSocketDir가 시작 시 mkdir하므로 추가 수정 없음. 테스트 test/admin/{users(4: sysadminctl 인자·비밀번호 미로그·멱등·검증·list/remove), doctor(4: 전부 ok·warn/fail 조합·config 불가·enddate 파싱), plist(3: plutil -lint), scripts(3: bash -n·strict·rm -rf 없음·비root 거부)}, test/cli/cli.test.ts(4: --help 전체·버전·비root exit 1·doctor nonexistent exit 1). AC 전부 통과: typecheck 0 에러, npm test 295 passed(2 skipped=IT), build OK, bash -n OK, --help 5개 서브커맨드, doctor /nonexistent.json exit 1, agent-host --probe JSON 파싱 OK, bash scripts/test.sh OK. 아키텍처 체크: 셸 문자열 실행 없음(모든 명령 Exec 경유), 비밀번호·토큰 로그 없음, 런타임 경로 ARCHITECTURE 4절 일치. 이 머신에서 setup-server.sh/sysadminctl/launchctl bootstrap/sudo 미실행. 새 의존성 없음, packages/protocol·phases/ 미수정.",
+      "completed_at": "2026-09-09T23:18:06+0900"
     },
     {
       "step": 9,
