@@ -2,16 +2,118 @@
   "project": "mac-agent-machine",
   "phase": "0-server-core",
   "steps": [
-    { "step": 0, "name": "workspace-setup", "status": "pending", "model": "sonnet", "effort": "low" },
-    { "step": 1, "name": "protocol-schemas", "status": "pending", "depends_on": [0] },
-    { "step": 2, "name": "session-manager", "status": "pending", "depends_on": [1] },
-    { "step": 3, "name": "fs-git-api", "status": "pending", "depends_on": [0] },
-    { "step": 4, "name": "agent-host-http", "status": "pending", "depends_on": [2, 3] },
-    { "step": 5, "name": "claude-adapter", "status": "pending", "depends_on": [2] },
-    { "step": 6, "name": "codex-adapter", "status": "pending", "depends_on": [2, 5] },
-    { "step": 7, "name": "gateway", "status": "pending", "depends_on": [4] },
-    { "step": 8, "name": "cli-and-install", "status": "pending", "depends_on": [4, 7] },
-    { "step": 9, "name": "auth-login-flow", "status": "pending", "depends_on": [4, 5, 6] },
-    { "step": 10, "name": "dev-smoke-e2e", "status": "pending", "depends_on": [8, 9], "model": "sonnet" }
-  ]
+    {
+      "step": 0,
+      "name": "workspace-setup",
+      "status": "completed",
+      "model": "sonnet",
+      "effort": "low",
+      "started_at": "2026-09-09T20:09:13+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "fae6ef53-c176-4a98-8851-11c42d404f0b",
+          "cost_usd": 0.7271716000000003,
+          "duration_s": 181.8,
+          "num_turns": 39,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 0.727172,
+      "duration_s": 181.8,
+      "retries": 0,
+      "session_id": "fae6ef53-c176-4a98-8851-11c42d404f0b",
+      "summary": "npm workspaces 모노레포 뼈대 생성: 루트 package.json/tsconfig.base.json/vitest.config.ts, packages/protocol(@mam/protocol, PROTOCOL_VERSION=1), packages/server(@mam/server, cli.ts, 런타임 의존성 전부 설치 및 package-lock.json 커밋 대상 포함). .gitignore의 `Packages/`가 대소문자 비구분 파일시스템에서 `packages/`까지 무시하던 버그를 `ios/Packages/`로 좁혀 수정. AC 전부 통과: npm ci/build/typecheck/test, bash scripts/test.sh, cli 출력 \"mam 0.1.0\", npm ls 의존성 확인.",
+      "completed_at": "2026-09-09T20:12:15+0900"
+    },
+    {
+      "step": 1,
+      "name": "protocol-schemas",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 2,
+      "name": "session-manager",
+      "status": "pending",
+      "depends_on": [
+        1
+      ]
+    },
+    {
+      "step": 3,
+      "name": "fs-git-api",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 4,
+      "name": "agent-host-http",
+      "status": "pending",
+      "depends_on": [
+        2,
+        3
+      ]
+    },
+    {
+      "step": 5,
+      "name": "claude-adapter",
+      "status": "pending",
+      "depends_on": [
+        2
+      ]
+    },
+    {
+      "step": 6,
+      "name": "codex-adapter",
+      "status": "pending",
+      "depends_on": [
+        2,
+        5
+      ]
+    },
+    {
+      "step": 7,
+      "name": "gateway",
+      "status": "pending",
+      "depends_on": [
+        4
+      ]
+    },
+    {
+      "step": 8,
+      "name": "cli-and-install",
+      "status": "pending",
+      "depends_on": [
+        4,
+        7
+      ]
+    },
+    {
+      "step": 9,
+      "name": "auth-login-flow",
+      "status": "pending",
+      "depends_on": [
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "step": 10,
+      "name": "dev-smoke-e2e",
+      "status": "pending",
+      "depends_on": [
+        8,
+        9
+      ],
+      "model": "sonnet"
+    }
+  ],
+  "created_at": "2026-09-09T20:09:13+0900"
 }
