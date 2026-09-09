@@ -321,12 +321,30 @@
     {
       "step": 9,
       "name": "auth-login-flow",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         4,
         5,
         6
-      ]
+      ],
+      "started_at": "2026-09-09T23:18:07+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "e54938c4-30ba-4ca7-836a-4607330ed8b4",
+          "cost_usd": 4.6522545,
+          "duration_s": 577.2,
+          "num_turns": 24,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 4.652254,
+      "duration_s": 577.2,
+      "retries": 0,
+      "session_id": "e54938c4-30ba-4ca7-836a-4607330ed8b4",
+      "summary": "로그인 플로우 완성: 사전 관찰(node-pty로 claude setup-token 10초 캡처, 2.1.266)에서 URL(`https://claude.com/cai/oauth/authorize?code=true&…` 약 330자, 200열에서 줄바꿈)과 프롬프트 \"Paste code here if prompted >\" 출력, 이미 로그인 상태에서도 동작 확인; Ink가 단어 사이를 `ESC[nG` 커서 이동으로 채우는 점, SDK 패키지에 번들 CLI 없음(cli.js/vendor 없음), node-pty 1.1.0 prebuild spawn-helper가 0644라 posix_spawnp 실패하는 점을 packages/server/src/agent-host/auth/README.md에 기록(토큰 접두어 sk-ant-oat01-와 오류 문구는 OAuth 미완료로 미실측·문서화). 구현: auth/flows.ts(FlowRegistry: 에이전트당 pending 1개 cancel 후 교체, 15분 TTL, createdAt은 레지스트리가 찍음, cancelAll), auth/claude-login.ts(ptySpawn 주입, cols 400, env에서 CLAUDECODE/CLAUDE_CODE_ENTRYPOINT 제거+HOME, cleanTerminalOutput/extractUrl(줄바꿈 이어붙임·종결 확인), submitCode→`code.trim()+'\\r'`, TOKEN_RE 검출 시 ~/.mam/secrets/claude-oauth-token 0600(디렉토리 0700) 저장→done, 코드 제출 후 invalid/expired/error/failed 줄→error, 10분 타임아웃→error+kill, URL 30초 미출력/조기 종료→AgentUnavailableError, 버퍼 64KiB·종료 시 폐기, 토큰·코드 로그 없음, spawn-helper 실행비트 best-effort chmod), auth/codex-login.ts(spawnFn 주입, initialize/initialized→account/login/start {type:'chatgptDeviceCode'}→{url:verificationUrl, instructions:\"링크를 열고 코드 <userCode> 를 입력하세요\", needsCode:false}, account/login/completed loginId 일치 시 done/error 후 프로세스 종료, 타임아웃 시 account/login/cancel {loginId}, 생성 바인딩 4종 import type), routes/auth.ts(201 LoginStartResponse, 미지원 agent 400, 바이너리 없음 501 {agent_unavailable,'ssh 로 접속해 직접 로그인하세요: claude setup-token / codex login'}, code는 needsCode false→400·없는/만료 플로우 404·끝난 플로우 400→{ok:true}, GET LoginStatusResponse, onClose에서 cancelAll), http.ts AgentHostContext에 `login?: {registry?, starters?}` 주입점 추가. scripts/setup-server.sh npm ci 뒤 spawn-helper chmod 755 추가. docs/RUNBOOK.md 온보딩 절에 개발 모드 curl 수동 확인 절차와 \"계정 변경 시 ~/.mam/secrets/claude-oauth-token 삭제\" 추가. 테스트 test/agent-host/auth/{claude-login(4: 가짜 pty 관찰 시나리오 재생·청크 분할·토큰 0600/0700 저장·로그 미노출, 오류 문구, URL 없이 종료, fake timers 타임아웃+kill), codex-login(3: 가짜 peer device code→done+kill, 실패 알림→error, 타임아웃→cancel 요청), routes(6: 3 엔드포인트 스키마 검증·400/404/501·재시작 교체·TTL)}; step 4의 rest.test.ts 501 스텁 단언은 새 계약(404)으로 교체. AC 전부 통과: npm ci OK, typecheck 0 에러, npm test 308 passed(2 skipped=IT), README 존재, bash scripts/test.sh exit 0(MAM_TEST_SKIP_IOS=1), build OK. 아키텍처 체크: pty.spawn(bin,['setup-token'])/spawn(bin,['app-server']) 인자 배열, shell/exec 없음, 토큰은 0600 파일에만·로그 없음, 응답은 fixture(login-start/login-status) 형태. 남은 것(사람이 확인): 실제 OAuth 완료 화면의 토큰 접두어(TOKEN_RE)·오류 문구 실측은 RUNBOOK 수동 절차로. 주의: 이 머신 기존 자격증명 미수정, packages/protocol·phases/ 미수정, 새 의존성 없음(node-pty는 이미 설치돼 있었음).",
+      "completed_at": "2026-09-09T23:27:44+0900"
     },
     {
       "step": 10,
