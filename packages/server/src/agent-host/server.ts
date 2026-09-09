@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { AgentKind } from "@mam/protocol";
 import { ClaudeAdapter } from "../agents/claude/index.js";
+import { CodexAdapter } from "../agents/codex/index.js";
 import { FakeAdapter } from "../agents/fake/index.js";
 import type { AgentAdapter } from "../agents/types.js";
 import { SERVER_VERSION } from "../index.js";
@@ -34,7 +35,7 @@ export function defaultAdapters(env: NodeJS.ProcessEnv = process.env): Partial<R
   if (env.MAM_FAKE_AGENT === "1") {
     return { claude: new FakeAdapter({ kind: "claude" }), codex: new FakeAdapter({ kind: "codex" }) };
   }
-  return { claude: new ClaudeAdapter() };
+  return { claude: new ClaudeAdapter(), codex: new CodexAdapter() };
 }
 
 async function realpathOr(path: string): Promise<string> {
