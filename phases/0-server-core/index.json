@@ -100,10 +100,37 @@
     {
       "step": 3,
       "name": "fs-git-api",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-09T20:43:42+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "83eddf13-c34b-49d2-a1ac-17edc06dfca2",
+          "cost_usd": 5.10995975,
+          "duration_s": 619.3,
+          "num_turns": 11,
+          "exit_code": 1,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "f55c7a14-9eae-4b85-b125-bc4ef814cecf",
+          "cost_usd": 1.261522,
+          "duration_s": 120.3,
+          "num_turns": 10,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 6.371482,
+      "duration_s": 739.6,
+      "retries": 1,
+      "session_id": "f55c7a14-9eae-4b85-b125-bc4ef814cecf",
+      "summary": "fs/git 순수 API 완성(이전 시도 산출물 검증·통과): packages/server/src/fs/sandbox.ts(resolveInsideHome: ~/치환·realpath·홈 접두어 검사·마지막 세그먼트 미존재 지원·홈 밖 존재여부 비노출, SandboxError extends MamError로 403/404 매핑, statResolved 헬퍼), fs/list.ts(listDirectory: 디렉토리 우선+대소문자 무시 정렬, lstat 기반 type/size/isHidden, gitStatus 맵 병합·하위 변경 디렉토리 M, porcelain 비표준 코드 C→A/기타→M 정규화, 5,000개 상한+truncated 필드), fs/read.ts(readFileForClient: 8KiB NUL 스니핑, 1MiB 절단+스트림 디코딩으로 깨진 멀티바이트 제거, 이미지 확장자 5MiB base64(svg 포함), FsError unsupported_media→415/invalid_request→400), fs/language.ts(languageForPath 확장자·basename 매핑), git/status.ts(runGit=spawn('git',[args])+10초 SIGKILL 타임아웃, findRepoRoot, parsePorcelainV2(-z, rename 새 경로, unmerged), gitStatus, gitStatusMap worktree 우선), git/diff.ts(gitDiff [--cached] -- [path], untracked는 리포 루트 realpath 검증 후 --no-index /dev/null, exit 1 정상 처리, 리포 아니면 빈 patch). 테스트 6파일 83개 추가(test/helpers/tmp-home.ts 임시 홈+git init 헬퍼, 결정적 GIT_CONFIG 환경 고정), 전체 216 passed. AC 전부 통과: npm ci, typecheck 0 errors, npm test, scripts/test.sh OK, src에 shell:true/exec 없음. 제안: FsListResponseSchema에 `truncated: boolean` optional 추가(현재 응답에 포함되나 스키마엔 없음, 미지 키 무시 규칙으로 호환). packages/protocol·phases/ 미수정, 새 의존성 없음.",
+      "completed_at": "2026-09-09T20:56:02+0900"
     },
     {
       "step": 4,
