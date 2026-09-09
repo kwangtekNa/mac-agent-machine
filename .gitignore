@@ -18,7 +18,7 @@ ios/build/
 xcuserdata/
 *.xcuserstate
 .build/
-Packages/
+ios/Packages/
 
 # env / local
 .env
