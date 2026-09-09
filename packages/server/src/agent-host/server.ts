@@ -3,6 +3,7 @@ import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { AgentKind } from "@mam/protocol";
+import { ClaudeAdapter } from "../agents/claude/index.js";
 import { FakeAdapter } from "../agents/fake/index.js";
 import type { AgentAdapter } from "../agents/types.js";
 import { SERVER_VERSION } from "../index.js";
@@ -13,7 +14,7 @@ export interface StartAgentHostOptions {
   socketPath: string;
   /** 기본 `~/.mam`. 없으면 0700 으로 만든다. */
   dataDir?: string;
-  /** 기본: `MAM_FAKE_AGENT=1` 이면 Fake 두 개, 아니면 빈 맵. */
+  /** 기본: `MAM_FAKE_AGENT=1` 이면 Fake 두 개, 아니면 Claude 실제 어댑터(codex 는 step 6). */
   adapters?: Partial<Record<AgentKind, AgentAdapter>>;
   workspaceRoot?: string;
   email?: string | null;
@@ -33,7 +34,7 @@ export function defaultAdapters(env: NodeJS.ProcessEnv = process.env): Partial<R
   if (env.MAM_FAKE_AGENT === "1") {
     return { claude: new FakeAdapter({ kind: "claude" }), codex: new FakeAdapter({ kind: "codex" }) };
   }
-  return {};
+  return { claude: new ClaudeAdapter() };
 }
 
 async function realpathOr(path: string): Promise<string> {

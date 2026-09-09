@@ -82,3 +82,9 @@ export class ApprovalAlreadyResolvedError extends ConflictError {
     super(`이미 처리된 승인 요청입니다: ${approvalId}`);
   }
 }
+
+export class AgentBusyError extends ConflictError {
+  constructor() {
+    super("에이전트가 이미 턴을 실행 중입니다");
+  }
+}
