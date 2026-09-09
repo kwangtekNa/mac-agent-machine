@@ -32,7 +32,7 @@ export async function resolveBinary(name: 'claude' | 'codex', envOverride?: stri
 
 - `tokenPath(home)` = `${home}/.mam/secrets/claude-oauth-token`.
 - `readOauthToken(home): Promise<string | null>` (파일 0600, 내용 trim).
-- `detectLogin(home): Promise<{ loggedIn: boolean; account: string | null; source: 'mam-token' | 'credentials-file' | 'claude-json' | null }>`: 순서대로 (1) 토큰 파일 존재, (2) `~/.claude/.credentials.json`에 `claudeAiOauth` 키, (3) `~/.claude.json`의 `oauthAccount.emailAddress`. (3)이 있으면 account로 쓴다. macOS Keychain은 조회하지 않는다(ADR-008: headless 프로세스는 키체인에 접근할 수 없다고 가정).
+- `detectLogin(home): Promise<{ loggedIn: boolean; account: string | null; source: 'mam-token' | 'credentials-file' | 'claude-json' | null; warning?: string }>`: 순서대로 (1) 토큰 파일 존재(파일 mtime이 330일 이상이면 `warning: '토큰 만료 임박'`), (2) `~/.claude/.credentials.json`에 `claudeAiOauth` 키, (3) `~/.claude.json`의 `oauthAccount.emailAddress`. (3)이 있으면 account로 쓴다. (2)는 공식 문서상 Keychain이 잠긴 headless 환경(SSH, `sudo -u`)에서 Claude Code가 자동으로 쓰는 폴백 파일이므로, SSH에서 `claude login`한 사용자는 여기에 잡힌다. macOS Keychain은 조회하지 않는다(ADR-008). `CLAUDE_CONFIG_DIR`가 설정돼 있으면 `~/.claude` 대신 그 디렉토리를 본다.
 
 ### 2. 어댑터 `packages/server/src/agents/claude/adapter.ts`
 
@@ -55,7 +55,9 @@ export class ClaudeAdapter implements AgentAdapter { readonly kind = 'claude'; .
 - `options`: `cwd`, `permissionMode: toPermissionMode(opts.mode)`(PROTOCOL 4절), `resume: opts.resumeNativeId`, `includePartialMessages: true`, `settingSources`, `model: opts.model`, `canUseTool`, `abortController`, `stderr: line => logger.warn(...)`, `pathToClaudeCodeExecutable: binPath ?? undefined`, `env`: `process.env` 복사본에서 **`CLAUDECODE`와 `CLAUDE_CODE_ENTRYPOINT`를 삭제**하고(중첩 세션 감지 회피. 하네스 자체가 Claude Code 안에서 돌기 때문), 토큰 파일이 있으면 `CLAUDE_CODE_OAUTH_TOKEN`을 넣는다.
 - `sendTurn(input)`: `trn_` ID를 새로 만들고 큐에 `SDKUserMessage`를 push한다. `message.content`는 `[{type:'text', text}]` + 첨부 이미지는 `image` 블록(base64). `SDKUserMessage`의 필수 필드(`parent_tool_use_id: null`, `session_id` 등)는 d.ts를 보고 정확히 채운다. 이미 턴이 진행 중이면 매니저가 막지만 어댑터도 `AgentBusyError`를 던진다.
 - 백그라운드 루프 `for await (const msg of q)`가 SDK 메시지를 `mapping.ts`로 넘겨 `AgentEvent`를 만든다. 이터레이터가 예외로 끝나면 `error{recoverable:false}`를 내고 events를 종료한다.
-- `interrupt()` → `q.interrupt()`. `setMode(mode)` → `q.setPermissionMode(toPermissionMode(mode))`. `close()` → 대기 중 승인은 전부 `deny{interrupt:true}`로 정리, `abortController.abort()`, `q.close()`(있으면), 루프 종료 대기.
+- `interrupt()` → `q.interrupt()`. 공식 문서에 `interrupt()`의 정확한 중단 의미가 없으므로 통합 테스트에서 실측하라: 호출 후 5초 안에 `result`(또는 status idle)가 오지 않으면 `abortController.abort()`로 프로세스를 끝내고 `error{recoverable:true, message:'턴을 강제 중단했습니다'}` + status idle을 낸 뒤, 다음 `sendTurn`에서 `resume: nativeId`로 새 프로세스를 연다(매니저의 유휴 재시작 경로와 같은 방식). 관찰 결과를 summary에 적어라. `setMode(mode)` → `q.setPermissionMode(toPermissionMode(mode))`. `close()` → 대기 중 승인은 전부 `deny{interrupt:true}`로 정리, `abortController.abort()`, `q.close()`(있으면), 루프 종료 대기.
+- `continue: true`는 쓰지 않는다(같은 cwd의 다른 세션을 집어올 수 있다). 재개는 항상 `resume: <id>`다.
+- `canUseTool`은 권한 평가가 프롬프트로 떨어질 때만 호출된다. `acceptEdits`나 사용자 allow 규칙으로 자동 허용된 도구는 콜백 없이 실행되므로, 승인 이벤트가 없다고 해서 버그가 아니다. 테스트 시나리오는 `default` 모드 기준으로 작성하라.
 
 ### 3. 매핑 `packages/server/src/agents/claude/mapping.ts`
 

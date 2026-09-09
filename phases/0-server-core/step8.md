@@ -78,7 +78,7 @@ export async function initConfig(deps: AdminDeps, opts: { hostname?: string; por
 
 ### 5. 문서 `docs/RUNBOOK.md`
 
-관리자 관점으로: 설치(사전 조건, 명령, 소요 시간), 사용자 추가(`sudo mam user add …` 예시와 출력), 사용자 온보딩 안내문(Tailscale 가입/노드 공유, `ssh`, Claude 로그인 두 가지 방법(`claude setup-token` 직접 실행 후 토큰을 `~/.mam/secrets/claude-oauth-token`에 저장하는 명령 포함 / 앱 로그인 플로우), `codex login`), 운영(로그 경로, `launchctl kickstart -k system/dev.mam.gateway`, `mam doctor`, 업그레이드 = `setup-server.sh` 재실행), 문제 해결(403 → whois·매핑, 502/503 → agent-host 로그 `~/.mam/agent-host.log`, 인증서 만료, tailscale 재로그인), 보안 노트(이 문서 6절 요약).
+관리자 관점으로: 설치(사전 조건, 명령, 소요 시간), 사용자 추가(`sudo mam user add …` 예시와 출력), 사용자 온보딩 안내문(Tailscale 가입/노드 공유, `ssh`, Claude 로그인: SSH에서 `claude login`이면 충분하다 — Keychain이 잠긴 SSH 세션에서는 Claude Code가 자격증명을 `~/.claude/.credentials.json`에 자동 저장하며 서버가 이를 그대로 읽는다(ADR-008). 앱에서 로그인하는 대안 흐름(step 9)과, 앱 로그인으로 만들어진 `~/.mam/secrets/claude-oauth-token`이 `/login` 자격증명보다 우선하므로 계정을 바꾸려면 이 파일을 지우라는 안내, 토큰 1년 만료. `codex login`은 SSH에서 URL을 열거나 앱의 device code 흐름), 운영(로그 경로, `launchctl kickstart -k system/dev.mam.gateway`, `mam doctor`, 업그레이드 = `setup-server.sh` 재실행), 문제 해결(403 → whois·매핑, 502/503 → agent-host 로그 `~/.mam/agent-host.log`, 인증서 만료, tailscale 재로그인, Claude "로그인 필요" → `~/.claude/.credentials.json` 존재 여부와 토큰 파일 확인), 보안 노트(이 문서 6절 요약).
 
 ### 6. 테스트 (`packages/server/test/admin/`, `test/cli/`)
 

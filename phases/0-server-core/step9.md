@@ -61,6 +61,8 @@ export class FlowRegistry { start(agent, factory): Promise<LoginFlow>; get(id): 
 
 실제 OAuth 완료는 사람의 브라우저가 필요하다. 이 step에서는 (0)의 관찰과 자동 테스트까지만 하고, 수동 확인 절차를 `docs/RUNBOOK.md`의 사용자 온보딩 절에 추가한다(개발 모드에서 `curl -X POST http://127.0.0.1:7777/api/v1/auth/claude/login` → URL 열기 → 코드 제출 → 상태 확인).
 
+배경 사실(ADR-008): 앱 로그인 플로우는 편의 기능이다. SSH에서 `claude login`을 하면 Keychain이 잠긴 세션이라 자격증명이 `~/.claude/.credentials.json`에 자동 저장되고 서버가 그대로 쓴다. 따라서 Claude 쪽 플로우가 이 step에서 완성되지 않아도 서버 기능은 막히지 않는다. 토큰 파일은 `/login` 자격증명보다 우선하므로, RUNBOOK에 "계정을 바꾸려면 `~/.mam/secrets/claude-oauth-token`을 삭제"를 적어라.
+
 ## Acceptance Criteria
 
 ```bash

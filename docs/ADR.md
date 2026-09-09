@@ -46,12 +46,15 @@
 - 결정: `codex app-server`를 사용자 권한 자식 프로세스로 띄우고 줄 단위 JSON-RPC로 통신한다. 흐름은 `initialize` → `initialized` → `thread/start`(또는 `thread/resume`) → `turn/start`. 승인은 서버 요청(`item/*/requestApproval`, `item/tool/requestUserInput`)에 같은 `id`로 응답한다. 타입은 `codex app-server generate-ts --out`으로 생성해 `packages/server/src/agents/codex/generated/`에 커밋한다(실험적 API라 버전 고정).
 - 결과: 승인, 스트리밍, 재개(`thread/list`, `thread/resume`)를 모두 얻는다. 프로토콜이 experimental이므로 Codex CLI 업데이트 시 바인딩 재생성과 매핑 테스트가 필요하다.
 
-## ADR-008 자격증명은 사용자별 OAuth, Claude는 setup-token 방식 (`검증 필요`)
+## ADR-008 자격증명은 사용자별 OAuth, Claude는 파일 폴백 + setup-token
 
-- 배경: 사용자마다 자기 구독으로 로그인한다. Claude Code는 macOS에서 OAuth 토큰을 Keychain에 저장하는 것으로 알려져 있는데, GUI 로그인 없이 `sudo -u`로 뜬 프로세스는 로그인 키체인이 잠겨 있거나 없다. Codex는 `~/.codex/auth.json` 파일이라 문제가 없다.
-- 결정: Claude는 `claude setup-token`이 발급하는 장기 토큰을 agent-host가 `~/.mam/secrets/claude-oauth-token`(0600)에 저장하고, SDK 실행 시 `CLAUDE_CODE_OAUTH_TOKEN` 환경변수로 주입한다. Keychain에 의존하지 않는다. 앱 로그인 흐름(F8): `POST /auth/claude/login`이 PTY에서 `claude setup-token`을 띄워 URL을 읽어 돌려주고, 사용자가 폰 브라우저에서 인증 후 받은 코드를 `.../code`로 보내면 stdin에 써서 토큰을 얻는다. Codex는 app-server `account/login/start { type: "chatgptDeviceCode" }`가 주는 `verificationUrl`과 `userCode`를 앱에 보여주고, `account/login/completed` 알림으로 완료를 확인한다(이 머신의 codex-cli 0.153.4 바인딩에서 확인됨). 콜백 포트가 필요 없다.
-- 검증 필요: (1) `claude setup-token`이 PTY 안에서 URL을 출력하고 코드를 stdin으로 받는지, (2) `CLAUDE_CODE_OAUTH_TOKEN`이 SDK 경로에서 인식되는지. 실패 시 SSH 안내(`ssh alice@mac` 후 직접 로그인)로 폴백하고 앱은 501 메시지를 보여준다.
-- 결과: 서버 주인의 API 키를 공유하지 않는다. 비용과 사용량은 각자에게 간다.
+- 배경: 사용자마다 자기 구독으로 로그인한다. Claude Code는 macOS에서 OAuth 토큰을 기본적으로 로그인 Keychain에 저장하지만, 공식 문서(code.claude.com/docs/en/authentication)에 따르면 Keychain이 잠겨 있거나 없는 환경(SSH, LaunchDaemon, `su -l`)에서는 **자동으로 `~/.claude/.credentials.json`(0600)에 저장·조회한다.** 따라서 사용자가 SSH로 접속해 `claude login`만 해도 `sudo -u`로 뜬 agent-host 프로세스가 같은 홈의 파일을 읽어 동작한다. Codex는 `~/.codex/auth.json` 파일이라 처음부터 문제가 없다.
+- 결정:
+  - 기본 경로는 SSH에서의 `claude login`(파일 폴백)과 `codex login`이다. 서버는 Keychain을 호출하지 않는다.
+  - 앱 로그인 흐름(F8)은 편의 기능이다. Claude는 `claude setup-token`(1년 유효 OAuth 토큰, 공식 headless 경로)을 PTY에서 띄워 URL을 돌려주고, 사용자가 폰 브라우저에서 인증 후 받은 코드를 `.../code`로 보내면 stdin에 써서 토큰을 얻어 `~/.mam/secrets/claude-oauth-token`(0600)에 저장한다. agent-host는 이 파일이 있으면 SDK 실행 시 `CLAUDE_CODE_OAUTH_TOKEN`으로 주입한다. 이 변수는 인증 우선순위에서 `/login` 자격증명보다 앞서므로, 계정을 바꾸려면 이 파일을 지워야 한다(RUNBOOK에 명시). 토큰은 1년 후 만료되므로 probe가 파일 나이 330일 이상이면 경고한다.
+  - Codex는 app-server `account/login/start { type: "chatgptDeviceCode" }`가 주는 `verificationUrl`과 `userCode`를 앱에 보여주고, `account/login/completed` 알림으로 완료를 확인한다(이 머신의 codex-cli 0.153.4 바인딩에서 확인됨). 콜백 포트가 필요 없다.
+- 검증 필요(남은 것): `claude setup-token`이 PTY 안에서 URL을 출력하고 코드를 stdin으로 받는지는 step 9가 구현 전에 관찰한다. 실패하면 Claude 앱 로그인은 501과 SSH 안내로 폴백한다. 서버 동작 자체는 파일 폴백으로 보장되므로 영향이 없다.
+- 결과: 서버 주인의 API 키를 공유하지 않는다. 비용과 사용량은 각자에게 간다. 문서에 없는 사항 두 가지는 구현 시 실측한다: Agent SDK `interrupt()`의 정확한 중단 의미(안 멈추면 abort 후 `resume`으로 재시작), 같은 cwd에서 여러 세션을 동시에 돌릴 때의 잠금(세션 ID별 파일이라 충돌은 없다고 보되 `continue: true`는 쓰지 않는다).
 
 ## ADR-009 정규화 이벤트 모델과 fixture 계약
 
@@ -61,7 +64,7 @@
 
 ## ADR-010 세션 영속화는 JSONL, 재개는 네이티브 ID
 
-- 결정: agent-host가 `~/.mam/sessions/<id>.json`과 `<id>.events.jsonl`을 쓴다. 프로세스가 죽거나 유휴 종료돼도 앱은 히스토리를 본다. 다음 턴은 Claude `resume`, Codex `thread/resume`로 이어간다. 에이전트 네이티브 트랜스크립트(`~/.claude/projects/`, Codex `thread/list`)의 가져오기(import)는 Phase 3.
+- 결정: agent-host가 `~/.mam/sessions/<id>.json`과 `<id>.events.jsonl`을 쓴다. 프로세스가 죽거나 유휴 종료돼도 앱은 히스토리를 본다. 다음 턴은 Claude `resume: <sessionId>`(항상 명시적 ID, `continue: true` 금지), Codex `thread/resume`로 이어간다. 에이전트 네이티브 트랜스크립트의 가져오기(import)는 Phase 3이며, Claude는 `~/.claude/projects/<cwd의 비영숫자를 -로 치환한 이름>/<session-id>.jsonl`과 SDK `listSessions()`, Codex는 `thread/list`를 쓴다.
 - 결과: 세션 수명이 프로세스 수명과 분리된다.
 
 ## ADR-011 프로세스 생성은 `sudo -u <user> -H -n`
@@ -91,7 +94,8 @@
 
 | 항목 | 결정 시점 |
 |---|---|
-| Claude setup-token 비대화형 구동 및 `CLAUDE_CODE_OAUTH_TOKEN` 인식 | Phase 0 `claude-adapter`, `auth-login-flow` step |
+| `claude setup-token`을 PTY에서 구동해 URL 출력·코드 입력을 받을 수 있는지 | Phase 0 `auth-login-flow` step |
+| Agent SDK `interrupt()`의 실제 중단 동작 | Phase 0 `claude-adapter` step 통합 테스트 |
 | iOS 코드 하이라이트 라이브러리 | Phase 1 `file-browser-ui` step |
 | 프로젝트/앱 표시 이름(현재 `MacAgent`, 번들 ID `dev.mam.MacAgent`) | Phase 1 `xcodegen-project` step |
 | 유휴 종료 시간 기본값(현재 30분) | 운영 후 조정 |
