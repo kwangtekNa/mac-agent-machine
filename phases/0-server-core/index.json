@@ -1,0 +1,17 @@
+{
+  "project": "mac-agent-machine",
+  "phase": "0-server-core",
+  "steps": [
+    { "step": 0, "name": "workspace-setup", "status": "pending", "model": "sonnet", "effort": "low" },
+    { "step": 1, "name": "protocol-schemas", "status": "pending", "depends_on": [0] },
+    { "step": 2, "name": "session-manager", "status": "pending", "depends_on": [1] },
+    { "step": 3, "name": "fs-git-api", "status": "pending", "depends_on": [0] },
+    { "step": 4, "name": "agent-host-http", "status": "pending", "depends_on": [2, 3] },
+    { "step": 5, "name": "claude-adapter", "status": "pending", "depends_on": [2] },
+    { "step": 6, "name": "codex-adapter", "status": "pending", "depends_on": [2, 5] },
+    { "step": 7, "name": "gateway", "status": "pending", "depends_on": [4] },
+    { "step": 8, "name": "cli-and-install", "status": "pending", "depends_on": [4, 7] },
+    { "step": 9, "name": "auth-login-flow", "status": "pending", "depends_on": [4, 5, 6] },
+    { "step": 10, "name": "dev-smoke-e2e", "status": "pending", "depends_on": [8, 9], "model": "sonnet" }
+  ]
+}
