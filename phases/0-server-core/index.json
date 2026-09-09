@@ -162,10 +162,37 @@
     {
       "step": 5,
       "name": "claude-adapter",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         2
-      ]
+      ],
+      "started_at": "2026-09-09T21:06:39+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "8aafb97e-0150-4044-aa3a-3cb9f8a4fc66",
+          "cost_usd": 5.40742175,
+          "duration_s": 490.8,
+          "num_turns": 15,
+          "exit_code": 1,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "f306509a-f5b3-4188-94a6-9bfb52fc5611",
+          "cost_usd": 4.63371775,
+          "duration_s": 531.3,
+          "num_turns": 19,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 10.041139,
+      "duration_s": 1022.1,
+      "retries": 1,
+      "session_id": "f306509a-f5b3-4188-94a6-9bfb52fc5611",
+      "summary": "Claude 어댑터 완성(이전 시도의 resolve-bin.ts·credentials.ts·mapping.ts·errors.ts AgentBusyError 검증 후 재사용): packages/server/src/agents/claude/adapter.ts(ClaudeAdapter/ClaudeSession: queryFn 주입, toPermissionMode(PROTOCOL 4절), options에 cwd/permissionMode/resume/includePartialMessages/settingSources(기본 user·project·local)/model/canUseTool/abortController/stderr→logger.warn/pathToClaudeCodeExecutable, env는 process.env 복사본에서 CLAUDECODE·CLAUDE_CODE_ENTRYPOINT 삭제+토큰 파일 있으면 CLAUDE_CODE_OAUTH_TOKEN; sendTurn은 trn_ ID+user_message 아이템 방출+SDKUserMessage{parent_tool_use_id:null, session_id} 큐 push, 턴 중이면 AgentBusyError; 백그라운드 루프가 ClaudeEventMapper로 AgentEvent 변환, 이터레이터 예외→error{recoverable:false}+events 종료; interrupt()→q.interrupt() 후 interruptTimeoutMs(기본 5초) 안에 turn.completed 없으면 abort+열린 아이템 cancelled+error{recoverable:true,'턴을 강제 중단했습니다'}+status idle, 다음 sendTurn에서 resume:nativeId로 새 프로세스; canUseTool→apr_ Approval(kind command/file_change/permission, prompt는 SDK options.title, detail은 cwd+입력 JSON 4KiB 절단, diff는 buildFilePatch, options allow/allow_session(suggestions 있을 때)/deny, abort는 숨은 옵션), item.started approval+approval.requested, 자동 만료 없음, respondApproval→allow{updatedInput}/allow_session{updatedPermissions:suggestions}/deny{message}/abort{interrupt:true}+item.completed(resolution by client), options.signal abort→by system; close()는 대기 승인 deny+interrupt, abort, q.close(), 루프 종료 대기; probe는 binPath(MAM_CLAUDE_BIN→resolveBinary) 있으면 `<bin> --version` 첫 줄 아니면 SDK 패키지 버전, detectLogin 결과), claude/index.ts, agent-host/server.ts defaultAdapters()에 claude: new ClaudeAdapter() 등록(MAM_FAKE_AGENT=1이면 Fake 유지), packages/server/vitest.config.ts 추가(`npx vitest run --root packages/server` AC 커맨드용, 루트와 같은 alias). 테스트 test/agents/claude/{adapter(8: a~g+probe, 가짜 Query로 SDKMessage 재생, TimelineItemSchema로 아이템 검증), credentials(5: 세 감지 경로+만료 경고+빈 토큰), integration(MAM_IT_CLAUDE=1일 때만)}.test.ts. AC 전부 통과: typecheck 0 에러, npm test 247 passed(1 skipped=IT), scripts/test.sh OK(MAM_TEST_SKIP_IOS=1), src에 shell:true/exec 없음. 통합 테스트 실측: 실제 SDK+~/.local/bin/claude 2.1.266, 계정 kwangteakna@gmail.com(claude-json 감지), maxTurns:1·allowedTools:[]로 \"pong\" 응답까지 3.2초, 비용 $0.153, turn.completed 수신. interrupt() 실측은 IT에 포함하지 못함(예산 한계) — 단위 테스트(g)는 타임아웃 경로(강제 abort→resume 재시작)만 검증하므로 실제 q.interrupt() 중단 의미는 step 6 이후 후속 확인 권장. 주의: 단위 테스트에서 user_message 아이템이 init(native_id)보다 먼저 나올 수 있음(sendTurn 즉시 방출) — 매니저는 순서 무관. packages/protocol·phases/ 미수정, 새 의존성 없음.",
+      "completed_at": "2026-09-09T21:23:41+0900"
     },
     {
       "step": 6,
