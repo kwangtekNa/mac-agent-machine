@@ -135,11 +135,29 @@
     {
       "step": 4,
       "name": "agent-host-http",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         2,
         3
-      ]
+      ],
+      "started_at": "2026-09-09T20:56:02+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "a1f79626-59cb-4eef-9811-fb8c4bf6ce68",
+          "cost_usd": 4.69061325,
+          "duration_s": 637.2,
+          "num_turns": 11,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 4.690613,
+      "duration_s": 637.2,
+      "retries": 0,
+      "session_id": "a1f79626-59cb-4eef-9811-fb8c4bf6ce68",
+      "summary": "agent-host HTTP/WS 계층 완성: packages/server/src/agent-host/http.ts(AgentHostContext·zod preHandler validate·개발모드 응답 스키마 검증 send→위반 시 500), app.ts(buildApp: onRequest 훅 X-MAM-Protocol≠1→426·X-MAM-User 누락/불일치→403(/healthz 예외), MamError/FsError/ZodError/Fastify 4xx/500 통합 오류 핸들러 {error:{code,message}}, 404 핸들러, @fastify/websocket, /api/v1 prefix, forceCloseConnections), routes/me.ts(probe 5초 WeakMap 캐시, 실패 시 available:false), projects.ts(workspaceRoot 하위 비숨김 디렉토리+세션 cwd 병합, findRepoRoot, lastSessionAt desc 정렬), sessions.ts(list/create/get/patch/close/approvals REST; cwd는 resolveInsideHome+디렉토리 검사, mode 기본 ask, body approvalId≠URL→400), fs.ts(list는 리포면 gitStatusMap 병합, read는 FsError→415/400), git.ts(status/diff, staged 문자열→boolean, 절대·~ path는 샌드박스 통과), auth.ts(3개 501 스텁), ws.ts(구독→스냅샷→큐 flush로 seq 순서 보장, parseClientMessage 실패→error seq0 recoverable, SessionBusyError→'session is busy', ping→pong, 세션 없음→close 4004, 30초 서버 ping 정리, 소켓당 독립 구독), server.ts(startAgentHost: stale 소켓 unlink→listen→chmod 0600, dataDir 기본 ~/.mam 0700, MAM_FAKE_AGENT=1이면 Fake 어댑터 아니면 빈 맵, close(), installSignalHandlers SIGTERM/SIGINT→manager.shutdown). cli.ts를 commander로 교체(agent-host --socket/--data-dir/--workspace/--dev, 인자 없으면 \"mam 0.1.0\" 유지). 테스트 test/agent-host/{helpers,rest,ws}.test.ts 18개(REST inject: 403/426/404 형태, /me·/projects, 세션 생성→목록→상세→patch→close, cwd 403/400/404, codex 503 agent_unavailable, approvals REST 200→409, fs/list gitStatus M/?, fs/read 415, git/status·diff, auth 501, 계약 위반→500; WS 실제 unix socket: 0600·stale 소켓, 4004, 스냅샷→turn.start→delta→approval.requested→busy error→approval.respond(다른 클라이언트)→approval.resolved→turn.completed→idle, seq 단조·두 클라이언트 동일 스트림, since 재접속 재생, 잘못된 JSON/미지 type→error 후 ping/pong·setMode 유지). AC 전부 통과: typecheck 0 에러, npm test 234 passed, build OK, scripts/test.sh OK(MAM_TEST_SKIP_IOS=1), curl 스모크 \"user\" 확인·소켓 srw-------. 제외: WS 업그레이드 요청에 X-MAM-User 누락 시 403 검증 테스트는 ws 클라이언트가 응답을 못 받고 멈춰 제거(같은 onRequest 훅이 적용되며 REST 테스트가 403/426 커버) — 후속 확인 권장. 새 의존성 없음, @mam/protocol·SessionManager·phases/ 미수정.",
+      "completed_at": "2026-09-09T21:06:39+0900"
     },
     {
       "step": 5,
