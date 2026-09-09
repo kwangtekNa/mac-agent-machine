@@ -1,0 +1,51 @@
+import { describe, expect, it } from "vitest";
+import { languageForPath } from "../../src/fs/language.js";
+
+describe("languageForPath", () => {
+  it.each([
+    ["a.ts", "typescript"],
+    ["a.tsx", "typescript"],
+    ["/x/y/App.JS", "javascript"],
+    ["a.mjs", "javascript"],
+    ["a.cjs", "javascript"],
+    ["a.jsx", "javascript"],
+    ["A.swift", "swift"],
+    ["a.py", "python"],
+    ["a.rb", "ruby"],
+    ["a.go", "go"],
+    ["a.rs", "rust"],
+    ["a.java", "java"],
+    ["a.kt", "kotlin"],
+    ["a.c", "c"],
+    ["a.h", "c"],
+    ["a.cc", "cpp"],
+    ["a.cpp", "cpp"],
+    ["a.hpp", "cpp"],
+    ["a.m", "objective-c"],
+    ["a.mm", "objective-c"],
+    ["a.sh", "shell"],
+    ["a.zsh", "shell"],
+    ["a.bash", "shell"],
+    ["a.json", "json"],
+    ["a.yaml", "yaml"],
+    ["a.yml", "yaml"],
+    ["a.toml", "toml"],
+    ["README.md", "markdown"],
+    ["a.html", "html"],
+    ["a.css", "css"],
+    ["a.scss", "scss"],
+    ["a.sql", "sql"],
+    ["a.xml", "xml"],
+    ["Info.plist", "xml"],
+    ["Dockerfile", "dockerfile"],
+    ["/app/Dockerfile.dev", "dockerfile"],
+    ["Makefile", "makefile"],
+    ["GNUmakefile", "makefile"],
+    ["LICENSE", "plaintext"],
+    ["a.unknownext", "plaintext"],
+    [".env", "plaintext"],
+    [".zshrc", "shell"],
+  ])("%s → %s", (p, lang) => {
+    expect(languageForPath(p)).toBe(lang);
+  });
+});
