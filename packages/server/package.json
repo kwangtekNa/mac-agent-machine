@@ -7,7 +7,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -b ../protocol && tsc --noEmit"
   },
   "dependencies": {
     "@mam/protocol": "*",
