@@ -95,6 +95,12 @@ enum LoginFlowStatus: String, LenientRawEnum {
     case unknown
 }
 
+/// 구독 사용 한도 창의 상태(2026-09-10 추가). `usedPercent < 80` → ok, 80 이상 → warning, 100 이상 또는 거부 보고 → exceeded.
+enum UsageLimitStatus: String, LenientRawEnum {
+    case ok, warning, exceeded
+    case unknown
+}
+
 enum ErrorCode: String, LenientRawEnum {
     case notFound = "not_found"
     case forbidden

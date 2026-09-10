@@ -55,6 +55,14 @@ struct SessionStatusEvent: Decodable, Hashable, Sendable {
     var reason: String?
 }
 
+/// 누적 사용량·컨텍스트 갱신(2026-09-10 추가). `usage` 는 `Session.usage` 와 같은 객체. 턴 종료 시, Codex 는 턴 중에도 온다.
+struct SessionUsageEvent: Decodable, Hashable, Sendable {
+    var seq: Int
+    var sessionId: String
+    var ts: Date
+    var usage: SessionUsage
+}
+
 struct TurnCompletedEvent: Decodable, Hashable, Sendable {
     var seq: Int
     var sessionId: String
@@ -89,6 +97,7 @@ enum ServerEvent: Decodable, Hashable, Sendable {
     case approvalRequested(ApprovalRequestedEvent)
     case approvalResolved(ApprovalResolvedEvent)
     case sessionStatus(SessionStatusEvent)
+    case sessionUsage(SessionUsageEvent)
     case turnCompleted(TurnCompletedEvent)
     case error(ErrorEvent)
     case pong(PongEvent)
@@ -102,6 +111,7 @@ enum ServerEvent: Decodable, Hashable, Sendable {
         case approvalRequested = "approval.requested"
         case approvalResolved = "approval.resolved"
         case sessionStatus = "session.status"
+        case sessionUsage = "session.usage"
         case turnCompleted = "turn.completed"
         case error
         case pong
@@ -122,6 +132,7 @@ enum ServerEvent: Decodable, Hashable, Sendable {
         case .approvalRequested: .approvalRequested(try ApprovalRequestedEvent(from: decoder))
         case .approvalResolved: .approvalResolved(try ApprovalResolvedEvent(from: decoder))
         case .sessionStatus: .sessionStatus(try SessionStatusEvent(from: decoder))
+        case .sessionUsage: .sessionUsage(try SessionUsageEvent(from: decoder))
         case .turnCompleted: .turnCompleted(try TurnCompletedEvent(from: decoder))
         case .error: .error(try ErrorEvent(from: decoder))
         case .pong: .pong(try PongEvent(from: decoder))
@@ -137,6 +148,7 @@ enum ServerEvent: Decodable, Hashable, Sendable {
         case .approvalRequested: .approvalRequested
         case .approvalResolved: .approvalResolved
         case .sessionStatus: .sessionStatus
+        case .sessionUsage: .sessionUsage
         case .turnCompleted: .turnCompleted
         case .error: .error
         case .pong: .pong
@@ -151,6 +163,7 @@ enum ServerEvent: Decodable, Hashable, Sendable {
         case .approvalRequested(let e): e.seq
         case .approvalResolved(let e): e.seq
         case .sessionStatus(let e): e.seq
+        case .sessionUsage(let e): e.seq
         case .turnCompleted(let e): e.seq
         case .error(let e): e.seq
         case .pong(let e): e.seq
@@ -165,6 +178,7 @@ enum ServerEvent: Decodable, Hashable, Sendable {
         case .approvalRequested(let e): e.sessionId
         case .approvalResolved(let e): e.sessionId
         case .sessionStatus(let e): e.sessionId
+        case .sessionUsage(let e): e.sessionId
         case .turnCompleted(let e): e.sessionId
         case .error(let e): e.sessionId
         case .pong(let e): e.sessionId
@@ -179,6 +193,7 @@ enum ServerEvent: Decodable, Hashable, Sendable {
         case .approvalRequested(let e): e.ts
         case .approvalResolved(let e): e.ts
         case .sessionStatus(let e): e.ts
+        case .sessionUsage(let e): e.ts
         case .turnCompleted(let e): e.ts
         case .error(let e): e.ts
         case .pong(let e): e.ts

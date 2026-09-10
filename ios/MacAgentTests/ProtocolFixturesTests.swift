@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import MacAgent
 
-/// 계약 테스트: `packages/protocol/fixtures/` 의 40개 JSON 을 Swift Codable 로 전수 디코딩한다.
+/// 계약 테스트: `packages/protocol/fixtures/` 의 46개 JSON 을 Swift Codable 로 전수 디코딩한다.
 /// TS 쪽 `packages/protocol/test/fixtures.test.ts` 의 매핑표와 대칭이다.
 final class ProtocolFixturesTests: XCTestCase {
     private typealias Decoder = (Data) throws -> Any
@@ -14,7 +14,7 @@ final class ProtocolFixturesTests: XCTestCase {
     /// 파일 상대 경로 → 디코더. 폴더의 모든 `.json` 이 여기 있어야 하고, 여기 있는 키는 전부 파일로 있어야 한다.
     private static func table() -> [String: Decoder] {
         var t: [String: Decoder] = [
-            // rest/ 13개
+            // rest/ 18개
             "rest/me.json": decode(MeResponse.self),
             "rest/projects.json": decode(ProjectsResponse.self),
             "rest/sessions.json": decode(SessionsResponse.self),
@@ -28,8 +28,14 @@ final class ProtocolFixturesTests: XCTestCase {
             "rest/error.json": decode(ErrorResponse.self),
             "rest/login-start.json": decode(LoginStartResponse.self),
             "rest/login-status.json": decode(LoginStatusResponse.self),
+            // 2026-09-10 추가분(사용량·모델·mkdir)
+            "rest/fs-mkdir.json": decode(FsMkdirResponse.self),
+            "rest/usage.json": decode(UsageResponse.self),
+            "rest/usage-empty.json": decode(UsageResponse.self),
+            "rest/models-claude.json": decode(ModelsResponse.self),
+            "rest/models-codex.json": decode(ModelsResponse.self),
         ]
-        // ws/ 22개: 전부 ServerEvent
+        // ws/ 23개: 전부 ServerEvent
         for name in wsExpectations.keys {
             t["ws/\(name).json"] = decode(ServerEvent.self)
         }
@@ -61,6 +67,7 @@ final class ProtocolFixturesTests: XCTestCase {
         "approval.requested.user_input": (.approvalRequested, nil, .userInput),
         "approval.resolved": (.approvalResolved, nil, nil),
         "session.status": (.sessionStatus, nil, nil),
+        "session.usage": (.sessionUsage, nil, nil),
         "turn.completed": (.turnCompleted, nil, nil),
         "error": (.error, nil, nil),
         "pong": (.pong, nil, nil),
@@ -84,7 +91,14 @@ final class ProtocolFixturesTests: XCTestCase {
         let files = try FixtureLoader.allJSONPaths()
         let keys = Self.table().keys.sorted()
         XCTAssertEqual(files, keys, "fixtures/ 의 파일 목록과 매핑표가 다르다")
-        XCTAssertEqual(files.count, 40)
+        XCTAssertEqual(files.count, 46)
+        // TS 쪽 fixtures.test.ts 의 ADDED_2026_09_10 과 같은 집합
+        for added in [
+            "rest/usage.json", "rest/usage-empty.json", "rest/models-claude.json", "rest/models-codex.json",
+            "rest/fs-mkdir.json", "ws/session.usage.json",
+        ] {
+            XCTAssertTrue(keys.contains(added), "\(added) 이 매핑표에 없다")
+        }
     }
 
     func testTableCoversEveryEventTypeItemKindAndClientType() {
@@ -305,6 +319,133 @@ final class ProtocolFixturesTests: XCTestCase {
         }
         XCTAssertEqual(p.durationMs, 30412)
         XCTAssertEqual(p.usage.inputTokens, 18420)
+    }
+
+    // MARK: - 2026-09-10 추가분 (사용량·모델·mkdir)
+
+    func testSessionCarriesEffortAndUsage() throws {
+        let session = try decodeFixture(Session.self, "rest/session.json")
+        XCTAssertEqual(session.effort, "high")
+        let usage = try XCTUnwrap(session.usage)
+        XCTAssertEqual(usage.inputTokens, 12000)
+        XCTAssertEqual(usage.outputTokens, 3400)
+        XCTAssertEqual(usage.cacheReadTokens, 90000)
+        XCTAssertEqual(usage.cacheWriteTokens, 5000)
+        XCTAssertEqual(usage.costUsd, 0.42)
+        XCTAssertEqual(usage.turns, 3)
+        let context = try XCTUnwrap(usage.context)
+        XCTAssertEqual(context.tokens, 42000)
+        XCTAssertEqual(context.window, 200000)
+        XCTAssertEqual(context.percent, 21)
+        XCTAssertEqual(usage.updatedAt, session.updatedAt)
+
+        // session-detail 과 snapshot 의 Session 도 같은 모양
+        let detail = try decodeFixture(SessionDetailResponse.self, "rest/session-detail.json")
+        XCTAssertNotNil(detail.session.effort)
+        XCTAssertGreaterThan(try XCTUnwrap(detail.session.usage?.turns), 0)
+        guard case .sessionSnapshot(let e) = try decodeFixture(ServerEvent.self, "ws/session.snapshot.json") else {
+            return XCTFail("session.snapshot 이 아니다")
+        }
+        XCTAssertNotNil(e.session.effort)
+        XCTAssertGreaterThan(try XCTUnwrap(e.session.usage?.context?.window), 0)
+    }
+
+    func testSessionsSecondEntryHasNilUsageAndEffort() throws {
+        let list = try decodeFixture(SessionsResponse.self, "rest/sessions.json")
+        XCTAssertGreaterThanOrEqual(list.sessions.count, 2)
+        XCTAssertNotNil(list.sessions[0].usage)
+        XCTAssertNotNil(list.sessions[0].effort)
+        XCTAssertNil(list.sessions[1].usage)
+        XCTAssertNil(list.sessions[1].effort)
+    }
+
+    func testSessionUsageEventDecodes() throws {
+        let event = try decodeFixture(ServerEvent.self, "ws/session.usage.json")
+        guard case .sessionUsage(let e) = event else { return XCTFail("session.usage 가 아니다") }
+        XCTAssertEqual(event.type, .sessionUsage)
+        XCTAssertEqual(e.seq, 44)
+        XCTAssertEqual(e.sessionId, "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB")
+        XCTAssertEqual(e.usage.turns, 3)
+        XCTAssertEqual(e.usage.context?.percent, 21)
+        XCTAssertEqual(e.usage.costUsd, 0.42)
+        // Session.usage 와 같은 객체
+        let session = try decodeFixture(Session.self, "rest/session.json")
+        XCTAssertEqual(e.usage.inputTokens, session.usage?.inputTokens)
+        XCTAssertEqual(e.usage.context, session.usage?.context)
+    }
+
+    func testUsageResponse() throws {
+        let usage = try decodeFixture(UsageResponse.self, "rest/usage.json")
+        XCTAssertEqual(usage.agents.map(\.kind), [.claude, .codex])
+        let claude = try XCTUnwrap(usage.agents.first { $0.kind == .claude })
+        XCTAssertEqual(claude.plan, "max")
+        XCTAssertFalse(claude.live)
+        XCTAssertNotNil(claude.observedAt)
+        XCTAssertEqual(claude.limits.map(\.id), ["five_hour", "seven_day"])
+        XCTAssertEqual(claude.limits.map(\.status), [.ok, .warning])
+        XCTAssertEqual(claude.limits[0].usedPercent, 42)
+        XCTAssertEqual(claude.limits[0].windowMinutes, 300)
+        XCTAssertNotNil(claude.limits[0].resetsAt)
+        XCTAssertEqual(claude.limits[0].label, "5시간")
+        let codex = try XCTUnwrap(usage.agents.first { $0.kind == .codex })
+        XCTAssertTrue(codex.live)
+        XCTAssertEqual(codex.limits.map(\.id), ["primary", "secondary"])
+
+        let empty = try decodeFixture(UsageResponse.self, "rest/usage-empty.json")
+        XCTAssertEqual(empty.agents.count, 2)
+        for agent in empty.agents {
+            XCTAssertNil(agent.plan)
+            XCTAssertNil(agent.observedAt)
+            XCTAssertTrue(agent.limits.isEmpty)
+        }
+    }
+
+    func testUsageLimitStatusUnknownValueIsLenient() throws {
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: FixtureLoader.data("rest/usage.json")) as? [String: Any])
+        var agents = try XCTUnwrap(json["agents"] as? [[String: Any]])
+        var limits = try XCTUnwrap(agents[0]["limits"] as? [[String: Any]])
+        limits[0]["status"] = "throttled"
+        limits[1]["windowMinutes"] = NSNull()
+        limits[1]["resetsAt"] = NSNull()
+        agents[0]["limits"] = limits
+        json["agents"] = agents
+        let data = try JSONSerialization.data(withJSONObject: json)
+        let usage = try JSONCoding.decoder.decode(UsageResponse.self, from: data)
+        XCTAssertEqual(usage.agents[0].limits[0].status, .unknown)
+        XCTAssertEqual(usage.agents[0].limits[1].status, .warning)
+        XCTAssertNil(usage.agents[0].limits[1].windowMinutes)
+        XCTAssertNil(usage.agents[0].limits[1].resetsAt)
+        XCTAssertEqual(UsageLimitStatus.allCases.count, 4)
+    }
+
+    func testModelsResponses() throws {
+        let claude = try decodeFixture(ModelsResponse.self, "rest/models-claude.json")
+        XCTAssertEqual(claude.models.map(\.id), ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"])
+        XCTAssertEqual(claude.models.filter(\.isDefault).count, 1)
+        XCTAssertEqual(claude.models[0].displayName, "Opus 5")
+        XCTAssertEqual(claude.models[0].description, "가장 뛰어난 모델")
+        XCTAssertEqual(claude.models[0].efforts, ["low", "medium", "high", "xhigh", "max"])
+        XCTAssertEqual(claude.models[0].defaultEffort, "high")
+        // effort 미지원 모델: efforts [] 와 description/defaultEffort null
+        XCTAssertTrue(claude.models[2].efforts.isEmpty)
+        XCTAssertNil(claude.models[2].description)
+        XCTAssertNil(claude.models[2].defaultEffort)
+
+        let codex = try decodeFixture(ModelsResponse.self, "rest/models-codex.json")
+        XCTAssertEqual(codex.models.count, 2)
+        XCTAssertEqual(codex.models.filter(\.isDefault).map(\.id), ["gpt-5-codex"])
+        for model in codex.models where model.defaultEffort != nil {
+            XCTAssertTrue(model.efforts.contains(try XCTUnwrap(model.defaultEffort)), model.id)
+        }
+    }
+
+    func testFsMkdirResponse() throws {
+        let response = try decodeFixture(FsMkdirResponse.self, "rest/fs-mkdir.json")
+        XCTAssertEqual(response.entry.type, .dir)
+        XCTAssertEqual(response.entry.name, "new-app")
+        XCTAssertEqual(response.entry.path, "/Users/alice/work/new-app")
+        XCTAssertNil(response.entry.size)
+        XCTAssertNil(response.entry.gitStatus)
     }
 
     func testTimelineItemRoundTrip() throws {

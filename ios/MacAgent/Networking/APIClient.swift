@@ -61,6 +61,7 @@ struct APIClient: Sendable {
         try await get(SessionDetailResponse.self, "/sessions/\(id)")
     }
 
+    /// `PATCH /sessions/:id`. `title`/`mode`/`model`/`effort` 중 nil 인 필드는 본문에서 생략된다.
     func patchSession(id: String, _ req: PatchSessionRequest) async throws -> Session {
         try await send(Session.self, method: "PATCH", path: "/sessions/\(id)", body: req)
     }
@@ -85,6 +86,21 @@ struct APIClient: Sendable {
             query: [URLQueryItem(name: "path", value: path)],
             timeout: Self.fileReadTimeout
         )
+    }
+
+    /// `POST /fs/mkdir` → 201. 홈 밖은 403, 이미 있으면 409 `conflict`, 잘못된 이름은 400.
+    func makeDirectory(path: String) async throws -> FsEntry {
+        try await send(FsMkdirResponse.self, method: "POST", path: "/fs/mkdir", body: FsMkdirRequest(path: path)).entry
+    }
+
+    /// `GET /usage` 에이전트별 구독 사용 한도.
+    func usage() async throws -> UsageResponse {
+        try await get(UsageResponse.self, "/usage")
+    }
+
+    /// `GET /models?agent=` 선택 가능한 모델과 effort 목록.
+    func models(agent: AgentKind) async throws -> [ModelOption] {
+        try await get(ModelsResponse.self, "/models", query: [URLQueryItem(name: "agent", value: agent.rawValue)]).models
     }
 
     func gitStatus(cwd: String) async throws -> GitStatusResponse {

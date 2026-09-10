@@ -113,22 +113,41 @@ final class LenientEnumTests: XCTestCase {
             json["model"] = NSNull()
             json["nativeId"] = NSNull()
             json["preview"] = NSNull()
+            json["effort"] = NSNull()
+            json["usage"] = NSNull()
         }
         let a = try JSONCoding.decoder.decode(Session.self, from: withNull)
         XCTAssertNil(a.model)
         XCTAssertNil(a.nativeId)
         XCTAssertNil(a.preview)
+        XCTAssertNil(a.effort)
+        XCTAssertNil(a.usage)
 
-        // 같은 필드의 키 자체가 없음
+        // 같은 필드의 키 자체가 없음(effort/usage 는 서버가 채우기 전 응답에서 키가 생략될 수 있다)
         let withoutKeys = try mutatedFixture("rest/session.json") { json in
             json.removeValue(forKey: "model")
             json.removeValue(forKey: "nativeId")
             json.removeValue(forKey: "preview")
+            json.removeValue(forKey: "effort")
+            json.removeValue(forKey: "usage")
         }
         let b = try JSONCoding.decoder.decode(Session.self, from: withoutKeys)
         XCTAssertNil(b.model)
         XCTAssertNil(b.nativeId)
         XCTAssertNil(b.preview)
+        XCTAssertNil(b.effort)
+        XCTAssertNil(b.usage)
+
+        // SessionUsage.costUsd / context: null (Codex 구독 계정, 컨텍스트 미상)
+        let usageNull = try mutatedFixture("ws/session.usage.json") { json in
+            self.setNested(&json, ["usage", "costUsd"], NSNull())
+            self.setNested(&json, ["usage", "context"], NSNull())
+        }
+        guard case .sessionUsage(let u) = try JSONCoding.decoder.decode(ServerEvent.self, from: usageNull)
+        else { return XCTFail("session.usage 가 아니다") }
+        XCTAssertNil(u.usage.costUsd)
+        XCTAssertNil(u.usage.context)
+        XCTAssertEqual(u.usage.turns, 3)
 
         // TimelineItem.turnId / completedAt, tool_call.exitCode, Approval.detail / diff
         let itemNull = try mutatedFixture("ws/item.completed.tool_call.json") { json in
@@ -177,11 +196,20 @@ final class LenientEnumTests: XCTestCase {
         let turn = try mutatedFixture("ws/turn.completed.json") { json in
             json.removeValue(forKey: "costUsd")
             self.setNested(&json, ["usage", "cacheReadTokens"], nil)
+            self.setNested(&json, ["usage", "cacheWriteTokens"], nil)
         }
         guard case .turnCompleted(let t) = try JSONCoding.decoder.decode(ServerEvent.self, from: turn)
         else { return XCTFail("turn.completed 가 아니다") }
         XCTAssertNil(t.costUsd)
         XCTAssertNil(t.usage.cacheReadTokens)
+        XCTAssertNil(t.usage.cacheWriteTokens)
+
+        let turnWithCacheWrite = try mutatedFixture("ws/turn.completed.json") { json in
+            self.setNested(&json, ["usage", "cacheWriteTokens"], 2500)
+        }
+        guard case .turnCompleted(let t2) = try JSONCoding.decoder.decode(ServerEvent.self, from: turnWithCacheWrite)
+        else { return XCTFail("turn.completed 가 아니다") }
+        XCTAssertEqual(t2.usage.cacheWriteTokens, 2500)
     }
 
     // MARK: - 알 수 없는 키와 날짜

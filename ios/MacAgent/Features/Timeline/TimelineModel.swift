@@ -150,6 +150,9 @@ final class TimelineModel {
             session?.status = e.status
             session?.mode = e.mode
             fatalError = e.status == .error ? (e.reason ?? ErrorMessages.sessionError) : nil
+        case .sessionUsage(let e):
+            // 누적 사용량·컨텍스트만 갱신한다. 아이템·상태는 바뀌지 않는다.
+            session?.usage = e.usage
         case .turnCompleted:
             break
         case .error(let e):

@@ -175,6 +175,32 @@ final class TimelineModelTests: XCTestCase {
         XCTAssertEqual(model.lastSeq, 43)
     }
 
+    func testSessionUsageUpdatesSessionUsageOnlyAndCreatesNoItem() throws {
+        let model = makeModel()
+        model.apply(try event("session.snapshot"))
+        let before = try XCTUnwrap(model.session?.usage)
+        XCTAssertEqual(before.turns, 2, "snapshot fixture 의 세션 usage")
+        XCTAssertEqual(model.items.count, 2)
+
+        // 스냅샷보다 뒤(seq 44, turns 3). 세션의 usage 만 바뀌고 아이템·상태는 그대로.
+        var data = try FixtureLoader.data("ws/session.usage.json")
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var usage = try XCTUnwrap(json["usage"] as? [String: Any])
+        usage["context"] = ["tokens": 60000, "window": 200000, "percent": 30]
+        json["usage"] = usage
+        data = try JSONSerialization.data(withJSONObject: json)
+        model.apply(try JSONCoding.decoder.decode(ServerEvent.self, from: data))
+
+        let after = try XCTUnwrap(model.session?.usage)
+        XCTAssertEqual(after.turns, 3)
+        XCTAssertGreaterThan(after.turns, before.turns)
+        XCTAssertEqual(after.context?.percent, 30)
+        XCTAssertEqual(after.context?.tokens, 60000)
+        XCTAssertEqual(model.items.count, 2)
+        XCTAssertEqual(model.status, .waitingApproval)
+        XCTAssertEqual(model.lastSeq, 44)
+    }
+
     // MARK: - approvals
 
     func testApprovalRequestedAddsPendingAndSetsWaiting() throws {

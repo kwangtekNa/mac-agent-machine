@@ -188,4 +188,105 @@ final class APIClientTests: XCTestCase {
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? NSDictionary)
         XCTAssertEqual(body, ["optionId": "deny", "message": "아니오"] as NSDictionary)
     }
+
+    // MARK: - 2026-09-10 추가분 (mkdir · usage · models · patch model/effort)
+
+    func testMakeDirectoryBodyAndDecodes201() async throws {
+        try stub(status: 201, fixture: "rest/fs-mkdir.json")
+        let entry = try await client.makeDirectory(path: "~/work/new-app")
+        XCTAssertEqual(entry.name, "new-app")
+        XCTAssertEqual(entry.path, "/Users/alice/work/new-app")
+        XCTAssertEqual(entry.type, .dir)
+        XCTAssertNil(entry.size)
+        let request = try XCTUnwrap(lastRequest)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:7777/api/v1/fs/mkdir")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? NSDictionary)
+        XCTAssertEqual(body, ["path": "~/work/new-app"] as NSDictionary)
+    }
+
+    func testMakeDirectory409MapsToConflict() async throws {
+        try stub(status: 409, body: Data(#"{"error":{"code":"conflict","message":"already exists"}}"#.utf8))
+        do {
+            _ = try await client.makeDirectory(path: "/Users/alice/work/app")
+            XCTFail("throw 를 기대")
+        } catch APIError.server(let code, let message, let status) {
+            XCTAssertEqual(code, .conflict)
+            XCTAssertEqual(message, "already exists")
+            XCTAssertEqual(status, 409)
+        } catch {
+            XCTFail("예상 밖 오류: \(error)")
+        }
+    }
+
+    func testUsageDecodesFixture() async throws {
+        try stub(status: 200, fixture: "rest/usage.json")
+        let usage = try await client.usage()
+        let request = try XCTUnwrap(lastRequest)
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:7777/api/v1/usage")
+        XCTAssertNil(request.httpBody)
+        XCTAssertEqual(usage.agents.map(\.kind), [.claude, .codex])
+        XCTAssertEqual(usage.agents[0].limits.map(\.status), [.ok, .warning])
+        XCTAssertTrue(usage.agents[1].live)
+
+        try stub(status: 200, fixture: "rest/usage-empty.json")
+        let empty = try await client.usage()
+        XCTAssertTrue(empty.agents.allSatisfy { $0.limits.isEmpty && $0.observedAt == nil && $0.plan == nil })
+    }
+
+    func testModelsQueryAndDecodes() async throws {
+        try stub(status: 200, fixture: "rest/models-claude.json")
+        let claude = try await client.models(agent: .claude)
+        let url = try XCTUnwrap(lastRequest?.url)
+        XCTAssertEqual(url.path(), "/api/v1/models")
+        let items = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(items, [URLQueryItem(name: "agent", value: "claude")])
+        XCTAssertEqual(claude.map(\.id), ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"])
+        XCTAssertEqual(claude.filter(\.isDefault).map(\.id), ["claude-opus-5"])
+        XCTAssertEqual(claude[0].efforts.count, 5)
+        XCTAssertTrue(claude[2].efforts.isEmpty)
+
+        try stub(status: 200, fixture: "rest/models-codex.json")
+        let codex = try await client.models(agent: .codex)
+        let items2 = try XCTUnwrap(URLComponents(url: XCTUnwrap(lastRequest?.url), resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(items2, [URLQueryItem(name: "agent", value: "codex")])
+        XCTAssertEqual(codex.map(\.id), ["gpt-5-codex", "gpt-5"])
+        XCTAssertEqual(codex[0].defaultEffort, "medium")
+    }
+
+    func testPatchSessionEncodesModelAndEffortAndOmitsEmptyFields() async throws {
+        try stub(status: 200, fixture: "rest/session.json")
+        let session = try await client.patchSession(id: "ses_1", PatchSessionRequest(model: "claude-opus-5", effort: "high"))
+        XCTAssertEqual(session.effort, "high")
+        XCTAssertEqual(session.usage?.context?.percent, 21)
+        let request = try XCTUnwrap(lastRequest)
+        XCTAssertEqual(request.httpMethod, "PATCH")
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:7777/api/v1/sessions/ses_1")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? NSDictionary)
+        XCTAssertEqual(body, ["model": "claude-opus-5", "effort": "high"] as NSDictionary)
+
+        // effort 만
+        _ = try await client.patchSession(id: "ses_1", PatchSessionRequest(effort: "low"))
+        let body2 = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(lastRequest?.httpBody)) as? NSDictionary)
+        XCTAssertEqual(body2, ["effort": "low"] as NSDictionary)
+
+        // 기존 필드(title/mode)와 섞어도 nil 키는 생략
+        _ = try await client.patchSession(id: "ses_1", PatchSessionRequest(title: "새 제목", mode: .plan, model: "gpt-5-codex"))
+        let body3 = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(lastRequest?.httpBody)) as? NSDictionary)
+        XCTAssertEqual(body3, ["title": "새 제목", "mode": "plan", "model": "gpt-5-codex"] as NSDictionary)
+
+        // 400: 모델 목록에 없는 값
+        try stub(status: 400, body: Data(#"{"error":{"code":"invalid_request","message":"unknown model"}}"#.utf8))
+        do {
+            _ = try await client.patchSession(id: "ses_1", PatchSessionRequest(model: "nope"))
+            XCTFail("throw 를 기대")
+        } catch APIError.server(let code, _, let status) {
+            XCTAssertEqual(code, .invalidRequest)
+            XCTAssertEqual(status, 400)
+        } catch {
+            XCTFail("예상 밖 오류: \(error)")
+        }
+    }
 }

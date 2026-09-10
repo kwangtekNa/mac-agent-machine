@@ -115,6 +115,68 @@ struct GitDiffResponse: Codable, Hashable, Sendable {
     var patch: String
 }
 
+/// `POST /fs/mkdir` 본문(2026-09-10 추가). `~/` 로 시작하면 서버가 홈으로 치환한다.
+struct FsMkdirRequest: Codable, Hashable, Sendable {
+    var path: String
+
+    init(path: String) {
+        self.path = path
+    }
+}
+
+/// `POST /fs/mkdir` → 201. 만든 디렉토리의 FsEntry.
+struct FsMkdirResponse: Codable, Hashable, Sendable {
+    var entry: FsEntry
+}
+
+/// 구독 사용 한도 창 하나(2026-09-10 추가). `usedPercent` 는 100 을 넘을 수 있다.
+struct UsageLimit: Codable, Identifiable, Hashable, Sendable {
+    /// `five_hour`, `seven_day`(Claude), `primary`, `secondary`(Codex) 등
+    var id: String
+    /// 표시용 라벨(`5시간`, `주간`)
+    var label: String
+    var usedPercent: Int
+    /// nullable
+    var windowMinutes: Int?
+    /// nullable
+    var resetsAt: Date?
+    var status: UsageLimitStatus
+}
+
+/// 에이전트별 구독 사용 한도(2026-09-10 추가). 관측값이 없으면 `limits: []`, `observedAt: null`.
+struct AgentUsage: Codable, Hashable, Sendable {
+    var kind: AgentKind
+    /// nullable
+    var plan: String?
+    /// Codex 는 호출 시점 조회(true), Claude 는 세션 실행 중 관측한 마지막 값(false).
+    var live: Bool
+    /// nullable
+    var observedAt: Date?
+    var limits: [UsageLimit]
+}
+
+/// `GET /usage`
+struct UsageResponse: Codable, Hashable, Sendable {
+    var agents: [AgentUsage]
+}
+
+/// `GET /models` 항목(2026-09-10 추가). `efforts` 가 비어 있으면 effort 조절을 지원하지 않는다.
+struct ModelOption: Codable, Identifiable, Hashable, Sendable {
+    var id: String
+    var displayName: String
+    /// nullable
+    var description: String?
+    var isDefault: Bool
+    var efforts: [String]
+    /// nullable
+    var defaultEffort: String?
+}
+
+/// `GET /models?agent=`
+struct ModelsResponse: Codable, Hashable, Sendable {
+    var models: [ModelOption]
+}
+
 /// `POST /auth/:agent/login`
 struct LoginStartResponse: Codable, Hashable, Sendable {
     var flowId: String
