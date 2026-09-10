@@ -97,7 +97,25 @@
     {
       "step": 4,
       "name": "sessions-ui",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-10T09:44:23+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "fb251759-fd7b-4ded-8400-b95227818471",
+          "cost_usd": 6.355802750000001,
+          "duration_s": 704.6,
+          "num_turns": 53,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 6.355803,
+      "duration_s": 704.6,
+      "retries": 0,
+      "session_id": "fb251759-fd7b-4ded-8400-b95227818471",
+      "summary": "ios/MacAgent/Features/Sessions/ 5개 파일 추가: SessionsStore.swift(@MainActor @Observable, refresh는 /projects·/sessions async let 병렬 + 실패 쪽만 이전 값 유지·errorMessage, hasLoaded 플래그, create는 POST 후 맨 앞 삽입(같은 id 교체), close는 응답 세션으로 교체, active=running|waiting_approval에서 waiting 먼저·updatedAt desc, recent 상위 10, sessions(inProject:)는 cwd 정확 일치(서버 sessionCount 기준), pendingApprovalTotal 합계, session(id:)), SessionsHomeView.swift(NavigationStack+path, insetGrouped List: 오류 배너 행(노랑+다시 시도) → \"지금 진행 중\"(비어 있지 않을 때) → \"프로젝트\"(folder·이름·경로 caption·git arrow.triangle.branch·세션 수 → ProjectSessionsView) → \"최근 세션\", 빈 상태 ContentUnavailableView(\"아직 세션이 없습니다\"/\"오른쪽 위 + 로 시작하세요\"), 첫 로딩 ProgressView, 툴바 gear→SettingsView 시트/+→NewSessionSheet, refreshable, .task로 등장 시 + 15초 주기 refresh(사라지면 취소), 새 세션은 시트 onDismiss 후 path.append), SessionRowView.swift(NavigationLink(value: Session), AgentBadge 캡슐 \"Claude\"/\"Codex\", displayTitle(제목→preview 첫 줄→\"새 세션\"), cwd 마지막 2컴포넌트 · 상대시간, 상태 점 idle 회색/running 파랑 ProgressView/waiting 노랑/error 빨강/closed 없음, waiting 또는 pendingApprovals>0이면 노란 hand.raised.fill+건수, closed 아니면 스와이프 \"닫기\"; SessionStatus.label/color, AgentKind.shortName 확장), ProjectSessionsView.swift(같은 행, 헤더에 경로, + 는 cwd 프리필 시트, path 바인딩으로 push), NewSessionSheet.swift(Form: 에이전트 segmented Picker + me.agents 기준 \"로그인 필요\"/\"설치되지 않음\" 캡션과 시작 버튼 비활성, 디렉토리 프로젝트 Picker + \"다른 경로\" TextField(\"~/work/my-app\"), 모드 inline Picker ask(기본)/auto-edit/plan 설명 한 줄씩(full-auto 없음, ADR-015), 제목 선택, \"세션 시작\"→store.create→onCreated+dismiss, 오류는 폼 하단 빨간 캡션). Features/Timeline/TimelineView.swift 자리표시자(store에서 sessionId 조회, 제목·에이전트·상태만). Shared/Formatters.swift(relativeTime: 방금/N분 전/N시간 전/어제(달력 기준)/N일 전/\"9월 3일\"·\"2025년 8월 6일\", abbreviatedPath 마지막 2컴포넌트). ErrorMessages.sessionCreateMessage(for:agent:) 추가(agent_unavailable→\"<에이전트>를 지금 사용할 수 없습니다…\", 403→\"접근할 수 없는 경로입니다…\", 400/404→\"디렉토리를 찾을 수 없습니다…\", 그 외 기존 매핑). RootView 자리표시자 제거, .connected면 ConnectedRootView(client:).id(baseURL)이 SessionsStore를 만들어 .environment로 주입(서버 주소 바뀌면 재생성). 테스트 ios/MacAgentTests/Features/Sessions/ SessionsStoreTests 15개(fixture 로드·전송 오류 매핑+이전 데이터 유지·한쪽 실패 시 서버 메시지·성공 후 오류 해제·active 정렬·inProject·pendingApprovalTotal·recent 10·create 본문 {agent,cwd,mode,title}/title nil 생략/맨 앞 삽입·중복 id·400 rethrow·close 경로+상태 교체·sessionCreateMessage 5종·displayTitle·status label) + FormattersTests 5개. TDD: 테스트 먼저 작성해 빌드 실패(RED) 확인 후 구현. AC: xcodegen+xcodebuild test 100개 통과(기존 80+20, 새 파일 경고 0), bash scripts/test.sh(TS 309 passed + iOS) exit 0. 서버 코드·fixture·phases/ 미수정, 커밋 안 함. 결정: 새 세션 push는 시트 onDismiss 뒤에 수행, segmented Picker는 항목 .disabled가 무시될 수 있어 캡션+시작 버튼 비활성으로 강제, 닫기 실패 시 refresh로 실제 상태 복원, 시뮬레이터 수동 UI 확인은 하지 않음(빌드·스토어 테스트만).",
+      "completed_at": "2026-09-10T09:56:08+0900"
     },
     {
       "step": 5,
