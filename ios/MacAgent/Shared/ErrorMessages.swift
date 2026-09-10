@@ -68,3 +68,14 @@ enum ErrorMessages {
         return status == 501 || code == .agentUnavailable
     }
 }
+
+extension ErrorMessages {
+    static let agentBusy = String(localized: "에이전트가 응답 중입니다. 잠시 후 다시 보내세요.")
+    static let sendFailed = String(localized: "메시지를 보내지 못했습니다. 연결 상태를 확인하세요.")
+    static let sessionError = String(localized: "세션에 오류가 발생했습니다. 다시 시도하세요.")
+
+    /// WS `error{recoverable:true}` 메시지 → 문구. 알려진 시스템 문구만 바꾸고 나머지는 그대로.
+    static func socketErrorMessage(_ message: String) -> String {
+        message.lowercased() == "session is busy" ? agentBusy : message
+    }
+}

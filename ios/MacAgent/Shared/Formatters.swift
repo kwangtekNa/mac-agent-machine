@@ -34,3 +34,37 @@ enum Formatters {
         return parts.suffix(count).joined(separator: "/")
     }
 }
+
+extension Formatters {
+    /// `500ms`, `12초`, `1분 30초`.
+    static func duration(ms: Int) -> String {
+        if ms < 1000 { return "\(ms)ms" }
+        let totalSeconds = ms / 1000
+        if totalSeconds < 60 { return String(localized: "\(totalSeconds)초") }
+        return String(localized: "\(totalSeconds / 60)분 \(totalSeconds % 60)초")
+    }
+
+    /// `999`, `1.3k`, `12k`, `2.5M`.
+    static func tokens(_ count: Int) -> String {
+        if count < 1000 { return "\(count)" }
+        if count < 1_000_000 { return compact(Double(count) / 1000) + "k" }
+        return compact(Double(count) / 1_000_000) + "M"
+    }
+
+    /// `$0.12`. 1센트 미만이면 세 자리(`$0.001`).
+    static func usd(_ value: Double) -> String {
+        if value > 0, value < 0.01 { return String(format: "$%.3f", value) }
+        return String(format: "$%.2f", value)
+    }
+
+    /// 카드 오른쪽 위 시각 `HH:mm`.
+    static func clock(_ date: Date) -> String {
+        date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+    }
+
+    private static func compact(_ value: Double) -> String {
+        let rounded = (value * 10).rounded() / 10
+        if rounded == rounded.rounded() { return String(Int(rounded)) }
+        return String(format: "%.1f", rounded)
+    }
+}

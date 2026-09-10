@@ -52,3 +52,28 @@ final class FormattersTests: XCTestCase {
         XCTAssertEqual(Formatters.abbreviatedPath(""), "")
     }
 }
+
+extension FormattersTests {
+    func testDuration() {
+        XCTAssertEqual(Formatters.duration(ms: 500), "500ms")
+        XCTAssertEqual(Formatters.duration(ms: 1234), "1초")
+        XCTAssertEqual(Formatters.duration(ms: 30412), "30초")
+        XCTAssertEqual(Formatters.duration(ms: 90_000), "1분 30초")
+        XCTAssertEqual(Formatters.duration(ms: 0), "0ms")
+    }
+
+    func testTokens() {
+        XCTAssertEqual(Formatters.tokens(999), "999")
+        XCTAssertEqual(Formatters.tokens(1275), "1.3k")
+        XCTAssertEqual(Formatters.tokens(12_000), "12k")
+        XCTAssertEqual(Formatters.tokens(19_695), "19.7k")
+        XCTAssertEqual(Formatters.tokens(2_500_000), "2.5M")
+    }
+
+    func testUsd() {
+        XCTAssertEqual(Formatters.usd(0.12), "$0.12")
+        XCTAssertEqual(Formatters.usd(0.001), "$0.001")
+        XCTAssertEqual(Formatters.usd(1.5), "$1.50")
+        XCTAssertEqual(Formatters.usd(0), "$0.00")
+    }
+}
