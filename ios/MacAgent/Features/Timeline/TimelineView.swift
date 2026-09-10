@@ -27,10 +27,15 @@ private struct TimelineScreen: View {
     @State private var showsInfo = false
     @State private var focusRequest = 0
     @State private var detailApproval: Approval?
+    @State private var showsFiles = false
+    /// 파일 시트 모델. 시트를 닫아도 화면이 살아 있는 동안 유지해 다시 열면 같은 위치다.
+    @State private var filesModel: FileBrowserModel?
     private let sessionId: String
+    private let client: APIClient
 
     init(sessionId: String, client: APIClient) {
         self.sessionId = sessionId
+        self.client = client
         _model = State(initialValue: TimelineModel(sessionId: sessionId, client: client))
     }
 
@@ -78,10 +83,11 @@ private struct TimelineScreen: View {
                     Task { await model.setMode(mode) }
                 }
                 Button {
+                    openFiles()
                 } label: {
                     Image(systemName: "folder")
                 }
-                .disabled(true)
+                .disabled(currentSession == nil)
                 .accessibilityLabel("파일")
                 Button {
                     showsInfo = true
@@ -96,6 +102,12 @@ private struct TimelineScreen: View {
         }
         .sheet(item: $detailApproval) { approval in
             ApprovalSheet(model: model, approvalId: approval.approvalId)
+        }
+        .sheet(isPresented: $showsFiles) {
+            if let filesModel {
+                FileBrowserView(model: filesModel)
+                    .presentationDetents([.large])
+            }
         }
         .task { await model.start() }
         .onDisappear { model.stop() }
@@ -159,6 +171,14 @@ private struct TimelineScreen: View {
 
     private var currentSession: Session? {
         model.session ?? store.session(id: sessionId)
+    }
+
+    private func openFiles() {
+        guard let cwd = currentSession?.cwd else { return }
+        if filesModel?.rootPath != cwd {
+            filesModel = FileBrowserModel(client: client, rootPath: cwd)
+        }
+        showsFiles = true
     }
 
     /// 세션 제목, 없으면 프로젝트(cwd 마지막 컴포넌트) 이름.

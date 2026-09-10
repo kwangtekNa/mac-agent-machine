@@ -11,6 +11,18 @@ enum ErrorMessages {
         localized: "이 서버에서는 앱 로그인을 지원하지 않습니다. SSH로 접속해 `claude setup-token` 또는 `codex login`을 실행하세요."
     )
 
+    static let pathForbidden = String(localized: "접근할 수 없는 경로입니다.")
+    static let pathNotFound = String(localized: "경로를 찾을 수 없습니다. 파일이 옮겨졌거나 삭제됐을 수 있습니다.")
+
+    /// 파일·git API(`/fs/*`, `/git/*`) 오류 → 문구(IOS.md 7절). 403 은 홈 밖 경로, 404 는 없는 경로, 그 외는 공통 매핑.
+    static func fileAccessMessage(for error: any Error) -> String {
+        if case .server(_, _, let status) = error as? APIError {
+            if status == 403 { return pathForbidden }
+            if status == 404 { return pathNotFound }
+        }
+        return message(for: error)
+    }
+
     /// REST 오류 → 문구. 전송 오류, 403, 426 은 고정 문구, 그 외는 서버 메시지.
     static func message(for error: any Error) -> String {
         guard let apiError = error as? APIError else { return cannotConnect }
