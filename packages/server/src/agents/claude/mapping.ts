@@ -1,7 +1,7 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKMessage, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk";
 import type { Approval } from "@mam/protocol";
 import { newId } from "../../ids.js";
-import type { AgentEvent, ItemDraft } from "../types.js";
+import type { AgentEvent, ContextSnapshot, ItemDraft, RateLimitObservation, TokenDelta } from "../types.js";
 
 type ToolCallItem = Extract<ItemDraft, { kind: "tool_call" }>;
 export type ToolKind = ToolCallItem["payload"]["tool"];
@@ -168,6 +168,27 @@ function int(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
 }
 
+/** `rateLimitType` → 창 길이(분). five_hour 300, seven_day* 10080, 그 외 모름. */
+export function rateLimitWindowMinutes(type: string): number | null {
+  if (type === "five_hour") return 300;
+  if (type.startsWith("seven_day")) return 10080;
+  return null;
+}
+
+/**
+ * `rate_limit_event.rate_limit_info` → 관측값. `rateLimitType` 이 없으면 null.
+ * `utilization` 은 1 이하면 비율(×100), 아니면 백분율로 본다. `resetsAt` 은 epoch 초.
+ */
+export function mapRateLimitInfo(info: SDKRateLimitInfo, _now: Date): RateLimitObservation | null {
+  const type = info.rateLimitType;
+  if (!type) return null;
+  const rejected = info.status === "rejected";
+  const raw = typeof info.utilization === "number" && Number.isFinite(info.utilization) ? info.utilization : rejected ? 100 : 0;
+  const usedPercent = Math.max(0, raw <= 1 ? raw * 100 : raw);
+  const resetsAt = typeof info.resetsAt === "number" && Number.isFinite(info.resetsAt) && info.resetsAt > 0 ? new Date(info.resetsAt * 1000) : null;
+  return { id: type, usedPercent, windowMinutes: rateLimitWindowMinutes(type), resetsAt, rejected };
+}
+
 export interface MapperOptions {
   cwd: string;
   now?: () => string;
@@ -186,6 +207,10 @@ export class ClaudeEventMapper {
   private readonly tools = new Map<string, ToolState>();
   private readonly now: () => string;
   private readonly logger: Pick<Console, "info" | "warn">;
+  /** 세션의 현재 effort. init 의 `usage` 이벤트에 싣는다(init 자체에 effort 가 없을 때). */
+  effort: string | undefined;
+  /** 직전 result 의 `total_cost_usd`(프로세스 누적). 프로세스를 다시 열면 `resetCostBaseline()`. */
+  private lastCostUsd = 0;
 
   constructor(private readonly opts: MapperOptions) {
     this.now = opts.now ?? (() => new Date().toISOString());
@@ -198,6 +223,11 @@ export class ClaudeEventMapper {
 
   beginTurn(turnId: string): void {
     this.turnId = turnId;
+  }
+
+  /** 새 프로세스(resume 재시작)는 비용 누적이 0 부터 시작한다. */
+  resetCostBaseline(): void {
+    this.lastCostUsd = 0;
   }
 
   map(msg: SDKMessage): AgentEvent[] {
@@ -216,6 +246,9 @@ export class ClaudeEventMapper {
         return [
           this.completedItem("system", { text: msg.error ? `인증 오류: ${msg.error}` : msg.isAuthenticating ? "Claude 인증 진행 중" : "Claude 인증 완료" }),
         ];
+      case "rate_limit_event":
+        // 세션이 RateLimitStore 에 저장한다(mapRateLimitInfo). 타임라인 아이템은 없다.
+        return [];
       default:
         this.logger.info(`[claude] ignored message type=${msg.type}`);
         return [];
@@ -245,6 +278,7 @@ export class ClaudeEventMapper {
         return [
           { type: "native_id", nativeId: msg.session_id },
           { type: "status", status: "idle" },
+          this.initUsage(msg),
         ];
       case "compact_boundary":
         return [this.completedItem("system", { text: `컨텍스트가 압축되었습니다 (${msg.compact_metadata.trigger === "auto" ? "자동" : "수동"})` })];
@@ -380,9 +414,44 @@ export class ClaudeEventMapper {
       events.push({ type: "error", message, recoverable: true });
     }
     events.push({ type: "turn.completed", turnId, durationMs, usage, ...(costUsd !== undefined ? { costUsd } : {}), stopReason });
+    const turnUsage = this.resultUsage(msg);
+    if (turnUsage) events.push(turnUsage);
     events.push({ type: "status", status: "idle" });
     this.turnId = null;
     return events;
+  }
+
+  /** `system/init` → `usage { model, effort }`. init 에 effort 가 실려 오면 그것이 적용값이다. */
+  private initUsage(msg: Extract<SDKMessage, { type: "system"; subtype: "init" }>): AgentEvent {
+    const effort = typeof msg.effort === "string" ? msg.effort : this.effort;
+    return { type: "usage", model: msg.model, ...(effort !== undefined ? { effort } : {}) };
+  }
+
+  /**
+   * PROTOCOL 5절 사용량: 토큰 델타 = `result.usage`(이번 턴 메인 루프), 비용 델타 = `total_cost_usd` 차분(음수면 0),
+   * 컨텍스트 tokens = input + cache_read + cache_creation, window = `modelUsage[*].contextWindow` 최댓값.
+   * `usage` 가 없는 SDKResultError 는 아무것도 바꾸지 않는다(이벤트 없음).
+   */
+  private resultUsage(msg: Extract<SDKMessage, { type: "result" }>): AgentEvent | null {
+    const raw = (msg as { usage?: Record<string, unknown> }).usage;
+    if (!raw || typeof raw !== "object") return null;
+    const total = typeof msg.total_cost_usd === "number" && Number.isFinite(msg.total_cost_usd) ? msg.total_cost_usd : this.lastCostUsd;
+    const costUsd = Math.max(0, total - this.lastCostUsd);
+    this.lastCostUsd = Math.max(this.lastCostUsd, total);
+    const delta: TokenDelta = {
+      inputTokens: int(raw.input_tokens),
+      outputTokens: int(raw.output_tokens),
+      cacheReadTokens: int(raw.cache_read_input_tokens),
+      cacheWriteTokens: int(raw.cache_creation_input_tokens),
+      costUsd,
+    };
+    let window = 0;
+    for (const mu of Object.values(msg.modelUsage ?? {})) {
+      const w = (mu as { contextWindow?: unknown }).contextWindow;
+      if (typeof w === "number" && Number.isFinite(w) && w > window) window = w;
+    }
+    const context: ContextSnapshot | undefined = window > 0 ? { tokens: delta.inputTokens + delta.cacheReadTokens + delta.cacheWriteTokens, window } : undefined;
+    return { type: "usage", delta, ...(context ? { context } : {}) };
   }
 
   private runningItem(kind: ItemDraft["kind"], payload: unknown): ItemDraft {

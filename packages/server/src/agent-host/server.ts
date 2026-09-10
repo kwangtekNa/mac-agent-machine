@@ -31,11 +31,11 @@ export interface AgentHostHandle {
   close(): Promise<void>;
 }
 
-export function defaultAdapters(env: NodeJS.ProcessEnv = process.env): Partial<Record<AgentKind, AgentAdapter>> {
+export function defaultAdapters(env: NodeJS.ProcessEnv = process.env, dataDir?: string): Partial<Record<AgentKind, AgentAdapter>> {
   if (env.MAM_FAKE_AGENT === "1") {
     return { claude: new FakeAdapter({ kind: "claude" }), codex: new FakeAdapter({ kind: "codex" }) };
   }
-  return { claude: new ClaudeAdapter(), codex: new CodexAdapter() };
+  return { claude: new ClaudeAdapter(dataDir ? { dataDir } : {}), codex: new CodexAdapter() };
 }
 
 async function realpathOr(path: string): Promise<string> {
@@ -60,7 +60,7 @@ export async function startAgentHost(opts: StartAgentHostOptions): Promise<Agent
   const dataDir = opts.dataDir ?? join(home, ".mam");
   await mkdir(dataDir, { recursive: true, mode: 0o700 });
   const workspaceRoot = await realpathOr(opts.workspaceRoot ?? join(home, "work"));
-  const adapters = opts.adapters ?? defaultAdapters();
+  const adapters = opts.adapters ?? defaultAdapters(process.env, dataDir);
 
   const manager = await SessionManager.open({ dataDir, adapters });
   const app = buildApp(
