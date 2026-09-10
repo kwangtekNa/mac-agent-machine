@@ -3,6 +3,8 @@ import SwiftUI
 /// 세션 cwd 파일 브라우저 시트(IOS.md 4절). 읽기 전용이며 루트 위로 올라가는 진입점은 없다.
 struct FileBrowserView: View {
     @Bindable var model: FileBrowserModel
+    /// 시트로 열렸을 때만 "닫기". iPad 디테일 열에서는 없다.
+    var showsCloseButton = true
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -21,8 +23,10 @@ struct FileBrowserView: View {
                     )
                 }
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("닫기") { dismiss() }
+                    if showsCloseButton {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("닫기") { dismiss() }
+                        }
                     }
                 }
         }

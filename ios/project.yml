@@ -81,6 +81,17 @@ targets:
         # 테스트 번들은 별도 Info.plist 파일 없이 빌드 시 자동 생성한다.
         GENERATE_INFOPLIST_FILE: "YES"
 
+  MacAgentUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - MacAgentUITests
+    dependencies:
+      - target: MacAgent
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+
 schemes:
   MacAgent:
     build:
@@ -92,4 +103,11 @@ schemes:
       config: Debug
       targets:
         - MacAgentTests
+        # 개발 서버(MAM_UI_TEST_SERVER)가 없으면 XCTSkip 이라 게이트를 늦추지 않는다.
+        - MacAgentUITests
       gatherCoverageData: false
+      environmentVariables:
+        # `MAM_UI_TEST_SERVER=http://127.0.0.1:7777 xcodebuild test` 처럼 셸 환경변수를 테스트 프로세스로 넘긴다.
+        - variable: MAM_UI_TEST_SERVER
+          value: "$(MAM_UI_TEST_SERVER)"
+          isEnabled: true

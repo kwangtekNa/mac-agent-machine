@@ -5,6 +5,13 @@ import SwiftUI
 struct SessionsHomeView: View {
     static let refreshInterval: Duration = .seconds(15)
 
+    /// iPad 사이드바 모드(`SplitRootView`): 값이 있으면 세션 행이 push 대신 이 선택을 바꾼다.
+    var selection: Binding<String?>?
+
+    init(selection: Binding<String?>? = nil) {
+        self.selection = selection
+    }
+
     @Environment(SessionsStore.self) private var store
     @State private var path = NavigationPath()
     @State private var showsSettings = false
@@ -34,7 +41,7 @@ struct SessionsHomeView: View {
                     }
                 }
                 .navigationDestination(for: Project.self) { project in
-                    ProjectSessionsView(project: project, path: $path)
+                    ProjectSessionsView(project: project, path: $path, onSelect: selectHandler)
                 }
                 .navigationDestination(for: Session.self) { session in
                     TimelineView(sessionId: session.id)
@@ -121,7 +128,7 @@ struct SessionsHomeView: View {
         if store.pendingApprovalTotal > 0, let target = store.oldestWaitingSession {
             Section {
                 Button {
-                    path.append(target)
+                    open(target)
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "hand.raised.fill")
@@ -142,8 +149,26 @@ struct SessionsHomeView: View {
     }
 
     private func row(_ session: Session) -> some View {
-        SessionRowView(session: session) {
-            Task { await close(session) }
+        SessionRowView(
+            session: session,
+            onClose: { Task { await close(session) } },
+            onSelect: selectHandler,
+            isSelected: selection?.wrappedValue == session.id
+        )
+    }
+
+    /// 사이드바 모드에서만 행에 넘기는 선택 콜백.
+    private var selectHandler: ((Session) -> Void)? {
+        guard selection != nil else { return nil }
+        return { session in open(session) }
+    }
+
+    /// compact 는 push, iPad 사이드바는 선택.
+    private func open(_ session: Session) {
+        if let selection {
+            selection.wrappedValue = session.id
+        } else {
+            path.append(session)
         }
     }
 
@@ -160,7 +185,7 @@ struct SessionsHomeView: View {
     private func openCreatedSession() {
         guard let session = createdSession else { return }
         createdSession = nil
-        path.append(session)
+        open(session)
     }
 
     private func refreshPeriodically() async {

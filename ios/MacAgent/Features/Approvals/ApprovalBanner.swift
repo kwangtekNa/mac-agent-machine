@@ -37,6 +37,19 @@ struct ApprovalBannerState: Equatable {
     let actions: [Action]
     let subtitle: Subtitle?
 
+    /// 옵션 버튼의 VoiceOver 힌트: 대상 + 라벨. "이 명령 실행을 허용합니다".
+    static func accessibilityHint(for option: ApprovalOption, kind: ApprovalKind) -> String {
+        let subject: String
+        switch kind {
+        case .command: subject = String(localized: "이 명령 실행을")
+        case .fileChange: subject = String(localized: "이 파일 변경을")
+        case .permission: subject = String(localized: "이 권한 요청을")
+        case .userInput: subject = String(localized: "이 질문에")
+        case .other, .unknown: subject = String(localized: "이 요청을")
+        }
+        return "\(subject) \(option.label)합니다"
+    }
+
     var othersLabel: String? {
         othersCount > 0 ? String(localized: "외 \(othersCount)건") : nil
     }
@@ -94,17 +107,23 @@ struct ApprovalBannerState: Equatable {
 struct ApprovalOptionButton: View {
     let option: ApprovalOption
     var fullWidth = false
+    /// VoiceOver 힌트("이 명령 실행을 허용합니다"). `ApprovalBannerState.accessibilityHint` 로 만든다.
+    var hint: String? = nil
     let action: () -> Void
 
     var body: some View {
-        switch ApprovalButtonStyle.map(option.style) {
-        case .prominent:
-            Button(action: action) { label }.buttonStyle(.borderedProminent)
-        case .bordered:
-            Button(action: action) { label }.buttonStyle(.bordered)
-        case .destructive:
-            Button(action: action) { label }.buttonStyle(.bordered).tint(.red)
+        Group {
+            switch ApprovalButtonStyle.map(option.style) {
+            case .prominent:
+                Button(action: action) { label }.buttonStyle(.borderedProminent)
+            case .bordered:
+                Button(action: action) { label }.buttonStyle(.bordered)
+            case .destructive:
+                Button(action: action) { label }.buttonStyle(.bordered).tint(.red)
+            }
         }
+        .accessibilityIdentifier("approval.option.\(option.id)")
+        .accessibilityHint(hint ?? "")
     }
 
     private var label: some View {
@@ -173,12 +192,13 @@ struct ApprovalBanner: View {
                         .accessibilityLabel("대기 중인 승인 \(state.othersCount + 1)건 보기")
                 }
             }
-            HStack(spacing: 8) {
-                ForEach(Array(state.actions.enumerated()), id: \.offset) { _, action in
-                    actionButton(action, approval: approval)
+            // 큰 글자(Dynamic Type 접근성 크기)에서 버튼이 잘리지 않도록 가로가 모자라면 세로로 쌓는다.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    actionButtons(state, approval: approval, isSubmitting: isSubmitting)
                 }
-                if isSubmitting {
-                    ProgressView().controlSize(.small)
+                VStack(alignment: .leading, spacing: 8) {
+                    actionButtons(state, approval: approval, isSubmitting: isSubmitting)
                 }
             }
             .controlSize(.small)
@@ -206,10 +226,20 @@ struct ApprovalBanner: View {
     }
 
     @ViewBuilder
+    private func actionButtons(_ state: ApprovalBannerState, approval: Approval, isSubmitting: Bool) -> some View {
+        ForEach(Array(state.actions.enumerated()), id: \.offset) { _, action in
+            actionButton(action, approval: approval)
+        }
+        if isSubmitting {
+            ProgressView().controlSize(.small)
+        }
+    }
+
+    @ViewBuilder
     private func actionButton(_ action: ApprovalBannerState.Action, approval: Approval) -> some View {
         switch action {
         case .option(let option):
-            ApprovalOptionButton(option: option) {
+            ApprovalOptionButton(option: option, hint: ApprovalBannerState.accessibilityHint(for: option, kind: approval.kind)) {
                 Task { await model.respond(to: approval, optionId: option.id) }
             }
         case .more:

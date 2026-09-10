@@ -5,6 +5,8 @@ struct ProjectSessionsView: View {
     @Environment(SessionsStore.self) private var store
     let project: Project
     @Binding var path: NavigationPath
+    /// iPad 사이드바: 값이 있으면 push 대신 선택한다.
+    var onSelect: ((Session) -> Void)? = nil
     @State private var showsNewSession = false
     @State private var createdSession: Session?
 
@@ -24,9 +26,11 @@ struct ProjectSessionsView: View {
             } else {
                 Section {
                     ForEach(sessions) { session in
-                        SessionRowView(session: session) {
-                            Task { await close(session) }
-                        }
+                        SessionRowView(
+                            session: session,
+                            onClose: { Task { await close(session) } },
+                            onSelect: onSelect
+                        )
                     }
                 } header: {
                     Text(project.path)
@@ -64,6 +68,10 @@ struct ProjectSessionsView: View {
     private func openCreatedSession() {
         guard let session = createdSession else { return }
         createdSession = nil
-        path.append(session)
+        if let onSelect {
+            onSelect(session)
+        } else {
+            path.append(session)
+        }
     }
 }

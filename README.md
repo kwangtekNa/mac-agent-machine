@@ -57,6 +57,19 @@ bash scripts/test.sh       # 전체 게이트 (TS + iOS). MAM_TEST_SKIP_IOS=1 �
 bash scripts/dev-smoke.sh  # 개발 모드 e2e (빌드 → 기동 → 검증 → 종료)
 ```
 
+iOS 앱(`ios/`, 설계는 `docs/IOS.md`):
+
+```bash
+cd ios && xcodegen generate                                   # MacAgent.xcodeproj 생성(생성물, 커밋하지 않음)
+open MacAgent.xcodeproj                                       # Xcode 에서 iPhone 17 Pro 시뮬레이터로 실행(⌘R)
+xcodebuild test -scheme MacAgent -destination 'platform=iOS Simulator,name=iPhone 17 Pro'   # 단위 테스트
+# UI 테스트: 다른 터미널에서 bash scripts/dev-smoke.sh --keep 으로 개발 서버를 띄운 뒤
+MAM_UI_TEST_SERVER=http://127.0.0.1:7777 xcodebuild test -scheme MacAgent \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:MacAgentUITests
+```
+
+시뮬레이터 앱의 첫 화면에는 "개발 서버(127.0.0.1:7777)에 연결" 버튼이 있다. 실기기 설치는 `docs/RUNBOOK.md` 의 "iPhone에 설치" 절.
+
 ## 프로덕션 설치
 
 관리자가 실제 Mac에 설치하고 사용자를 추가하는 절차는 `docs/RUNBOOK.md`에 있다.

@@ -103,6 +103,7 @@ struct NewSessionSheet: View {
                 }
                 Text("다른 경로").tag(DirectoryChoice.custom)
             }
+            .accessibilityIdentifier("newSession.directory")
             if case .project(let path) = directory {
                 Text(path)
                     .font(.caption.monospaced())
@@ -111,6 +112,7 @@ struct NewSessionSheet: View {
                     .truncationMode(.head)
             } else {
                 TextField("~/work/my-app", text: $customPath)
+                    .accessibilityIdentifier("newSession.customPath")
                     .font(.body.monospaced())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

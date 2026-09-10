@@ -50,6 +50,19 @@ authorized_keys 에 공개키 추가
 5. MacAgent 앱에 `https://<hostname>`을 입력한다. 로그인 화면은 없다. 접속 기기의 Tailscale 신원으로 자동 매핑된다.
 
 
+### iPhone에 설치 (개발 빌드, TestFlight 는 Phase 3)
+
+1. `ios/Local.xcconfig` 를 만들고(`cp ios/Local.xcconfig.example ios/Local.xcconfig`) `DEVELOPMENT_TEAM` 에 Apple Developer 팀 ID를 적는다. 무료 Apple ID 도 된다.
+2. `cd ios && xcodegen generate && open MacAgent.xcodeproj` 로 Xcode 를 연다.
+3. iPhone 을 USB 로 연결하고 iPhone 의 설정 > 개인정보 보호 및 보안 > 개발자 모드를 켠다(재시동).
+4. Xcode 상단에서 연결한 iPhone 을 선택하고 실행(⌘R)한다. 처음 한 번 Xcode 가 프로비저닝 프로파일을 만든다.
+5. iPhone 에서 앱이 열리지 않으면 설정 > 일반 > VPN 및 기기 관리에서 개발자 앱을 신뢰한다.
+6. 무료 계정의 프로파일은 7일 뒤 만료되므로 7일마다 Xcode 에서 다시 실행(재설치)한다. 유료 계정은 1년.
+7. iPhone 에 App Store 의 Tailscale 앱을 설치하고 같은 tailnet 에 로그인한다.
+8. MacAgent 앱 첫 화면에 `https://<MagicDNS 호스트 이름>` 을 입력한다(`tailscale cert` 로 만든 인증서를 gateway 가 쓴다). 로그인 화면은 없다.
+
+개발 서버로 확인하려면 시뮬레이터에서 `bash scripts/dev-smoke.sh --keep` 을 띄우고 앱의 "개발 서버(127.0.0.1:7777)에 연결" 버튼을 누른다.
+
 ### 앱 로그인 플로우 수동 확인 (step 9, 사람이 브라우저로 끝낸다)
 
 개발 모드에서 확인한다. `MAM_FAKE_AGENT` 없이 gateway 를 띄우고 다른 터미널에서:

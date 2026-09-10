@@ -5,9 +5,37 @@ import SwiftUI
 struct SessionRowView: View {
     let session: Session
     var onClose: (() -> Void)?
+    /// iPad 사이드바: 값이 있으면 push 대신 이 콜백으로 선택한다.
+    var onSelect: ((Session) -> Void)? = nil
+    var isSelected = false
 
     var body: some View {
-        NavigationLink(value: session) {
+        Group {
+            if let onSelect {
+                Button {
+                    onSelect(session)
+                } label: {
+                    rowContent
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(isSelected ? Color.accentColor.opacity(0.14) : nil)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            } else {
+                NavigationLink(value: session) {
+                    rowContent
+                }
+            }
+        }
+        .accessibilityLabel(accessibilityText)
+        .swipeActions(edge: .trailing) {
+            if session.status != .closed, let onClose {
+                Button("닫기", systemImage: "xmark.circle", action: onClose)
+                    .tint(.gray)
+            }
+        }
+    }
+
+    private var rowContent: some View {
             HStack(alignment: .top, spacing: 10) {
                 statusIndicator
                     .padding(.top, 5)
@@ -29,14 +57,7 @@ struct SessionRowView: View {
                 }
             }
             .padding(.vertical, 2)
-        }
-        .accessibilityLabel(accessibilityText)
-        .swipeActions(edge: .trailing) {
-            if session.status != .closed, let onClose {
-                Button("닫기", systemImage: "xmark.circle", action: onClose)
-                    .tint(.gray)
-            }
-        }
+            .contentShape(Rectangle())
     }
 
     private var subtitle: String {

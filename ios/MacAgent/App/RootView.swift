@@ -23,7 +23,9 @@ struct RootView: View {
 }
 
 /// 연결된 동안 살아 있는 `SessionsStore` 를 만들고 환경에 넣는다.
+/// 가로 크기 클래스가 regular(iPad) 면 3열 분리 뷰, 아니면 compact `NavigationStack` 흐름. 크기가 바뀌어도 store 는 유지된다.
 private struct ConnectedRootView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var store: SessionsStore
 
     init(client: APIClient) {
@@ -31,7 +33,13 @@ private struct ConnectedRootView: View {
     }
 
     var body: some View {
-        SessionsHomeView()
-            .environment(store)
+        Group {
+            if horizontalSizeClass == .regular {
+                SplitRootView()
+            } else {
+                SessionsHomeView()
+            }
+        }
+        .environment(store)
     }
 }

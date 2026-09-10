@@ -4,13 +4,20 @@ import SwiftUI
 struct TimelineView: View {
     @Environment(AppState.self) private var appState
     let sessionId: String
+    /// iPad 3열: 값이 있으면 툴바 "파일" 버튼이 시트 대신 디테일 열을 토글한다.
+    var onToggleFiles: (() -> Void)? = nil
 
     var body: some View {
         if let client = appState.client {
-            TimelineScreen(sessionId: sessionId, client: client)
-                .id(sessionId)
+            TimelineScreen(
+                sessionId: sessionId,
+                model: appState.timelineModel(for: sessionId, client: client),
+                client: client,
+                onToggleFiles: onToggleFiles
+            )
+            .id(sessionId)
         } else {
-            ContentUnavailableView("서버에 연결되어 있지 않습니다", systemImage: "wifi.slash")
+            ContentUnavailableView("서버에 연결되어 있지 않습니다", systemImage: "wifi.slash", description: Text("설정에서 서버에 다시 연결하세요"))
         }
     }
 }
@@ -21,7 +28,8 @@ private struct TimelineScreen: View {
     @Environment(SessionsStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
-    @State private var model: TimelineModel
+    /// `AppState` 가 세션별로 보관한다(회전·크기 변화에도 유지).
+    let model: TimelineModel
     @State private var isAtBottom = true
     @State private var showsNewEvents = false
     @State private var showsInfo = false
@@ -32,11 +40,13 @@ private struct TimelineScreen: View {
     @State private var filesModel: FileBrowserModel?
     private let sessionId: String
     private let client: APIClient
+    private let onToggleFiles: (() -> Void)?
 
-    init(sessionId: String, client: APIClient) {
+    init(sessionId: String, model: TimelineModel, client: APIClient, onToggleFiles: (() -> Void)?) {
         self.sessionId = sessionId
+        self.model = model
         self.client = client
-        _model = State(initialValue: TimelineModel(sessionId: sessionId, client: client))
+        self.onToggleFiles = onToggleFiles
     }
 
     var body: some View {
@@ -83,18 +93,24 @@ private struct TimelineScreen: View {
                     Task { await model.setMode(mode) }
                 }
                 Button {
-                    openFiles()
+                    if let onToggleFiles {
+                        onToggleFiles()
+                    } else {
+                        openFiles()
+                    }
                 } label: {
                     Image(systemName: "folder")
                 }
-                .disabled(currentSession == nil)
+                .disabled(onToggleFiles == nil && currentSession == nil)
                 .accessibilityLabel("파일")
+                .accessibilityIdentifier("timeline.files")
                 Button {
                     showsInfo = true
                 } label: {
                     Image(systemName: "info.circle")
                 }
                 .accessibilityLabel("세션 정보")
+                .accessibilityIdentifier("timeline.info")
             }
         }
         .sheet(isPresented: $showsInfo) {

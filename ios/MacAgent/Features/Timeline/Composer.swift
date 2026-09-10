@@ -21,6 +21,7 @@ struct Composer: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("메시지", text: $text, axis: .vertical)
+                    .accessibilityIdentifier("composer.input")
                     .lineLimit(1...6)
                     .focused($focused)
                     .padding(.horizontal, 12)
@@ -34,12 +35,14 @@ struct Composer: View {
                     }
                     .tint(.red)
                     .accessibilityLabel("중단")
+                    .accessibilityIdentifier("composer.stop")
                 } else {
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill").font(.title)
                     }
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isSending)
                     .accessibilityLabel("보내기")
+                    .accessibilityIdentifier("composer.send")
                 }
             }
             .disabled(model.socketState != .open)
