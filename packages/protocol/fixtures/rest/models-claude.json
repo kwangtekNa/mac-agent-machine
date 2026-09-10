@@ -1,0 +1,7 @@
+{
+  "models": [
+    { "id": "claude-opus-5", "displayName": "Opus 5", "description": "가장 뛰어난 모델", "isDefault": true, "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high" },
+    { "id": "claude-sonnet-5", "displayName": "Sonnet 5", "description": "속도와 성능의 균형", "isDefault": false, "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "medium" },
+    { "id": "claude-haiku-4-5-20251001", "displayName": "Haiku 4.5", "description": null, "isDefault": false, "efforts": [], "defaultEffort": null }
+  ]
+}

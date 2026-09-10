@@ -7,13 +7,24 @@
       "title": "로그인 버그 수정",
       "mode": "ask",
       "model": null,
+      "effort": "high",
       "status": "idle",
       "nativeId": "7f3c2a1e-9b4d-4c6f-8e2a-1d5b7c9e3f00",
       "createdAt": "2026-09-09T10:00:00Z",
       "updatedAt": "2026-09-09T10:12:00Z",
       "lastSeq": 42,
       "pendingApprovals": 0,
-      "preview": "테스트가 통과했습니다."
+      "preview": "테스트가 통과했습니다.",
+      "usage": {
+        "inputTokens": 12000,
+        "outputTokens": 3400,
+        "cacheReadTokens": 90000,
+        "cacheWriteTokens": 5000,
+        "costUsd": 0.42,
+        "turns": 3,
+        "context": { "tokens": 42000, "window": 200000, "percent": 21 },
+        "updatedAt": "2026-09-09T10:12:00Z"
+      }
     },
     {
       "id": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAC",
@@ -22,13 +33,15 @@
       "title": "새 세션",
       "mode": "auto-edit",
       "model": "gpt-5-codex",
+      "effort": null,
       "status": "starting",
       "nativeId": null,
       "createdAt": "2026-09-09T11:00:00Z",
       "updatedAt": "2026-09-09T11:00:00Z",
       "lastSeq": 0,
       "pendingApprovals": 0,
-      "preview": null
+      "preview": null,
+      "usage": null
     }
   ]
 }

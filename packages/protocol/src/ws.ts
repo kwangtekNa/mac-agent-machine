@@ -11,7 +11,7 @@ import {
   TurnIdSchema,
 } from "./common.js";
 import { ApprovalRespondFieldsSchema } from "./rest.js";
-import { SessionSchema, TurnInputSchema, UsageSchema } from "./session.js";
+import { SessionSchema, SessionUsageSchema, TurnInputSchema, UsageSchema } from "./session.js";
 import { TimelineItemSchema } from "./timeline.js";
 
 /** 모든 서버 이벤트의 공통 필드. */
@@ -69,6 +69,12 @@ export const SessionStatusEventSchema = ServerEventBaseSchema.extend({
   reason: z.string().optional(),
 });
 
+/** 누적 사용량·컨텍스트 갱신(2026-09-10 추가). 턴 종료 시, Codex 는 턴 중에도 온다. */
+export const SessionUsageEventSchema = ServerEventBaseSchema.extend({
+  type: z.literal("session.usage"),
+  usage: SessionUsageSchema,
+});
+
 export const TurnCompletedEventSchema = ServerEventBaseSchema.extend({
   type: z.literal("turn.completed"),
   turnId: TurnIdSchema,
@@ -97,6 +103,7 @@ export const ServerEventSchema = z.discriminatedUnion("type", [
   ApprovalRequestedEventSchema,
   ApprovalResolvedEventSchema,
   SessionStatusEventSchema,
+  SessionUsageEventSchema,
   TurnCompletedEventSchema,
   ErrorEventSchema,
   PongEventSchema,

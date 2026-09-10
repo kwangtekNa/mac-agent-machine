@@ -1,0 +1,18 @@
+{
+  "agents": [
+    {
+      "kind": "claude", "plan": "max", "live": false, "observedAt": "2026-09-10T03:40:00Z",
+      "limits": [
+        { "id": "five_hour", "label": "5시간", "usedPercent": 42, "windowMinutes": 300, "resetsAt": "2026-09-10T06:00:00Z", "status": "ok" },
+        { "id": "seven_day", "label": "주간", "usedPercent": 81, "windowMinutes": 10080, "resetsAt": "2026-09-14T00:00:00Z", "status": "warning" }
+      ]
+    },
+    {
+      "kind": "codex", "plan": "plus", "live": true, "observedAt": "2026-09-10T04:10:00Z",
+      "limits": [
+        { "id": "primary", "label": "5시간", "usedPercent": 12, "windowMinutes": 300, "resetsAt": "2026-09-10T08:30:00Z", "status": "ok" },
+        { "id": "secondary", "label": "주간", "usedPercent": 35, "windowMinutes": 10080, "resetsAt": "2026-09-15T00:00:00Z", "status": "ok" }
+      ]
+    }
+  ]
+}

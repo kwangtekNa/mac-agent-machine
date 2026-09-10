@@ -22,7 +22,9 @@ import type {
   AttachmentSchema,
   CreateSessionRequestSchema,
   PatchSessionRequestSchema,
+  SessionContextSchema,
   SessionSchema,
+  SessionUsageSchema,
   TurnInputSchema,
   UsageSchema,
 } from "./session.js";
@@ -48,10 +50,13 @@ import type {
 } from "./timeline.js";
 import type {
   AgentInfoSchema,
+  AgentUsageSchema,
   ApprovalRespondRequestSchema,
   FsEntrySchema,
   FsEntryTypeSchema,
   FsListResponseSchema,
+  FsMkdirRequestSchema,
+  FsMkdirResponseSchema,
   FsReadResponseSchema,
   GitDiffResponseSchema,
   GitStatusCodeSchema,
@@ -62,11 +67,17 @@ import type {
   LoginStartResponseSchema,
   LoginStatusResponseSchema,
   MeResponseSchema,
+  ModelOptionSchema,
+  ModelsQuerySchema,
+  ModelsResponseSchema,
   OkResponseSchema,
   ProjectSchema,
   ProjectsResponseSchema,
   SessionDetailResponseSchema,
   SessionsResponseSchema,
+  UsageLimitSchema,
+  UsageLimitStatusSchema,
+  UsageResponseSchema,
 } from "./rest.js";
 import type {
   ApprovalRequestedEventSchema,
@@ -82,6 +93,7 @@ import type {
   SessionSetModeMessageSchema,
   SessionSnapshotEventSchema,
   SessionStatusEventSchema,
+  SessionUsageEventSchema,
   TurnCompletedEventSchema,
   TurnInterruptMessageSchema,
   TurnStartMessageSchema,
@@ -104,6 +116,8 @@ export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 // session
 export type Usage = z.infer<typeof UsageSchema>;
+export type SessionContext = z.infer<typeof SessionContextSchema>;
+export type SessionUsage = z.infer<typeof SessionUsageSchema>;
 export type Attachment = z.infer<typeof AttachmentSchema>;
 export type TurnInput = z.infer<typeof TurnInputSchema>;
 export type Session = z.infer<typeof SessionSchema>;
@@ -161,6 +175,15 @@ export type LoginFlowStatus = z.infer<typeof LoginFlowStatusSchema>;
 export type LoginStatusResponse = z.infer<typeof LoginStatusResponseSchema>;
 export type LoginCodeRequest = z.infer<typeof LoginCodeRequestSchema>;
 export type ApprovalRespondRequest = z.infer<typeof ApprovalRespondRequestSchema>;
+export type FsMkdirRequest = z.infer<typeof FsMkdirRequestSchema>;
+export type FsMkdirResponse = z.infer<typeof FsMkdirResponseSchema>;
+export type UsageLimitStatus = z.infer<typeof UsageLimitStatusSchema>;
+export type UsageLimit = z.infer<typeof UsageLimitSchema>;
+export type AgentUsage = z.infer<typeof AgentUsageSchema>;
+export type UsageResponse = z.infer<typeof UsageResponseSchema>;
+export type ModelOption = z.infer<typeof ModelOptionSchema>;
+export type ModelsResponse = z.infer<typeof ModelsResponseSchema>;
+export type ModelsQuery = z.infer<typeof ModelsQuerySchema>;
 
 // ws: server → client
 export type ServerEvent = z.infer<typeof ServerEventSchema>;
@@ -173,6 +196,7 @@ export type ItemCompletedEvent = z.infer<typeof ItemCompletedEventSchema>;
 export type ApprovalRequestedEvent = z.infer<typeof ApprovalRequestedEventSchema>;
 export type ApprovalResolvedEvent = z.infer<typeof ApprovalResolvedEventSchema>;
 export type SessionStatusEvent = z.infer<typeof SessionStatusEventSchema>;
+export type SessionUsageEvent = z.infer<typeof SessionUsageEventSchema>;
 export type TurnCompletedEvent = z.infer<typeof TurnCompletedEventSchema>;
 export type ErrorEvent = z.infer<typeof ErrorEventSchema>;
 export type PongEvent = z.infer<typeof PongEventSchema>;

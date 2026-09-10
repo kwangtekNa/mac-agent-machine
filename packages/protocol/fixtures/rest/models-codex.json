@@ -1,0 +1,6 @@
+{
+  "models": [
+    { "id": "gpt-5-codex", "displayName": "GPT-5 Codex", "description": "코딩에 최적화된 모델", "isDefault": true, "efforts": ["low", "medium", "high"], "defaultEffort": "medium" },
+    { "id": "gpt-5", "displayName": "GPT-5", "description": null, "isDefault": false, "efforts": ["minimal", "low", "medium", "high"], "defaultEffort": "medium" }
+  ]
+}

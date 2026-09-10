@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  AgentUsageSchema,
   ApprovalRespondRequestSchema,
   ClientMessageSchema,
   ErrorResponseSchema,
+  FsMkdirRequestSchema,
   IsoDateSchema,
+  ModelOptionSchema,
+  PatchSessionRequestSchema,
   SeqSchema,
   ServerEventSchema,
   SessionSchema,
+  SessionUsageSchema,
   TimelineItemSchema,
+  UsageLimitSchema,
+  UsageSchema,
   idSchema,
   parseClientMessage,
   parseServerEvent,
@@ -151,5 +158,118 @@ describe("알 수 없는 키", () => {
   it("payload 안의 모르는 키도 제거한다", () => {
     const parsed = TimelineItemSchema.parse({ ...systemItem, payload: { text: "x", raw: {} } });
     expect(parsed.payload).toEqual({ text: "x" });
+  });
+});
+
+describe("2026-09-10 추가분 (usage / models / mkdir)", () => {
+  const usage = {
+    inputTokens: 12000,
+    outputTokens: 3400,
+    cacheReadTokens: 90000,
+    cacheWriteTokens: 5000,
+    costUsd: 0.42,
+    turns: 3,
+    context: { tokens: 42000, window: 200000, percent: 21 },
+    updatedAt: TS,
+  };
+  const session = {
+    id: SES,
+    agent: "claude",
+    cwd: "/Users/alice/work/app",
+    title: "t",
+    mode: "ask",
+    model: "claude-opus-5",
+    effort: "high",
+    status: "idle",
+    nativeId: null,
+    createdAt: TS,
+    updatedAt: TS,
+    lastSeq: 0,
+    pendingApprovals: 0,
+    preview: null,
+    usage,
+  };
+  const limit = { id: "five_hour", label: "5시간", usedPercent: 42, windowMinutes: 300, resetsAt: TS, status: "ok" };
+  const usageEvent = { type: "session.usage", seq: 44, sessionId: SES, ts: TS, usage };
+
+  it("usage.context.percent 는 0~100 정수만 허용한다 (101 거부)", () => {
+    expect(SessionUsageSchema.safeParse(usage).success).toBe(true);
+    const withPercent = (percent: number) => ({ ...usage, context: { ...usage.context, percent } });
+    expect(SessionUsageSchema.safeParse(withPercent(101)).success).toBe(false);
+    expect(SessionUsageSchema.safeParse(withPercent(-1)).success).toBe(false);
+    expect(SessionUsageSchema.safeParse(withPercent(21.5)).success).toBe(false);
+    expect(SessionUsageSchema.safeParse(withPercent(100)).success).toBe(true);
+    expect(SessionSchema.safeParse({ ...session, usage: withPercent(101) }).success).toBe(false);
+    expect(ServerEventSchema.safeParse({ ...usageEvent, usage: withPercent(101) }).success).toBe(false);
+  });
+
+  it("usage 의 토큰·턴은 0 이상 정수, window 는 1 이상, costUsd 와 context 는 null 가능", () => {
+    expect(SessionUsageSchema.safeParse({ ...usage, inputTokens: -1 }).success).toBe(false);
+    expect(SessionUsageSchema.safeParse({ ...usage, turns: 1.5 }).success).toBe(false);
+    expect(SessionUsageSchema.safeParse({ ...usage, costUsd: -0.01 }).success).toBe(false);
+    expect(SessionUsageSchema.safeParse({ ...usage, context: { ...usage.context, window: 0 } }).success).toBe(false);
+    expect(SessionUsageSchema.safeParse({ ...usage, costUsd: null, context: null }).success).toBe(true);
+  });
+
+  it("Session 의 usage 와 effort 는 null 일 수 있고, 키가 없어도(서버가 아직 안 채움) 통과한다", () => {
+    expect(SessionSchema.safeParse({ ...session, usage: null, effort: null }).success).toBe(true);
+    const { usage: _u, effort: _e, ...legacy } = session;
+    expect(SessionSchema.safeParse(legacy).success).toBe(true);
+    expect(SessionSchema.safeParse({ ...session, effort: 3 }).success).toBe(false);
+  });
+
+  it("턴별 Usage 는 cacheWriteTokens 를 생략할 수 있다", () => {
+    expect(UsageSchema.safeParse({ inputTokens: 1, outputTokens: 1 }).success).toBe(true);
+    expect(UsageSchema.safeParse({ inputTokens: 1, outputTokens: 1, cacheReadTokens: 2, cacheWriteTokens: 3 }).success).toBe(true);
+    expect(UsageSchema.safeParse({ inputTokens: 1, outputTokens: 1, cacheWriteTokens: -3 }).success).toBe(false);
+  });
+
+  it("UsageLimit.usedPercent 는 음수를 거부하고 100 초과는 허용한다", () => {
+    expect(UsageLimitSchema.safeParse(limit).success).toBe(true);
+    expect(UsageLimitSchema.safeParse({ ...limit, usedPercent: -1 }).success).toBe(false);
+    expect(UsageLimitSchema.safeParse({ ...limit, usedPercent: 120, status: "exceeded" }).success).toBe(true);
+    expect(UsageLimitSchema.safeParse({ ...limit, windowMinutes: null, resetsAt: null }).success).toBe(true);
+  });
+
+  it("UsageLimit.status 오타는 실패한다", () => {
+    expect(UsageLimitSchema.safeParse({ ...limit, status: "warn" }).success).toBe(false);
+    expect(UsageLimitSchema.safeParse({ ...limit, status: "OK" }).success).toBe(false);
+    for (const status of ["ok", "warning", "exceeded"]) {
+      expect(UsageLimitSchema.safeParse({ ...limit, status }).success).toBe(true);
+    }
+    expect(
+      AgentUsageSchema.safeParse({ kind: "claude", plan: "max", live: false, observedAt: TS, limits: [{ ...limit, status: "nope" }] }).success,
+    ).toBe(false);
+    expect(AgentUsageSchema.safeParse({ kind: "gemini", plan: null, live: true, observedAt: null, limits: [] }).success).toBe(false);
+  });
+
+  it("session.usage 이벤트는 usage 가 없으면 실패한다", () => {
+    expect(ServerEventSchema.safeParse(usageEvent).success).toBe(true);
+    const { usage: _usage, ...withoutUsage } = usageEvent;
+    expect(ServerEventSchema.safeParse(withoutUsage).success).toBe(false);
+    expect(() => parseServerEvent(withoutUsage)).toThrow();
+    expect(ServerEventSchema.safeParse({ ...usageEvent, usage: null }).success).toBe(false);
+  });
+
+  it("PATCH /sessions/:id 는 빈 문자열 model/effort 를 거부한다", () => {
+    expect(PatchSessionRequestSchema.safeParse({ model: "" }).success).toBe(false);
+    expect(PatchSessionRequestSchema.safeParse({ effort: "" }).success).toBe(false);
+    expect(PatchSessionRequestSchema.safeParse({ model: "claude-opus-5", effort: "high" }).success).toBe(true);
+    expect(PatchSessionRequestSchema.safeParse({ title: "새 제목", mode: "plan" }).success).toBe(true);
+    expect(PatchSessionRequestSchema.safeParse({}).success).toBe(true);
+  });
+
+  it("ModelOption 은 efforts 가 비어 있을 수 있고 description/defaultEffort 는 null 가능", () => {
+    const model = { id: "claude-opus-5", displayName: "Opus 5", description: null, isDefault: true, efforts: [], defaultEffort: null };
+    expect(ModelOptionSchema.safeParse(model).success).toBe(true);
+    expect(ModelOptionSchema.safeParse({ ...model, id: "" }).success).toBe(false);
+    expect(ModelOptionSchema.safeParse({ ...model, efforts: [""] }).success).toBe(false);
+    expect(ModelOptionSchema.safeParse({ ...model, isDefault: "yes" }).success).toBe(false);
+  });
+
+  it("POST /fs/mkdir 요청은 path 가 비어 있으면 실패한다", () => {
+    expect(FsMkdirRequestSchema.safeParse({ path: "~/work/new-app" }).success).toBe(true);
+    expect(FsMkdirRequestSchema.safeParse({ path: "" }).success).toBe(false);
+    expect(FsMkdirRequestSchema.safeParse({}).success).toBe(false);
   });
 });

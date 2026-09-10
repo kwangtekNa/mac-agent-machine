@@ -42,6 +42,7 @@ const SCHEMA_EXPORTS = [
   "PatchSessionRequestSchema",
   "TurnInputSchema",
   "UsageSchema",
+  "SessionUsageSchema",
   // rest
   "MeResponseSchema",
   "ProjectsResponseSchema",
@@ -56,9 +57,18 @@ const SCHEMA_EXPORTS = [
   "LoginStatusResponseSchema",
   "LoginCodeRequestSchema",
   "ApprovalRespondRequestSchema",
+  "FsMkdirRequestSchema",
+  "FsMkdirResponseSchema",
+  "UsageLimitSchema",
+  "AgentUsageSchema",
+  "UsageResponseSchema",
+  "ModelOptionSchema",
+  "ModelsResponseSchema",
+  "ModelsQuerySchema",
   // ws
   "ServerEventSchema",
   "ClientMessageSchema",
+  "SessionUsageEventSchema",
 ] as const;
 
 const FUNCTION_EXPORTS = ["idSchema", "parseServerEvent", "parseClientMessage", "safeParseClientMessage"] as const;

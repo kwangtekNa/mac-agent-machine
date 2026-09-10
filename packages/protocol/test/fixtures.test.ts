@@ -7,17 +7,20 @@ import {
   ClientMessageSchema,
   ErrorResponseSchema,
   FsListResponseSchema,
+  FsMkdirResponseSchema,
   FsReadResponseSchema,
   GitDiffResponseSchema,
   GitStatusResponseSchema,
   LoginStartResponseSchema,
   LoginStatusResponseSchema,
   MeResponseSchema,
+  ModelsResponseSchema,
   ProjectsResponseSchema,
   ServerEventSchema,
   SessionDetailResponseSchema,
   SessionSchema,
   SessionsResponseSchema,
+  UsageResponseSchema,
 } from "../src/index.js";
 
 const FIXTURES_DIR = fileURLToPath(new URL("../fixtures/", import.meta.url));
@@ -32,11 +35,16 @@ const REST: Record<string, ZodType> = {
   "fs-list": FsListResponseSchema,
   "fs-read-text": FsReadResponseSchema,
   "fs-read-image": FsReadResponseSchema,
+  "fs-mkdir": FsMkdirResponseSchema,
   "git-status": GitStatusResponseSchema,
   "git-diff": GitDiffResponseSchema,
   error: ErrorResponseSchema,
   "login-start": LoginStartResponseSchema,
   "login-status": LoginStatusResponseSchema,
+  usage: UsageResponseSchema,
+  "usage-empty": UsageResponseSchema,
+  "models-claude": ModelsResponseSchema,
+  "models-codex": ModelsResponseSchema,
 };
 
 /** `ws/<type>[.<variant>].json` → 기대하는 `type` 과 (있으면) 아이템 kind / 승인 kind. */
@@ -60,6 +68,7 @@ const WS: Record<string, { type: string; itemKind?: string; approvalKind?: strin
   "approval.requested.user_input": { type: "approval.requested", approvalKind: "user_input" },
   "approval.resolved": { type: "approval.resolved" },
   "session.status": { type: "session.status" },
+  "session.usage": { type: "session.usage" },
   "turn.completed": { type: "turn.completed" },
   error: { type: "error" },
   pong: { type: "pong" },
@@ -73,6 +82,16 @@ const CLIENT: Record<string, { type: string }> = {
   "session.setMode": { type: "session.setMode" },
   ping: { type: "ping" },
 };
+
+/** 2026-09-10 추가분(사용량·모델·mkdir). 라운드트립 테스트가 최소한 이 파일들을 반드시 포함해야 한다. */
+const ADDED_2026_09_10 = [
+  "rest/usage",
+  "rest/usage-empty",
+  "rest/models-claude",
+  "rest/models-codex",
+  "rest/fs-mkdir",
+  "ws/session.usage",
+];
 
 function listFixtures(dir: string): string[] {
   return readdirSync(join(FIXTURES_DIR, dir))
@@ -90,6 +109,15 @@ function expectLossless(schema: ZodType, input: unknown): unknown {
   const parsed = schema.parse(input);
   expect(parsed).toEqual(input);
   return parsed;
+}
+
+/** 모든 fixture 의 (디렉토리, 이름, 스키마) 목록. */
+function allFixtures(): Array<{ dir: string; name: string; schema: ZodType }> {
+  return [
+    ...Object.entries(REST).map(([name, schema]) => ({ dir: "rest", name, schema })),
+    ...Object.keys(WS).map((name) => ({ dir: "ws", name, schema: ServerEventSchema as ZodType })),
+    ...Object.keys(CLIENT).map((name) => ({ dir: "client", name, schema: ClientMessageSchema as ZodType })),
+  ];
 }
 
 describe("fixtures ↔ 매핑 테이블 (누락 방지)", () => {
@@ -127,6 +155,10 @@ describe("fixtures ↔ 매핑 테이블 (누락 방지)", () => {
       ClientMessageSchema.options.map((o) => o.shape.type.value).sort(),
     );
   });
+  it("2026-09-10 추가분이 전부 매핑표에 있다", () => {
+    const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
+    for (const added of ADDED_2026_09_10) expect(keys.has(added), added).toBe(true);
+  });
 });
 
 describe("rest fixtures", () => {
@@ -143,6 +175,27 @@ describe("rest fixtures", () => {
     const seqs = detail.items.map((i) => i.seq);
     expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
     expect(detail.session.lastSeq).toBeGreaterThanOrEqual(seqs.at(-1) ?? 0);
+  });
+
+  it("session 과 session-detail 의 Session 은 effort 와 usage(컨텍스트 포함)를 채운다", () => {
+    for (const session of [
+      SessionSchema.parse(loadFixture("rest", "session")),
+      SessionDetailResponseSchema.parse(loadFixture("rest", "session-detail")).session,
+    ]) {
+      expect(session.effort).toEqual(expect.any(String));
+      expect(session.usage).not.toBeNull();
+      expect(session.usage?.context).not.toBeNull();
+      expect(session.usage?.turns).toBeGreaterThan(0);
+    }
+  });
+
+  it("sessions 의 두 번째 항목은 첫 턴 전이라 usage 와 effort 가 null 이다", () => {
+    const { sessions } = SessionsResponseSchema.parse(loadFixture("rest", "sessions"));
+    expect(sessions.length).toBeGreaterThanOrEqual(2);
+    expect(sessions[0]?.usage).not.toBeNull();
+    expect(sessions[0]?.effort).not.toBeNull();
+    expect(sessions[1]?.usage).toBeNull();
+    expect(sessions[1]?.effort).toBeNull();
   });
 
   it("fs-list 는 dir/file/symlink 와 여러 gitStatus 값을 섞어 담는다", () => {
@@ -162,6 +215,54 @@ describe("rest fixtures", () => {
     expect(image.isBinary).toBe(true);
     expect(image.encoding).toBe("base64");
     expect(() => Buffer.from(image.content, "base64")).not.toThrow();
+  });
+
+  it("fs-mkdir 은 만든 디렉토리의 FsEntry(type dir) 를 돌려준다", () => {
+    const { entry } = FsMkdirResponseSchema.parse(loadFixture("rest", "fs-mkdir"));
+    expect(entry.type).toBe("dir");
+    expect(entry.size).toBeNull();
+    expect(entry.path.endsWith(`/${entry.name}`)).toBe(true);
+  });
+
+  it("usage 는 claude(live:false) 와 codex(live:true) 를 담고 status ok/warning 을 섞는다", () => {
+    const { agents } = UsageResponseSchema.parse(loadFixture("rest", "usage"));
+    expect(agents.map((a) => a.kind).sort()).toEqual(["claude", "codex"]);
+    const claude = agents.find((a) => a.kind === "claude");
+    const codex = agents.find((a) => a.kind === "codex");
+    expect(claude?.live).toBe(false);
+    expect(codex?.live).toBe(true);
+    expect(claude?.observedAt).toEqual(expect.any(String));
+    const statuses = new Set(agents.flatMap((a) => a.limits.map((l) => l.status)));
+    expect(statuses.has("ok") && statuses.has("warning")).toBe(true);
+    for (const limit of agents.flatMap((a) => a.limits)) {
+      // 문서 규칙: 80 미만 ok, 80 이상 warning, 100 이상 exceeded
+      const expected = limit.usedPercent >= 100 ? "exceeded" : limit.usedPercent >= 80 ? "warning" : "ok";
+      expect(limit.status, limit.id).toBe(expected);
+    }
+  });
+
+  it("usage-empty 는 관측값이 없어 limits [] 와 observedAt null 이다", () => {
+    const { agents } = UsageResponseSchema.parse(loadFixture("rest", "usage-empty"));
+    expect(agents.length).toBeGreaterThan(0);
+    for (const agent of agents) {
+      expect(agent.limits).toEqual([]);
+      expect(agent.observedAt).toBeNull();
+      expect(agent.plan).toBeNull();
+    }
+  });
+
+  it("models-claude 와 models-codex 는 기본 모델 하나와 effort 지원/미지원 모델을 담는다", () => {
+    for (const name of ["models-claude", "models-codex"]) {
+      const { models } = ModelsResponseSchema.parse(loadFixture("rest", name));
+      expect(models.filter((m) => m.isDefault), name).toHaveLength(1);
+      expect(models.some((m) => m.efforts.length > 0), name).toBe(true);
+      for (const model of models) {
+        if (model.efforts.length === 0) expect(model.defaultEffort, model.id).toBeNull();
+        if (model.defaultEffort !== null) expect(model.efforts, model.id).toContain(model.defaultEffort);
+      }
+    }
+    const claude = ModelsResponseSchema.parse(loadFixture("rest", "models-claude")).models;
+    expect(claude.some((m) => m.efforts.length === 0 && m.description === null)).toBe(true);
   });
 });
 
@@ -184,6 +285,21 @@ describe("ws fixtures", () => {
       }
     });
   }
+
+  it("session.usage 의 usage 는 Session.usage 와 같은 객체이며 percent 는 0~100 이다", () => {
+    const event = ServerEventSchema.parse(loadFixture("ws", "session.usage"));
+    if (event.type !== "session.usage") throw new Error("type mismatch");
+    expect(SessionSchema.shape.usage.unwrap().unwrap().safeParse(event.usage).success).toBe(true);
+    expect(event.usage.context?.percent).toBeGreaterThanOrEqual(0);
+    expect(event.usage.context?.percent).toBeLessThanOrEqual(100);
+  });
+
+  it("session.snapshot 의 Session 도 effort 와 usage 를 담는다", () => {
+    const event = ServerEventSchema.parse(loadFixture("ws", "session.snapshot"));
+    if (event.type !== "session.snapshot") throw new Error("type mismatch");
+    expect(event.session.effort).toEqual(expect.any(String));
+    expect(event.session.usage?.context?.window).toBeGreaterThan(0);
+  });
 });
 
 describe("client fixtures", () => {
@@ -193,6 +309,18 @@ describe("client fixtures", () => {
         type: string;
       };
       expect(message.type).toBe(expected.type);
+    });
+  }
+});
+
+describe("라운드트립 (parse → JSON → parse 무손실)", () => {
+  for (const { dir, name, schema } of allFixtures()) {
+    it(`${dir}/${name}.json`, () => {
+      const input = loadFixture(dir, name);
+      const first = schema.parse(input);
+      const second = schema.parse(JSON.parse(JSON.stringify(first)));
+      expect(second).toEqual(first);
+      expect(second).toEqual(input);
     });
   }
 });

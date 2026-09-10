@@ -1,0 +1,6 @@
+{
+  "agents": [
+    { "kind": "claude", "plan": null, "live": false, "observedAt": null, "limits": [] },
+    { "kind": "codex", "plan": null, "live": true, "observedAt": null, "limits": [] }
+  ]
+}
