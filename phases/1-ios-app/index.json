@@ -74,7 +74,25 @@
     {
       "step": 3,
       "name": "connect-settings-ui",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-10T09:36:34+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "e61d3498-a54f-4c71-9aac-7a668dd941a1",
+          "cost_usd": 3.6553522499999995,
+          "duration_s": 468.3,
+          "num_turns": 15,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 3.655352,
+      "duration_s": 468.3,
+      "retries": 0,
+      "session_id": "e61d3498-a54f-4c71-9aac-7a668dd941a1",
+      "summary": "ios/MacAgent/App/AppState.swift(@MainActor @Observable, ConnectionState disconnected/connecting/connected(MeResponse)/failed(message), configStore·client, connect(주소 저장→/me, 실패해도 주소 유지)/reconnectSavedServer/refreshMe/disconnect(설정 삭제), URLSession 주입 가능) + ios/MacAgent/Shared/ErrorMessages.swift(전송→\"서버에 연결할 수 없습니다. Tailscale이…\", 403→등록 안내, 426→\"앱을 업데이트해야 합니다.\", 그 외→서버 메시지, ConfigError 4종 한국어, isLoginUnsupported(501 또는 agent_unavailable)+SSH 안내 문구) 추가. App/RootView.swift 교체(connection 분기: ConnectView / ProgressView / SessionsHomePlaceholderView(툴바 gearshape→SettingsView 시트, accessibilityLabel)), MacAgentApp에 AppState .environment + .task reconnectSavedServer. Features/Connect/ConnectView.swift(Form, URL 키보드·자동대문자/자동수정 끔, 빈 값 비활성 \"연결\", 검증/연결 실패 .red 캡션, #if simulator 개발 서버 버튼)·ConnectModel.swift(normalize→appState.connect, 저장 주소 프리필, canSubmit). Features/Settings/SettingsView.swift(서버/에이전트/정보 섹션, 연결 해제 destructive, Claude Code·Codex 행: 사용 가능·버전·계정 또는 \"로그인 필요\"·\"로그인\"→AgentLoginView 시트; AgentKind Identifiable+displayName 확장)·LoginFlowModel.swift(Phase starting/waiting/done/failed/unsupported, begin/retry/submitCode(제출 후 code 비움, 실패는 codeMessage)/stop, 2초 폴링 sleep 주입·pollTask 노출, displayedCode 정규식 [A-Z0-9]{4}-[A-Z0-9]{4}, loginURL)·AgentLoginView.swift(instructions 본문, 링크 열기 openURL·링크 복사·코드 복사(UIPasteboard), Claude 코드 입력+\"코드 제출\", Codex 코드 largeTitle monospaced, done→appState.refreshMe 후 dismiss, failed→\"다시 시도\", onDisappear stop). 테스트 ios/MacAgentTests/Features/ 3개 파일 21개(AppStateTests 8: /me 성공·403 문구·transport/426·서버 메시지·저장 없음 disconnected·저장된 서버 재연결·disconnect 삭제·refreshMe 갱신; ConnectModelTests 4: normalize 오류 4종 문구·canSubmit·정규화 후 연결·프리필; LoginFlowModelTests 9: Claude start→코드 제출(본문·트림·비움)→pending→done, 코드 실패 후 폴링 유지, Codex 코드 추출·미제출, 코드 없음 nil, error→failed→retry→done, start 실패, 501 및 503 agent_unavailable→unsupported, stop 후 폴링 중단). AC: xcodegen+xcodebuild test 80개(기존 59+21) 통과, bash scripts/test.sh(TS 309 passed + iOS) exit 0, 새 파일 경고 0. 서버 코드·fixture·phases/ 미수정, 커밋 안 함. 결정: Localizable.xcstrings는 xcodebuild가 갱신하지 않아 비어 있음(SWIFT_EMIT_LOC_STRINGS로 Xcode 빌드 시 수집), 폴링 요청 실패 시 failed로 전환(다시 시도는 start부터), Claude도 start 직후 폴링 시작.",
+      "completed_at": "2026-09-10T09:44:23+0900"
     },
     {
       "step": 4,
