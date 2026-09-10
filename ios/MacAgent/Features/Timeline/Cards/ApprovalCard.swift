@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// 승인 아이템(읽기 전용). 대기 중이면 노란 카드 + "아래 배너에서 응답하세요"(응답 버튼은 step 6),
+/// 승인 아이템(읽기 전용). 대기 중이면 노란 카드 + "자세히 보기"(시트). 허용/거절 버튼은 배너에만 있다.
 /// 처리됐으면 "허용됨 · 12:03" 한 줄.
 struct ApprovalCard: View {
     let item: TimelineItem
     let payload: ApprovalPayload
+    var onShowDetail: (() -> Void)? = nil
 
     var body: some View {
         if let resolution = payload.resolution {
@@ -18,9 +19,11 @@ struct ApprovalCard: View {
                 Text(payload.approval.prompt)
                     .font(.subheadline)
                     .textSelection(.enabled)
-                Text("아래 배너에서 응답하세요")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let onShowDetail {
+                    Button("자세히 보기", action: onShowDetail)
+                        .font(.caption)
+                        .buttonStyle(.borderless)
+                }
             }
         }
     }

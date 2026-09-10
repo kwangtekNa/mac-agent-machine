@@ -26,6 +26,7 @@ private struct TimelineScreen: View {
     @State private var showsNewEvents = false
     @State private var showsInfo = false
     @State private var focusRequest = 0
+    @State private var detailApproval: Approval?
     private let sessionId: String
 
     init(sessionId: String, client: APIClient) {
@@ -60,7 +61,7 @@ private struct TimelineScreen: View {
         .background(Color(.systemGroupedBackground))
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
-                ApprovalBannerSlot(pendingCount: model.pendingApprovals.count)
+                ApprovalBanner(model: model)
                 Composer(model: model, focusRequest: focusRequest)
             }
         }
@@ -93,6 +94,9 @@ private struct TimelineScreen: View {
         .sheet(isPresented: $showsInfo) {
             SessionInfoSheet(session: currentSession, onClose: closeSession)
         }
+        .sheet(item: $detailApproval) { approval in
+            ApprovalSheet(model: model, approvalId: approval.approvalId)
+        }
         .task { await model.start() }
         .onDisappear { model.stop() }
         .onChange(of: scenePhase) { _, phase in
@@ -115,7 +119,7 @@ private struct TimelineScreen: View {
                             .frame(maxWidth: .infinity)
                     }
                     ForEach(model.items) { item in
-                        TimelineItemRow(item: item) { focusRequest += 1 }
+                        TimelineItemRow(item: item, onRetry: { focusRequest += 1 }, onApprovalDetail: { detailApproval = $0 })
                             .id(item.id)
                     }
                     Color.clear
@@ -192,6 +196,7 @@ private struct TimelineScreen: View {
 private struct TimelineItemRow: View {
     let item: TimelineItem
     let onRetry: () -> Void
+    let onApprovalDetail: (Approval) -> Void
 
     var body: some View {
         switch item.payload {
@@ -201,28 +206,11 @@ private struct TimelineItemRow: View {
         case .toolCall(let p): ToolCallCard(item: item, payload: p)
         case .fileChange(let p): FileChangeCard(item: item, payload: p)
         case .plan(let p): PlanCard(item: item, payload: p)
-        case .approval(let p): ApprovalCard(item: item, payload: p)
+        case .approval(let p):
+            ApprovalCard(item: item, payload: p, onShowDetail: p.resolution == nil ? { onApprovalDetail(p.approval) } : nil)
         case .turnSummary(let p): TurnSummaryRow(payload: p)
         case .error(let p): ErrorCard(item: item, payload: p, onRetry: onRetry)
         case .system(let p): SystemRow(payload: p)
-        }
-    }
-}
-
-/// 승인 배너 자리(step 6 이 채운다). 대기 건이 있을 때만 높이를 가진다.
-struct ApprovalBannerSlot: View {
-    let pendingCount: Int
-
-    var body: some View {
-        if pendingCount > 0 {
-            HStack(spacing: 8) {
-                Image(systemName: "hand.raised.fill").foregroundStyle(.yellow)
-                Text("승인 대기 \(pendingCount)건").font(.caption)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color.yellow.opacity(0.18))
         }
     }
 }

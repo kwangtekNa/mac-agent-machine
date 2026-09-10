@@ -79,3 +79,9 @@ extension ErrorMessages {
         message.lowercased() == "session is busy" ? agentBusy : message
     }
 }
+
+extension ErrorMessages {
+    /// 409/404 또는 소켓 `error`: 다른 클라이언트가 먼저 처리했다.
+    static let approvalAlreadyResolved = String(localized: "이미 처리된 요청입니다")
+    static let approvalSendFailed = String(localized: "응답을 보내지 못했습니다. 연결 상태를 확인하세요.")
+}

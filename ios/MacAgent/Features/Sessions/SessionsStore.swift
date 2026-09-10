@@ -86,6 +86,13 @@ final class SessionsStore {
         sessions.reduce(0) { $0 + $1.pendingApprovals }
     }
 
+    /// 승인 대기가 있는 세션 중 가장 오래 기다린 것(updatedAt 오름차순). 홈 요약 행의 이동 대상.
+    var oldestWaitingSession: Session? {
+        sessions
+            .filter { $0.pendingApprovals > 0 || $0.status == .waitingApproval }
+            .min { $0.updatedAt < $1.updatedAt }
+    }
+
     func session(id: String) -> Session? {
         sessions.first { $0.id == id }
     }

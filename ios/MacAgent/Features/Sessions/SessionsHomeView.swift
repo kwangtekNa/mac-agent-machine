@@ -71,6 +71,7 @@ struct SessionsHomeView: View {
         } else {
             List {
                 errorBanner
+                approvalSummary
                 if !store.active.isEmpty {
                     Section("지금 진행 중") {
                         ForEach(store.active) { session in
@@ -110,6 +111,32 @@ struct SessionsHomeView: View {
                 ErrorBannerRow(message: message) {
                     Task { await store.refresh() }
                 }
+            }
+        }
+    }
+
+    /// 승인 대기가 있으면 맨 위에 노란 요약 행. 탭하면 가장 오래 기다린 세션으로 이동한다(푸시는 Phase 3).
+    @ViewBuilder
+    private var approvalSummary: some View {
+        if store.pendingApprovalTotal > 0, let target = store.oldestWaitingSession {
+            Section {
+                Button {
+                    path.append(target)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "hand.raised.fill")
+                            .foregroundStyle(.yellow)
+                        Text("승인 대기 \(store.pendingApprovalTotal)건 · 탭하여 이동")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .foregroundStyle(.primary)
+                .listRowBackground(Color.yellow.opacity(0.18))
+                .accessibilityLabel("승인 대기 \(store.pendingApprovalTotal)건, 탭하여 이동")
             }
         }
     }

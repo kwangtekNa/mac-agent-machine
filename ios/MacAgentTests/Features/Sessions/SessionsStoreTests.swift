@@ -195,6 +195,28 @@ final class SessionsStoreTests: XCTestCase {
         XCTAssertEqual(store.pendingApprovalTotal, 3)
     }
 
+    func testOldestWaitingSessionPicksEarliestUpdatedWithPendingApprovals() async throws {
+        install([
+            try projectsRoute(),
+            try sessionsRoute([
+                makeSession(id: "ses_idle", status: .idle, updatedAt: "2026-09-09T08:00:00Z"),
+                makeSession(id: "ses_wait_new", status: .waitingApproval, updatedAt: "2026-09-09T12:00:00Z", pendingApprovals: 1),
+                makeSession(id: "ses_wait_old", status: .waitingApproval, updatedAt: "2026-09-09T09:00:00Z", pendingApprovals: 2),
+                makeSession(id: "ses_running", status: .running, updatedAt: "2026-09-09T07:00:00Z"),
+            ]),
+        ])
+
+        await store.refresh()
+
+        XCTAssertEqual(store.oldestWaitingSession?.id, "ses_wait_old")
+    }
+
+    func testOldestWaitingSessionIsNilWithoutPendingApprovals() async throws {
+        install([try projectsRoute(), try sessionsRoute([makeSession(id: "ses_idle", status: .idle)])])
+        await store.refresh()
+        XCTAssertNil(store.oldestWaitingSession)
+    }
+
     func testRecentTakesTopTenByUpdatedAt() async throws {
         let sessions = (0..<12).map { index in
             makeSession(id: "ses_\(index)", updatedAt: "2026-09-09T\(String(format: "%02d", index)):00:00Z")

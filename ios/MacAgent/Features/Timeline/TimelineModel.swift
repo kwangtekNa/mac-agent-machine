@@ -2,6 +2,13 @@ import Foundation
 import Observation
 import os
 
+/// 승인 응답 전송 상태. 확정은 서버의 `approval.resolved` 이며 낙관적으로 pending 을 바꾸지 않는다.
+enum ApprovalSubmitState: Equatable, Sendable {
+    case idle
+    case submitting(approvalId: String)
+    case failed(approvalId: String, message: String)
+}
+
 /// 세션 화면의 상태(IOS.md 6절). `apply(_:)` 가 유일한 변경 경로이며 뷰는 상태만 읽는다.
 /// REST `GET /sessions/:id` 로 초기 아이템을 받은 뒤 `since=lastSeq` 로 소켓에 붙고, 스냅샷은 REST 결과와 합친다.
 @MainActor
@@ -26,12 +33,19 @@ final class TimelineModel {
     private(set) var lastSeq = 0
     private(set) var isSending = false
     private(set) var socket: SessionSocket?
+    /// 승인 응답 전송 상태(step 6). `submitting` 동안 해당 승인의 버튼은 비활성.
+    private(set) var approvalSubmit: ApprovalSubmitState = .idle
+    /// snapshot 처리 직후부터 첫 라이브 이벤트 전까지 true. 재생으로 들어온 승인 요청에는 햅틱을 울리지 않는다.
+    private(set) var isReplaying = false
 
     var socketState: SessionSocket.State { socket?.state ?? .idle }
 
     @ObservationIgnored private let client: APIClient
     @ObservationIgnored private let socketFactory: SocketFactory
     @ObservationIgnored private let transientErrorDuration: Duration
+    @ObservationIgnored private let approvalFailureDuration: Duration
+    @ObservationIgnored private let haptics: any HapticsProviding
+    @ObservationIgnored private var approvalFailureTask: Task<Void, Never>?
     @ObservationIgnored private var indexById: [String: Int] = [:]
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
     @ObservationIgnored private var transientTask: Task<Void, Never>?
@@ -41,11 +55,15 @@ final class TimelineModel {
         sessionId: String,
         client: APIClient,
         transientErrorDuration: Duration = .seconds(3),
+        approvalFailureDuration: Duration = .seconds(2),
+        haptics: (any HapticsProviding)? = nil,
         socketFactory: SocketFactory? = nil
     ) {
         self.sessionId = sessionId
         self.client = client
         self.transientErrorDuration = transientErrorDuration
+        self.approvalFailureDuration = approvalFailureDuration
+        self.haptics = haptics ?? SystemHaptics()
         let baseURL = client.baseURL
         self.socketFactory = socketFactory ?? { id, since in
             SessionSocket(baseURL: baseURL, sessionId: id, since: since)
@@ -106,6 +124,7 @@ final class TimelineModel {
         if seq > 0 {
             guard seq > lastSeq else { return }
             lastSeq = seq
+            isReplaying = false
         }
         switch event {
         case .sessionSnapshot(let e):
@@ -120,9 +139,11 @@ final class TimelineModel {
             pendingApprovals.sort { $0.requestedAt < $1.requestedAt }
             status = .waitingApproval
             session?.status = .waitingApproval
+            if !isReplaying { haptics.warning() }
         case .approvalResolved(let e):
             pendingApprovals.removeAll { $0.approvalId == e.approvalId }
             resolveApprovalItem(approvalId: e.approvalId, optionId: e.optionId, by: e.by, at: e.ts)
+            reconcileSubmitState()
         case .sessionStatus(let e):
             status = e.status
             mode = e.mode
@@ -132,7 +153,11 @@ final class TimelineModel {
         case .turnCompleted:
             break
         case .error(let e):
-            if e.recoverable {
+            // 응답 전송 중에 온 error 는 그 승인에 대한 거절(이미 처리됨 등)로 본다. 문구는 배너가 보여준다.
+            if case .submitting(let id) = approvalSubmit {
+                failApproval(id, alreadyResolved: true)
+                if !e.recoverable { fatalError = e.message }
+            } else if e.recoverable {
                 showTransient(ErrorMessages.socketErrorMessage(e.message))
             } else {
                 fatalError = e.message
@@ -149,6 +174,8 @@ final class TimelineModel {
         pendingApprovals = e.pendingApprovals.sorted { $0.requestedAt < $1.requestedAt }
         lastSeq = max(lastSeq, e.session.lastSeq, e.items.map(\.seq).max() ?? 0)
         fatalError = e.session.status == .error ? (fatalError ?? ErrorMessages.sessionError) : nil
+        isReplaying = true
+        reconcileSubmitState()
     }
 
     private func applySession(_ s: Session) {
@@ -225,6 +252,93 @@ final class TimelineModel {
             guard !Task.isCancelled else { return }
             self?.transientError = nil
         }
+    }
+
+    // MARK: - 승인
+
+    /// 승인 응답. 소켓이 열려 있으면 `approval.respond`, 아니면 REST `POST /sessions/:id/approvals/:approvalId`.
+    /// 확정은 서버의 `approval.resolved` 이벤트다(REST 200 도 마찬가지). pending 은 낙관적으로 바꾸지 않는다.
+    /// 전송 중에는 다른 승인을 보내지 않는다.
+    func respond(to approval: Approval, optionId: String, inputs: [String: String]? = nil, message: String? = nil) async {
+        let id = approval.approvalId
+        guard pendingApprovals.contains(where: { $0.approvalId == id }) else { return }
+        if case .submitting = approvalSubmit { return }
+        approvalFailureTask?.cancel()
+        approvalSubmit = .submitting(approvalId: id)
+        do {
+            if let socket, socket.state == .open {
+                try await socket.send(.approvalRespond(approvalId: id, optionId: optionId, inputs: inputs, message: message))
+            } else {
+                try await client.respondApproval(
+                    sessionId: sessionId, approvalId: id,
+                    ApprovalRespondRequest(optionId: optionId, inputs: inputs, message: message)
+                )
+            }
+        } catch {
+            // 기다리는 동안 resolved 가 먼저 왔으면 이미 idle 이다.
+            guard approvalSubmit == .submitting(approvalId: id) else { return }
+            failApproval(id, alreadyResolved: Self.isAlreadyResolved(error))
+        }
+    }
+
+    /// `GET /sessions/:id` 로 세션·아이템을 다시 읽어 서버 상태와 맞춘다. 처리된 승인은 pending 에서 뺀다.
+    /// `lastSeq` 는 올리지 않는다(REST 와 소켓 사이에 떠 있는 이벤트를 버리지 않도록).
+    func refreshDetail() async {
+        do {
+            let detail = try await client.session(id: sessionId)
+            applySession(detail.session)
+            hasOlderHistory = detail.truncated
+            for item in detail.items.sorted(by: { $0.seq < $1.seq }) { upsert(item) }
+            fatalError = detail.session.status == .error ? (fatalError ?? ErrorMessages.sessionError) : nil
+            if detail.session.pendingApprovals == 0 {
+                pendingApprovals.removeAll()
+            } else {
+                let resolvedItemIds = Set(detail.items.compactMap { item -> String? in
+                    if case .approval(let p) = item.payload, p.resolution != nil { return p.approval.itemId }
+                    return nil
+                })
+                pendingApprovals.removeAll { resolvedItemIds.contains($0.itemId) }
+            }
+            reconcileSubmitState()
+        } catch {
+            if Task.isCancelled { return }
+            logger.debug("세션 재조회 실패")
+        }
+    }
+
+    /// 이미 처리됨(409/404, 소켓 error): 문구를 `approvalFailureDuration` 동안 보여준 뒤 pending 에서 빼고 서버 상태를 다시 읽는다.
+    /// 전송 실패: 문구만 보여주고 pending 은 남긴다(다시 시도 가능).
+    private func failApproval(_ id: String, alreadyResolved: Bool) {
+        approvalSubmit = .failed(
+            approvalId: id,
+            message: alreadyResolved ? ErrorMessages.approvalAlreadyResolved : ErrorMessages.approvalSendFailed
+        )
+        approvalFailureTask?.cancel()
+        let duration = approvalFailureDuration
+        approvalFailureTask = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard let self, !Task.isCancelled else { return }
+            if alreadyResolved {
+                self.pendingApprovals.removeAll { $0.approvalId == id }
+                await self.refreshDetail()
+            }
+            if case .failed(let failedId, _) = self.approvalSubmit, failedId == id {
+                self.approvalSubmit = .idle
+            }
+        }
+    }
+
+    /// 전송 중인 승인이 더는 pending 에 없으면(누가 처리했든) 전송 상태를 정리한다.
+    private func reconcileSubmitState() {
+        guard case .submitting(let id) = approvalSubmit else { return }
+        if !pendingApprovals.contains(where: { $0.approvalId == id }) {
+            approvalSubmit = .idle
+        }
+    }
+
+    nonisolated private static func isAlreadyResolved(_ error: any Error) -> Bool {
+        guard case .server(let code, _, let status) = error as? APIError else { return false }
+        return status == 409 || status == 404 || code == .conflict
     }
 
     // MARK: - 전송
