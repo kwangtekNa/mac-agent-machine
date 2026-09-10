@@ -26,11 +26,20 @@ final class FileBrowserModel {
         func hash(into hasher: inout Hasher) { hasher.combine(path) }
     }
 
+    /// 무엇을 보여줄지. 피커는 디렉토리만 본다(IOS.md 9.2).
+    enum Mode: Equatable, Sendable {
+        /// 파일과 디렉토리 모두(세션 파일 탭).
+        case files
+        /// 디렉토리만(새 세션 피커). 파일 탭은 비활성.
+        case directories
+    }
+
     static let showHiddenKey = "mam.files.showHidden"
 
     let client: APIClient
-    /// 세션 cwd. 이 위로는 올라가지 않는다.
+    /// 세션 cwd 또는 피커의 홈(`~`). 이 위로는 올라가지 않는다.
     let rootPath: String
+    let mode: Mode
     private(set) var root: Directory
     /// NavigationStack path. 루트는 포함하지 않는다.
     var stack: [Directory] = []
@@ -41,9 +50,10 @@ final class FileBrowserModel {
     @ObservationIgnored private var cache: [String: FsListResponse] = [:]
     @ObservationIgnored private let defaults: UserDefaults
 
-    init(client: APIClient, rootPath: String, defaults: UserDefaults = .standard) {
+    init(client: APIClient, rootPath: String, mode: Mode = .files, defaults: UserDefaults = .standard) {
         self.client = client
         self.rootPath = rootPath
+        self.mode = mode
         self.root = Directory(path: rootPath)
         self.defaults = defaults
         self.showHidden = defaults.bool(forKey: Self.showHiddenKey)
@@ -55,6 +65,55 @@ final class FileBrowserModel {
     func directory(for path: String) -> Directory? {
         if path == rootPath { return root }
         return stack.first { $0.path == path }
+    }
+
+    /// 목록을 읽은 뒤에는 서버가 준 절대 경로, 아니면 입력 경로 그대로(루트 `~` 는 읽기 전까지 `~`).
+    func serverPath(of path: String) -> String {
+        directory(for: path)?.listing?.path ?? path
+    }
+
+    /// 지금 보고 있는 디렉토리의 서버 경로(피커의 하단 바·선택 결과).
+    var currentPath: String {
+        stack.last?.path ?? serverPath(of: rootPath)
+    }
+
+    /// 홈 절대 경로 아래의 `target` 까지 내려가는 중간 디렉토리 목록(홈 제외, target 포함). `~/x` 는 홈 기준으로 푼다.
+    /// 홈 자신이나 홈 밖 경로는 빈 배열이다(피커는 홈 위로 가지 않는다).
+    nonisolated static func pathsUnderHome(_ home: String, target: String) -> [String] {
+        var home = home
+        while home.count > 1, home.hasSuffix("/") { home.removeLast() }
+        if target == "~" { return [] }
+        var absolute = target.hasPrefix("~/") ? home + "/" + target.dropFirst(2) : target
+        while absolute.count > 1, absolute.hasSuffix("/") { absolute.removeLast() }
+        guard absolute.hasPrefix(home + "/") else { return [] }
+        var paths: [String] = []
+        var cursor = home
+        for segment in absolute.dropFirst(home.count + 1).split(separator: "/", omittingEmptySubsequences: true) {
+            cursor += "/" + segment
+            paths.append(cursor)
+        }
+        return paths
+    }
+
+    /// 루트 목록을 읽은 뒤 `target` 까지 중간 디렉토리를 한 번에 push 한다(피커 시작 위치). 홈 절대 경로를 아직 모르면 아무것도 하지 않는다.
+    func reveal(_ target: String) {
+        guard let home = root.listing?.path else { return }
+        stack = Self.pathsUnderHome(home, target: target).map { Directory(path: $0, listing: cache[$0]) }
+    }
+
+    /// 새 폴더(IOS.md 9.2). 이름 검증은 제출 전 편의이고 최종 판단은 서버(400/403/409)다.
+    /// 성공하면 부모 목록을 다시 읽고 만든 폴더로 push 한다. 실패하면 사용자에게 보일 문구를 돌려준다.
+    func createDirectory(named name: String, in parentPath: String) async -> String? {
+        if let invalid = DirectoryNameValidation.validate(name) { return invalid }
+        let target = serverPath(of: parentPath) + "/" + DirectoryNameValidation.normalized(name)
+        do {
+            let entry = try await client.makeDirectory(path: target)
+            await load(parentPath)
+            push(entry.path)
+            return nil
+        } catch {
+            return ErrorMessages.makeDirectoryMessage(for: error)
+        }
     }
 
     /// 캐시가 있으면 먼저 보여주고 서버에서 다시 읽는다. 실패하면 캐시된 목록은 유지하고 오류만 기록한다.
@@ -90,10 +149,12 @@ final class FileBrowserModel {
         defaults.set(showHidden, forKey: Self.showHiddenKey)
     }
 
-    /// 숨김 필터만 적용한다. 정렬은 서버(디렉토리 먼저, 이름순)를 그대로 따른다.
+    /// 숨김 필터(와 `.directories` 모드의 디렉토리 필터)만 적용한다. 정렬은 서버(디렉토리 먼저, 이름순)를 그대로 따른다.
     func visibleEntries(of dir: Directory) -> [FsEntry] {
         guard let entries = dir.listing?.entries else { return [] }
-        return showHidden ? entries : entries.filter { !$0.isHidden }
+        return entries.filter { entry in
+            (showHidden || !entry.isHidden) && (mode == .files || entry.type == .dir)
+        }
     }
 
     private func update(_ path: String, _ change: (inout Directory) -> Void) {
@@ -102,6 +163,27 @@ final class FileBrowserModel {
         } else if let index = stack.firstIndex(where: { $0.path == path }) {
             change(&stack[index])
         }
+    }
+}
+
+/// 새 폴더 이름의 제출 전 검증(IOS.md 9.2). 빈 값·`/`·제어 문자만 막고 나머지(중복 등)는 서버 400/409 가 판단한다.
+enum DirectoryNameValidation {
+    static let emptyMessage = String(localized: "이름을 입력하세요.")
+    static let slashMessage = String(localized: "이름에 /를 넣을 수 없습니다.")
+    static let controlMessage = String(localized: "이름에 쓸 수 없는 문자가 있습니다.")
+
+    /// 앞뒤 공백·줄바꿈을 뗀 이름. 요청에는 이 값을 쓴다.
+    static func normalized(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 문제가 있으면 문구, 없으면 nil.
+    static func validate(_ name: String) -> String? {
+        let trimmed = normalized(name)
+        if trimmed.isEmpty { return emptyMessage }
+        if trimmed.contains("/") { return slashMessage }
+        if trimmed.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) { return controlMessage }
+        return nil
     }
 }
 

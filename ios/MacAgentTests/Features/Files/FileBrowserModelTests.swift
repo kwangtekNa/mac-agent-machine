@@ -22,10 +22,11 @@ final class FileBrowserModelTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeModel() -> FileBrowserModel {
+    private func makeModel(mode: FileBrowserModel.Mode = .files, rootPath: String? = nil) -> FileBrowserModel {
         FileBrowserModel(
             client: APIClient(baseURL: URL(string: "http://127.0.0.1:7777")!, session: StubURLProtocol.makeSession()),
-            rootPath: rootPath,
+            rootPath: rootPath ?? self.rootPath,
+            mode: mode,
             defaults: defaults
         )
     }
@@ -145,5 +146,128 @@ final class FileBrowserModelTests: XCTestCase {
         XCTAssertEqual(a, b)
         XCTAssertEqual(a.hashValue, b.hashValue)
         XCTAssertEqual(b.name, "app")
+    }
+
+    // MARK: - 디렉토리 피커 (IOS.md 9.2)
+
+    func testDirectoriesModeShowsOnlyDirectories() async throws {
+        install([(200, try FixtureLoader.data("rest/fs-list.json"))])
+        let model = makeModel(mode: .directories)
+        XCTAssertEqual(model.mode, .directories)
+        XCTAssertEqual(makeModel().mode, .files, "기본은 파일 모드")
+        await model.load(rootPath)
+        XCTAssertEqual(model.visibleEntries(of: model.root).map(\.name), ["src"], "파일·심링크·기타는 숨긴다")
+        model.toggleShowHidden()
+        XCTAssertEqual(model.visibleEntries(of: model.root).map(\.name), [".git", "src"], "숨김 토글은 디렉토리에만 적용된다")
+    }
+
+    func testCreateDirectorySuccessReloadsParentAndPushes() async throws {
+        let listing = try FixtureLoader.data("rest/fs-list.json")
+        let created = try FixtureLoader.data("rest/fs-mkdir.json")   // /Users/alice/work/new-app
+        let requests = self.requests
+        StubURLProtocol.handler = { request in
+            requests.withValue { $0.append(request) }
+            switch request.url?.path() {
+            case "/api/v1/fs/mkdir": return StubURLProtocol.response(request, status: 201, body: created)
+            case "/api/v1/fs/list": return StubURLProtocol.response(request, status: 200, body: listing)
+            default: throw URLError(.unsupportedURL)
+            }
+        }
+        let model = makeModel(mode: .directories)
+        let error = await model.createDirectory(named: " new-app ", in: rootPath)
+        XCTAssertNil(error)
+
+        let mkdir = try XCTUnwrap(requests.value.first { $0.url?.path() == "/api/v1/fs/mkdir" })
+        XCTAssertEqual(mkdir.httpMethod, "POST")
+        let body = try XCTUnwrap(StubURLProtocol.body(of: mkdir))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
+        XCTAssertEqual(json, ["path": "\(rootPath)/new-app"], "이름은 다듬어 부모 경로 뒤에 붙인다")
+        XCTAssertEqual(
+            requests.value.map { $0.url?.path() }, ["/api/v1/fs/mkdir", "/api/v1/fs/list"],
+            "성공하면 부모 목록을 다시 읽는다"
+        )
+        XCTAssertEqual(model.stack.map(\.path), ["/Users/alice/work/new-app"], "서버가 돌려준 경로로 push 한다")
+        XCTAssertEqual(model.root.listing?.entries.count, 9)
+    }
+
+    func testCreateDirectoryUsesServerPathOfParentWhenKnown() async throws {
+        let listing = try FixtureLoader.data("rest/fs-list.json")   // path /Users/alice/work/app
+        let created = try FixtureLoader.data("rest/fs-mkdir.json")
+        let requests = self.requests
+        StubURLProtocol.handler = { request in
+            requests.withValue { $0.append(request) }
+            switch request.url?.path() {
+            case "/api/v1/fs/mkdir": return StubURLProtocol.response(request, status: 201, body: created)
+            default: return StubURLProtocol.response(request, status: 200, body: listing)
+            }
+        }
+        let model = makeModel(mode: .directories, rootPath: "~")
+        await model.load("~")
+        XCTAssertEqual(model.currentPath, "/Users/alice/work/app", "루트 `~` 는 서버가 준 절대 경로로 보인다")
+        _ = await model.createDirectory(named: "new-app", in: "~")
+        let mkdir = try XCTUnwrap(requests.value.first { $0.url?.path() == "/api/v1/fs/mkdir" })
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(StubURLProtocol.body(of: mkdir))) as? [String: String])
+        XCTAssertEqual(json, ["path": "/Users/alice/work/app/new-app"])
+        XCTAssertEqual(model.stack.map(\.path), ["/Users/alice/work/new-app"])
+        XCTAssertEqual(model.currentPath, "/Users/alice/work/new-app")
+    }
+
+    func testCreateDirectoryErrorMessages() async {
+        let responses = Locked<[(Int, Data)]>([
+            (409, errorBody("conflict", "이미 존재하는 경로입니다")),
+            (400, errorBody("invalid_request", "경로에 제어 문자가 있습니다")),
+            (403, errorBody("forbidden", "outside home")),
+        ])
+        StubURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path(), "/api/v1/fs/mkdir")
+            let next = responses.withValue { $0.removeFirst() }
+            return StubURLProtocol.response(request, status: next.0, body: next.1)
+        }
+        let model = makeModel(mode: .directories)
+        let conflict = await model.createDirectory(named: "dup", in: rootPath)
+        XCTAssertEqual(conflict, ErrorMessages.directoryExists)
+        let invalid = await model.createDirectory(named: "weird", in: rootPath)
+        XCTAssertEqual(invalid, "경로에 제어 문자가 있습니다", "400 은 서버 메시지 그대로")
+        let forbidden = await model.createDirectory(named: "x", in: rootPath)
+        XCTAssertEqual(forbidden, "outside home", "403 도 서버 메시지 그대로")
+        XCTAssertTrue(model.stack.isEmpty, "실패하면 push 하지 않는다")
+    }
+
+    func testCreateDirectoryRejectsInvalidNameBeforeRequest() async {
+        StubURLProtocol.handler = { _ in
+            XCTFail("잘못된 이름은 서버에 보내지 않는다")
+            throw URLError(.unsupportedURL)
+        }
+        let model = makeModel(mode: .directories)
+        let message = await model.createDirectory(named: "a/b", in: rootPath)
+        XCTAssertEqual(message, DirectoryNameValidation.validate("a/b"))
+        XCTAssertNotNil(message)
+        XCTAssertTrue(model.stack.isEmpty)
+    }
+
+    func testPathsUnderHome() {
+        XCTAssertEqual(
+            FileBrowserModel.pathsUnderHome("/Users/alice", target: "/Users/alice/work/app"),
+            ["/Users/alice/work", "/Users/alice/work/app"]
+        )
+        XCTAssertEqual(FileBrowserModel.pathsUnderHome("/Users/alice", target: "~/work"), ["/Users/alice/work"])
+        XCTAssertEqual(FileBrowserModel.pathsUnderHome("/Users/alice", target: "/Users/alice/work/"), ["/Users/alice/work"])
+        XCTAssertEqual(FileBrowserModel.pathsUnderHome("/Users/alice", target: "~"), [])
+        XCTAssertEqual(FileBrowserModel.pathsUnderHome("/Users/alice", target: "/Users/alice"), [])
+        XCTAssertEqual(FileBrowserModel.pathsUnderHome("/Users/alice", target: "/Users/bob/x"), [], "홈 밖은 시작점이 없다")
+        XCTAssertEqual(FileBrowserModel.pathsUnderHome("/Users/alice", target: "/Users/alicex/y"), [], "접두어만 같은 경로는 홈 밖")
+    }
+
+    func testRevealPushesIntermediateDirectoriesAfterRootLoads() async throws {
+        install([(200, try FixtureLoader.data("rest/fs-list.json"))])   // path /Users/alice/work/app
+        let model = makeModel(mode: .directories, rootPath: "~")
+        model.reveal("/Users/alice/work/app/src/lib")
+        XCTAssertTrue(model.stack.isEmpty, "홈의 절대 경로를 모르면 아무것도 하지 않는다")
+        await model.load("~")
+        model.reveal("/Users/alice/work/app/src/lib")
+        XCTAssertEqual(model.stack.map(\.path), ["/Users/alice/work/app/src", "/Users/alice/work/app/src/lib"])
+        XCTAssertEqual(model.currentPath, "/Users/alice/work/app/src/lib")
+        model.reveal("~")
+        XCTAssertTrue(model.stack.isEmpty)
     }
 }

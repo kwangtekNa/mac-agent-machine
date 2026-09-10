@@ -97,3 +97,18 @@ extension ErrorMessages {
     static let approvalAlreadyResolved = String(localized: "이미 처리된 요청입니다")
     static let approvalSendFailed = String(localized: "응답을 보내지 못했습니다. 연결 상태를 확인하세요.")
 }
+
+extension ErrorMessages {
+    /// `POST /fs/mkdir` 409.
+    static let directoryExists = String(localized: "이미 있는 이름입니다")
+
+    /// 새 폴더 오류 → 문구(IOS.md 9.2). 409 는 고정 문구, 400/403 은 서버 메시지를 그대로, 그 외는 파일 API 공통 매핑.
+    static func makeDirectoryMessage(for error: any Error) -> String {
+        guard case .server(let code, let serverMessage, let status) = error as? APIError else {
+            return message(for: error)
+        }
+        if status == 409 || code == .conflict { return directoryExists }
+        if status == 400 || status == 403 { return serverMessage }
+        return fileAccessMessage(for: error)
+    }
+}

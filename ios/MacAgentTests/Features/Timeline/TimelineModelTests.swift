@@ -325,4 +325,57 @@ final class TimelineModelTests: XCTestCase {
         await model.send(text: "hello")
         XCTAssertNotNil(model.transientError)
     }
+
+    // MARK: - 변경 파일 수 (IOS.md 9.1 "파일 N" 배지)
+
+    func testFileChangeUpsertTracksChangedPathsWithoutDuplicates() throws {
+        let model = makeModel()
+        XCTAssertEqual(model.changedFileCount, 0)
+        XCTAssertTrue(model.changedFilePaths.isEmpty)
+
+        model.apply(try event("item.started.file_change"))                 // seq 39: login.ts, login.test.ts
+        XCTAssertEqual(model.changedFilePaths, ["src/login.ts", "src/login.test.ts"])
+        XCTAssertEqual(model.changedFileCount, 2)
+
+        // 같은 아이템이 completed 로 교체돼도 중복으로 세지 않는다.
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: FixtureLoader.data("ws/item.started.file_change.json")) as? [String: Any])
+        json["type"] = "item.completed"
+        json["seq"] = 40
+        model.apply(try JSONCoding.decoder.decode(ServerEvent.self, from: JSONSerialization.data(withJSONObject: json)))
+        XCTAssertEqual(model.items.count, 1)
+        XCTAssertEqual(model.changedFileCount, 2)
+
+        // 다른 아이템이 같은 경로를 다시 바꾸면 1회만 세고, 새 경로는 더한다.
+        json["type"] = "item.started"
+        json["seq"] = 41
+        var item = try XCTUnwrap(json["item"] as? [String: Any])
+        item["id"] = "itm_second_change"
+        item["seq"] = 41
+        var payload = try XCTUnwrap(item["payload"] as? [String: Any])
+        payload["files"] = [
+            ["path": "src/login.ts", "kind": "modify", "additions": 1, "deletions": 1],
+            ["path": "README.md", "kind": "add", "additions": 5, "deletions": 0],
+        ]
+        item["payload"] = payload
+        json["item"] = item
+        model.apply(try JSONCoding.decoder.decode(ServerEvent.self, from: JSONSerialization.data(withJSONObject: json)))
+        XCTAssertEqual(model.items.count, 2)
+        XCTAssertEqual(model.changedFilePaths, ["src/login.ts", "src/login.test.ts", "README.md"])
+        XCTAssertEqual(model.changedFileCount, 3)
+
+        // 파일 변경이 아닌 아이템은 영향이 없다.
+        model.apply(try event("item.started.tool_call", seq: 42))
+        XCTAssertEqual(model.changedFileCount, 3)
+    }
+
+    func testSnapshotItemsCountTowardChangedFiles() throws {
+        let model = makeModel()
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: FixtureLoader.data("ws/session.snapshot.json")) as? [String: Any])
+        var items = try XCTUnwrap(json["items"] as? [[String: Any]])
+        let change = try XCTUnwrap(JSONSerialization.jsonObject(with: FixtureLoader.data("ws/item.started.file_change.json")) as? [String: Any])
+        items.append(try XCTUnwrap(change["item"] as? [String: Any]))
+        json["items"] = items
+        model.apply(try JSONCoding.decoder.decode(ServerEvent.self, from: JSONSerialization.data(withJSONObject: json)))
+        XCTAssertEqual(model.changedFileCount, 2, "스냅샷의 file_change 도 upsert 를 거치므로 집계된다")
+    }
 }

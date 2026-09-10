@@ -25,6 +25,7 @@ struct TimelineView: View {
 private struct TimelineScreen: View {
     private static let bottomId = "timeline.bottom"
 
+    @Environment(AppState.self) private var appState
     @Environment(SessionsStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
@@ -35,9 +36,8 @@ private struct TimelineScreen: View {
     @State private var showsInfo = false
     @State private var focusRequest = 0
     @State private var detailApproval: Approval?
-    @State private var showsFiles = false
-    /// 파일 시트 모델. 시트를 닫아도 화면이 살아 있는 동안 유지해 다시 열면 같은 위치다.
-    @State private var filesModel: FileBrowserModel?
+    /// compact 의 "대화 | 파일" 세그먼트(IOS.md 9.1). iPad 3열(`onToggleFiles` 있음)에서는 항상 대화.
+    @State private var tab: SessionTab = .chat
     private let sessionId: String
     private let client: APIClient
     private let onToggleFiles: (() -> Void)?
@@ -51,6 +51,17 @@ private struct TimelineScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if onToggleFiles == nil {
+                Picker("", selection: $tab) {
+                    Text("대화").tag(SessionTab.chat)
+                    Text(filesLabel).tag(SessionTab.files)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color(.systemGroupedBackground))
+                .accessibilityIdentifier("timeline.tabs")
+            }
             if let fatal = model.fatalError {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
@@ -71,7 +82,10 @@ private struct TimelineScreen: View {
                     .padding(.vertical, 3)
                     .background(Color(.secondarySystemGroupedBackground))
             }
-            timeline
+            switch tab {
+            case .chat: timeline
+            case .files: filesTab
+            }
         }
         .background(Color(.systemGroupedBackground))
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -92,18 +106,14 @@ private struct TimelineScreen: View {
                 ModeMenu(mode: model.mode) { mode in
                     Task { await model.setMode(mode) }
                 }
-                Button {
-                    if let onToggleFiles {
-                        onToggleFiles()
-                    } else {
-                        openFiles()
+                if let onToggleFiles {
+                    // iPad 3열: 디테일 열의 파일 브라우저를 토글한다. compact 는 세그먼트로 간다.
+                    Button(action: onToggleFiles) {
+                        Image(systemName: "folder")
                     }
-                } label: {
-                    Image(systemName: "folder")
+                    .accessibilityLabel("파일")
+                    .accessibilityIdentifier("timeline.files")
                 }
-                .disabled(onToggleFiles == nil && currentSession == nil)
-                .accessibilityLabel("파일")
-                .accessibilityIdentifier("timeline.files")
                 Button {
                     showsInfo = true
                 } label: {
@@ -118,12 +128,6 @@ private struct TimelineScreen: View {
         }
         .sheet(item: $detailApproval) { approval in
             ApprovalSheet(model: model, approvalId: approval.approvalId)
-        }
-        .sheet(isPresented: $showsFiles) {
-            if let filesModel {
-                FileBrowserView(model: filesModel)
-                    .presentationDetents([.large])
-            }
         }
         .task { await model.start() }
         .onDisappear { model.stop() }
@@ -189,12 +193,20 @@ private struct TimelineScreen: View {
         model.session ?? store.session(id: sessionId)
     }
 
-    private func openFiles() {
-        guard let cwd = currentSession?.cwd else { return }
-        if filesModel?.rootPath != cwd {
-            filesModel = FileBrowserModel(client: client, rootPath: cwd)
+    /// "파일" 탭: 세션 cwd 를 루트로 하는 인라인 파일 브라우저. 모델은 `AppState` 가 세션별로 보관하므로 탭을 오가도 위치가 남는다.
+    @ViewBuilder
+    private var filesTab: some View {
+        if let cwd = currentSession?.cwd {
+            FileBrowserView(model: appState.fileBrowserModel(for: sessionId, cwd: cwd, client: client), embedded: true)
+        } else {
+            ContentUnavailableView("작업 디렉토리를 알 수 없습니다", systemImage: "folder", description: Text("세션 정보를 불러온 뒤 다시 시도하세요"))
         }
-        showsFiles = true
+    }
+
+    /// 변경된 파일이 있으면 "파일 3", 없으면 "파일".
+    private var filesLabel: String {
+        let count = model.changedFileCount
+        return count > 0 ? String(localized: "파일 \(count)") : String(localized: "파일")
     }
 
     /// 세션 제목, 없으면 프로젝트(cwd 마지막 컴포넌트) 이름.
@@ -226,6 +238,11 @@ private struct TimelineScreen: View {
             await store.refresh()
         }
     }
+}
+
+/// 세션 화면의 세그먼트(IOS.md 9.1).
+private enum SessionTab: Hashable {
+    case chat, files
 }
 
 /// 아이템 종류 → 카드/행.

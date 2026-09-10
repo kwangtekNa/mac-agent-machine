@@ -37,6 +37,10 @@ final class TimelineModel {
     private(set) var approvalSubmit: ApprovalSubmitState = .idle
     /// snapshot 처리 직후부터 첫 라이브 이벤트 전까지 true. 재생으로 들어온 승인 요청에는 햅틱을 울리지 않는다.
     private(set) var isReplaying = false
+    /// 이 세션의 `file_change` 아이템이 바꾼 경로 집합(IOS.md 9.1 "파일 N" 배지). upsert 때마다 더하고 전체를 다시 세지 않는다.
+    private(set) var changedFilePaths: Set<String> = []
+
+    var changedFileCount: Int { changedFilePaths.count }
 
     var socketState: SessionSocket.State { socket?.state ?? .idle }
 
@@ -189,6 +193,10 @@ final class TimelineModel {
 
     /// 같은 id 는 제자리 교체, 아니면 seq 순서를 지켜 삽입(보통은 끝에 append).
     private func upsert(_ item: TimelineItem) {
+        if case .fileChange(let change) = item.payload {
+            let paths = change.files.map(\.path)
+            if !paths.allSatisfy(changedFilePaths.contains) { changedFilePaths.formUnion(paths) }
+        }
         if let index = indexById[item.id] {
             items[index] = item
             return

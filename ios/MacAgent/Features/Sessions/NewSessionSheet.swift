@@ -1,5 +1,69 @@
 import SwiftUI
 
+/// 새 세션 시트의 디렉토리 선택 상태(IOS.md 9.2). 세 진입점(프로젝트 메뉴 · 찾아보기 · 직접 입력)이 하나의 `selectedPath` 를 갱신한다.
+struct NewSessionFormState: Equatable, Sendable {
+    /// 세션 cwd 로 보낼 경로. 비어 있으면 제출할 수 없다.
+    var selectedPath = ""
+    /// 직접 입력 필드의 원문(다듬기 전).
+    var customPath = ""
+    var showsCustomInput = false
+
+    /// 첫 표시: 미리 채워진 cwd 가 프로젝트면 선택, 아니면 직접 입력. cwd 가 없으면 첫 프로젝트, 프로젝트도 없으면 입력 필드를 연다.
+    static func initial(initialCwd: String?, projects: [Project]) -> NewSessionFormState {
+        var form = NewSessionFormState()
+        if let initialCwd {
+            if projects.contains(where: { $0.path == initialCwd }) {
+                form.chooseProject(initialCwd)
+            } else {
+                form.showsCustomInput = true
+                form.setCustomPath(initialCwd)
+            }
+        } else if let first = projects.first {
+            form.chooseProject(first.path)
+        } else {
+            form.showsCustomInput = true
+        }
+        return form
+    }
+
+    /// 프로젝트 메뉴에서 선택. 직접 입력은 닫힌다.
+    mutating func chooseProject(_ path: String) {
+        selectedPath = path
+        customPath = path
+        showsCustomInput = false
+    }
+
+    /// 찾아보기(`DirectoryPickerView`)에서 선택.
+    mutating func pick(_ path: String) {
+        chooseProject(path)
+    }
+
+    /// 직접 입력 열기/닫기. 열 때는 현재 선택 경로에서 시작한다. 닫아도 선택은 남는다.
+    mutating func toggleCustomInput() {
+        showsCustomInput.toggle()
+        if showsCustomInput { customPath = selectedPath }
+    }
+
+    mutating func setCustomPath(_ text: String) {
+        customPath = text
+        selectedPath = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 선택 경로가 프로젝트 목록에 있으면 그 경로(메뉴의 현재 값), 아니면 nil.
+    func selectedProjectPath(in projects: [Project]) -> String? {
+        projects.first { $0.path == selectedPath }?.path
+    }
+
+    /// 찾아보기 시작 경로: 선택된 프로젝트 경로 또는 홈.
+    func browseStartPath(in projects: [Project]) -> String {
+        selectedProjectPath(in: projects) ?? DirectoryPickerView.homePath
+    }
+
+    func canSubmit(agentAvailable: Bool, isSubmitting: Bool) -> Bool {
+        !isSubmitting && agentAvailable && !selectedPath.isEmpty
+    }
+}
+
 /// 새 세션 시트: 에이전트 · 디렉토리 · 모드 · 제목. `full-auto` 는 여기 없다(ADR-015, 타임라인의 모드 메뉴에서만).
 /// 성공하면 `onCreated` 로 세션을 넘기고 닫는다. push 는 시트가 닫힌 뒤 부모가 한다.
 struct NewSessionSheet: View {
@@ -11,19 +75,13 @@ struct NewSessionSheet: View {
     let onCreated: (Session) -> Void
 
     @State private var agent: AgentKind = .claude
-    @State private var directory: DirectoryChoice = .custom
-    @State private var customPath = ""
+    @State private var form = NewSessionFormState()
+    @State private var showsPicker = false
     @State private var mode: SessionMode = .ask
     @State private var title = ""
     @State private var isSubmitting = false
     @State private var errorMessage: String?
     @State private var didPrepare = false
-
-    /// 프로젝트 목록에서 고르거나 직접 입력한다. 파일 브라우저는 step 7.
-    enum DirectoryChoice: Hashable {
-        case project(String)
-        case custom
-    }
 
     /// 새 세션 시트에서 고를 수 있는 모드. `full-auto` 제외.
     static let selectableModes: [SessionMode] = [.ask, .autoEdit, .plan]
@@ -69,6 +127,13 @@ struct NewSessionSheet: View {
             }
             .interactiveDismissDisabled(isSubmitting)
         }
+        .sheet(isPresented: $showsPicker) {
+            if let client = appState.client {
+                DirectoryPickerView(client: client, initialPath: form.browseStartPath(in: store.projects)) { path in
+                    form.pick(path)
+                }
+            }
+        }
         .onAppear(perform: prepare)
     }
 
@@ -95,23 +160,44 @@ struct NewSessionSheet: View {
         }
     }
 
+    /// 디렉토리(IOS.md 9.2): 선택 경로 표시 행 + 세 진입점(프로젝트 메뉴 · 찾아보기 · 직접 입력).
     private var directorySection: some View {
         Section("디렉토리") {
-            Picker("프로젝트", selection: $directory) {
-                ForEach(store.projects) { project in
-                    Text(project.name).tag(DirectoryChoice.project(project.path))
+            LabeledContent("선택한 경로") {
+                if form.selectedPath.isEmpty {
+                    Text("선택 안 됨").foregroundStyle(.secondary)
+                } else {
+                    Text(form.selectedPath)
+                        .font(.caption.monospaced())
+                        .lineLimit(2)
+                        .truncationMode(.head)
+                        .multilineTextAlignment(.trailing)
                 }
-                Text("다른 경로").tag(DirectoryChoice.custom)
             }
+            .accessibilityIdentifier("newSession.selectedPath")
+            Picker("프로젝트에서 선택", selection: projectSelection) {
+                Text("선택").tag(String?.none)
+                ForEach(store.projects) { project in
+                    Text(project.name).tag(String?.some(project.path))
+                }
+            }
+            .pickerStyle(.menu)
+            .disabled(store.projects.isEmpty)
             .accessibilityIdentifier("newSession.directory")
-            if case .project(let path) = directory {
-                Text(path)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            } else {
-                TextField("~/work/my-app", text: $customPath)
+            Button {
+                showsPicker = true
+            } label: {
+                Label("찾아보기…", systemImage: "folder")
+            }
+            .accessibilityIdentifier("newSession.browse")
+            Button {
+                form.toggleCustomInput()
+            } label: {
+                Label(form.showsCustomInput ? "직접 입력 닫기" : "직접 입력", systemImage: "keyboard")
+            }
+            .accessibilityIdentifier("newSession.customToggle")
+            if form.showsCustomInput {
+                TextField("~/work/my-app", text: customPathBinding)
                     .accessibilityIdentifier("newSession.customPath")
                     .font(.body.monospaced())
                     .textInputAutocapitalization(.never)
@@ -142,6 +228,19 @@ struct NewSessionSheet: View {
 
     // MARK: - 상태
 
+    private var projectSelection: Binding<String?> {
+        Binding(
+            get: { form.selectedProjectPath(in: store.projects) },
+            set: { path in
+                if let path { form.chooseProject(path) }
+            }
+        )
+    }
+
+    private var customPathBinding: Binding<String> {
+        Binding(get: { form.customPath }, set: { form.setCustomPath($0) })
+    }
+
     private var me: MeResponse? {
         if case .connected(let me) = appState.connection { return me }
         return nil
@@ -155,36 +254,18 @@ struct NewSessionSheet: View {
         return info.loggedIn ? nil : String(localized: "로그인 필요")
     }
 
-    private var resolvedCwd: String {
-        switch directory {
-        case .project(let path): return path
-        case .custom: return customPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-    }
-
     private var canSubmit: Bool {
-        !isSubmitting && availability(of: agent) == nil && !resolvedCwd.isEmpty
+        form.canSubmit(agentAvailable: availability(of: agent) == nil, isSubmitting: isSubmitting)
     }
 
-    /// 첫 표시: 사용 가능한 에이전트, 미리 채워진 cwd(프로젝트면 선택, 아니면 직접 입력) 로 초기화한다.
+    /// 첫 표시: 사용 가능한 에이전트와 디렉토리 초기 상태.
     private func prepare() {
         guard !didPrepare else { return }
         didPrepare = true
         if let usable = [AgentKind.claude, .codex].first(where: { availability(of: $0) == nil }) {
             agent = usable
         }
-        if let initialCwd {
-            if store.projects.contains(where: { $0.path == initialCwd }) {
-                directory = .project(initialCwd)
-            } else {
-                directory = .custom
-                customPath = initialCwd
-            }
-        } else if let first = store.projects.first {
-            directory = .project(first.path)
-        } else {
-            directory = .custom
-        }
+        form = .initial(initialCwd: initialCwd, projects: store.projects)
     }
 
     private func submit() async {
@@ -195,7 +276,7 @@ struct NewSessionSheet: View {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             let session = try await store.create(
-                agent: agent, cwd: resolvedCwd, title: trimmedTitle.isEmpty ? nil : trimmedTitle, mode: mode
+                agent: agent, cwd: form.selectedPath, title: trimmedTitle.isEmpty ? nil : trimmedTitle, mode: mode
             )
             onCreated(session)
             dismiss()

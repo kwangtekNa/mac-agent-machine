@@ -32,15 +32,12 @@ final class ApprovalFlowUITests: XCTestCase {
             claude.tap()
         }
 
-        // 디렉토리: "다른 경로" 에 ~/.mam (agent-host 가 시작 시 만드는 디렉토리).
+        // 디렉토리: "직접 입력" 에 ~/.mam (agent-host 가 시작 시 만드는 디렉토리). 프로젝트가 없으면 입력 필드가 바로 열려 있다.
         let pathField = app.textFields["newSession.customPath"]
         if !pathField.waitForExistence(timeout: 2) {
-            let picker = app.descendants(matching: .any).matching(identifier: "newSession.directory").firstMatch
-            XCTAssertTrue(picker.waitForExistence(timeout: 5), "디렉토리 선택기가 없습니다")
-            picker.tap()
-            let other = app.buttons["다른 경로"].exists ? app.buttons["다른 경로"] : app.staticTexts["다른 경로"]
-            XCTAssertTrue(other.waitForExistence(timeout: 5), "'다른 경로' 항목이 없습니다")
-            other.tap()
+            let toggle = app.buttons["newSession.customToggle"]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 5), "'직접 입력' 버튼이 없습니다")
+            toggle.tap()
         }
         XCTAssertTrue(pathField.waitForExistence(timeout: 5))
         pathField.tap()
