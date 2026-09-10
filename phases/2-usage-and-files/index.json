@@ -149,11 +149,29 @@
     {
       "step": 5,
       "name": "ios-files-tab-mkdir",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         1,
         4
-      ]
+      ],
+      "started_at": "2026-09-10T14:41:22+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "aa275005-43d3-4911-b585-c2dcba2f3b28",
+          "cost_usd": 8.209973750000001,
+          "duration_s": 860.2,
+          "num_turns": 24,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 8.209974,
+      "duration_s": 860.2,
+      "retries": 0,
+      "session_id": "aa275005-43d3-4911-b585-c2dcba2f3b28",
+      "summary": "iOS 세션 화면에 \"대화 | 파일\" 세그먼트와 인라인 파일 브라우저, 새 세션 시트에 홈 루트 디렉토리 피커(새 폴더 포함)를 추가. TimelineView.swift: compact 에서만 Picker(.segmented, 좌우 16/상하 8, systemGroupedBackground) 라벨 \"대화\"/\"파일 N\"(changedFileCount>0), 파일 탭은 FileBrowserView(model: appState.fileBrowserModel(for:cwd:client:), embedded: true), 컴포저·승인 배너는 safeAreaInset 으로 두 탭 공통, 폴더 툴바 버튼과 showsFiles 시트 제거(iPad onToggleFiles 경로만 유지, 세그먼트 숨김). TimelineModel.swift: changedFilePaths Set 을 upsert 때만 갱신(전체 순회 없음) + changedFileCount. FileBrowserModel.swift: Mode(.files/.directories, directories 면 visibleEntries 가 dir 만), createDirectory(named:in:) (DirectoryNameValidation 통과 → client.makeDirectory(serverPath(parent)+\"/\"+name) → 부모 load 후 entry.path push, 실패 시 문구 반환), serverPath/currentPath, nonisolated static pathsUnderHome(home,target) + reveal(target)(홈 목록 로드 후 중간 경로 일괄 push), DirectoryNameValidation(빈 값/슬래시/제어 문자 문구, normalized). FileBrowserView.swift: embedded 옵션(닫기 버튼 없음, NavigationStack 유지), 내용을 DirectoryListContent<Row>(banner 문구, directories 모드 빈 문구 \"하위 폴더 없음\")로 추출, FileRow internal. 신규 Features/Files/DirectoryPickerView.swift: 루트 \"~\" 고정(홈 위 진입점 없음), initialPath 로 reveal, 제목=폴더 이름/부제=전체 경로, 툴바 숨김 토글·새 폴더(folder.badge.plus → alert TextField \"이름\" → 검증/서버 오류는 목록 위 인라인 배너), 하단 safeAreaInset 에 경로 캡션 + \"이 폴더 선택\"(.borderedProminent, 목록 로드 전 비활성) → onPick(currentPath)+dismiss. ErrorMessages.makeDirectoryMessage: 409→\"이미 있는 이름입니다\", 400/403→서버 메시지 그대로, 그 외 fileAccessMessage. NewSessionSheet.swift: NewSessionFormState(selectedPath/customPath/showsCustomInput, initial(initialCwd:projects:), chooseProject/pick/toggleCustomInput/setCustomPath, selectedProjectPath, browseStartPath=선택 프로젝트 또는 \"~\", canSubmit) + 디렉토리 섹션 = 선택 경로 행(\"선택 안 됨\") · Picker(.menu) \"프로젝트에서 선택\"(id newSession.directory) · \"찾아보기…\"(DirectoryPickerView 시트) · \"직접 입력\" 토글(id newSession.customToggle, TextField id newSession.customPath), 세션 시작은 selectedPath 비면 비활성, 400/403 문구 기존 유지. UI 테스트(ApprovalFlowUITests)는 \"다른 경로\" 대신 newSession.customToggle 을 누르도록 최소 수정. 테스트: TimelineModelTests +2(file_change upsert 중복 없음·completed 교체·스냅샷), FileBrowserModelTests +7(directories 필터, mkdir 성공 후 부모 재조회+push, \"~\" 루트의 서버 경로 사용, 409/400/403 문구, 잘못된 이름은 요청 안 함, pathsUnderHome, reveal), DirectoryNameValidationTests 4, NewSessionSheetLogicTests 4. 검증: bash scripts/test.sh OK(vitest 442 passed/2 skipped, iOS 203 passed/0 failed/2 skipped), grep AC 2건 통과. 미수행: 5절 수동 확인(dev-smoke 스크린샷·~/mam-picker-test 생성/삭제)은 step 예산 한도로 생략 — 파일 탭 안의 중첩 NavigationStack 외관과 피커 흐름은 빌드·단위 테스트로만 확인됨(step 7 verify 에서 실기기/시뮬레이터 확인 권장). Fake 어댑터는 file_change 를 내지 않아 \"파일 N\" 배지는 dev 서버에서 항상 \"파일\"임. packages/protocol, docs, phases 미수정.",
+      "completed_at": "2026-09-10T14:55:42+0900"
     },
     {
       "step": 6,
