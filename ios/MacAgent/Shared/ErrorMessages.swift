@@ -44,6 +44,24 @@ enum ErrorMessages {
         }
     }
 
+    /// `POST /sessions` 오류 → 문구. 403 은 홈 밖 경로(IOS.md 7절), 400 은 없는 경로, `agent_unavailable` 은 설정 안내.
+    static func sessionCreateMessage(for error: any Error, agent: AgentKind) -> String {
+        guard case .server(let code, _, let status) = error as? APIError else {
+            return message(for: error)
+        }
+        if code == .agentUnavailable {
+            return String(localized: "\(agent.displayName)를 지금 사용할 수 없습니다. 설정에서 설치와 로그인 상태를 확인하세요.")
+        }
+        switch status {
+        case 403:
+            return String(localized: "접근할 수 없는 경로입니다. 홈 디렉토리 안의 경로를 입력하세요.")
+        case 400, 404:
+            return String(localized: "디렉토리를 찾을 수 없습니다. 경로를 확인하세요.")
+        default:
+            return message(for: error)
+        }
+    }
+
     /// 로그인 시작이 501/`agent_unavailable` 이면 SSH 안내로 바꾼다.
     static func isLoginUnsupported(_ error: any Error) -> Bool {
         guard case .server(let code, _, let status) = error as? APIError else { return false }
