@@ -97,10 +97,28 @@
     {
       "step": 3,
       "name": "codex-usage-models",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         1
-      ]
+      ],
+      "started_at": "2026-09-10T14:20:37+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "b020aa0a-df8a-42a0-b6c4-26261aab9327",
+          "cost_usd": 7.790361999999999,
+          "duration_s": 711.5,
+          "num_turns": 43,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 7.790362,
+      "duration_s": 711.5,
+      "retries": 0,
+      "session_id": "b020aa0a-df8a-42a0-b6c4-26261aab9327",
+      "summary": "Codex 어댑터에 사용량·한도·모델 기능 추가. mapping.ts: thread/tokenUsage/updated → usage{delta(total 증가분, 음수 0, cachedInputTokens→cacheReadTokens, cacheWriteInputTokens→cacheWriteTokens), context{last.totalTokens, modelContextWindow}(창 null이면 키 생략), costUsd 없음}; resumed 옵션이면 첫 관측은 기준선만(델타 없음, 턴 요약 기준도 동일); turn/completed 뒤에 마지막 context만 담은 usage 1건 추가(매니저가 turns 반영 상태를 발행하도록). 순수 함수 tokenDelta/contextSnapshot/mapRateLimitSnapshot(primary/secondary→{id, usedPercent, windowMinutes, resetsAt epoch초→Date, rejected = rateLimitReachedType 있음 또는 ≥100}, plan=planType)/toAgentModels(hidden 제외, efforts=supportedReasoningEfforts[].reasoningEffort, defaultEffort, isDefault). process.ts: initializeAppServer(peer)(initialize+initialized 공용화, 세션·codex-login.ts가 사용), withEphemeralAppServer(opts, fn)(핸드셰이크 후 fn, finally에서 peer.close+kill). adapter.ts: dataDir 옵션(기본 ~/.mam), 세션이 thread/start·resume 응답의 model(+start.effort 우선, 없으면 응답 reasoningEffort)을 usage{model,effort}로 발행, setModel/setEffort는 저장+즉시 usage 이벤트(closed면 409)이고 이후 모든 turn/start에 model/effort 전달, StartOptions.model→thread/start.model, account/rateLimits/updated 알림은 어댑터가 RateLimitStore('codex')에 병합 저장(있는 창·plan만 덮어씀, live:true). usage(): 저장소 60초 캐시 → 라이브 세션 피어 또는 임시 프로세스로 account/rateLimits/read + account/read(chatgpt planType, 실패는 plan null) → live:true 저장, 실패 시 마지막 저장값(live:false) 또는 limits [], 동시 호출 합침. listModels(): models/codex.json 24h 캐시 → model/list{includeHidden:false} nextCursor 전부 → 실패 시 오래된 캐시, 없으면 throw. server.ts: CodexAdapter에 dataDir 전달. 테스트: test/helpers/fake-codex-app-server.ts(adapter.test.ts의 FakeAppServer 공용화 + on(method) 핸들러, spawned/killed 카운트, makeFakeSpawn), test/agents/codex/usage.test.ts 14개(델타·컨텍스트, resume 기준선, model/effort 이벤트와 turn/start 반영, rateLimits/updated 병합, 라벨 5시간/주간/2시간/2일·rejected·epoch, 페이지네이션·hidden, usage 60초 캐시·실패 폴백·임시 프로세스 spawn/kill 횟수, listModels 캐시·라이브 피어·폴백), integration.test.ts에 usage/listModels/usage 이벤트 검증 추가. 검증: npm ci OK, typecheck OK, npm test 442 passed(2 skipped), MAM_IT_CODEX=1 통합 32 passed, MAM_TEST_SKIP_IOS=1 bash scripts/test.sh OK(ios/ 미수정, step 0~2와 동일 방식). 통합 관측(codex-cli 0.153.4, 값 형태만): usage plan='prolite', live:true, limits 1건 {id:'primary', windowMinutes:10080(→라벨 \"주간\"), usedPercent:37, resetsAt epoch초 정상 변환, rejected:false} — secondary 창은 이 계정에서 null; models 6개, 기본 'gpt-6-astra' efforts [low,medium,high,xhigh,max,ultra] defaultEffort medium; pong 턴 이벤트 순서 native_id→status→usage{model:'gpt-6-astra',effort:'max'}→…→turn.completed→usage(context)→status idle, delta input 18173/output 5/cacheRead 12160, context 18178/258400. packages/protocol, ios/, docs, phases 미수정.",
+      "completed_at": "2026-09-10T14:32:29+0900"
     },
     {
       "step": 4,
