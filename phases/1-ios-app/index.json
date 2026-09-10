@@ -198,7 +198,25 @@
     {
       "step": 8,
       "name": "ipad-polish-device",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-10T10:49:00+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "848954c4-6ad1-4d70-ad9c-64633d3697a3",
+          "cost_usd": 5.986953750000001,
+          "duration_s": 993.2,
+          "num_turns": 21,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 5.986954,
+      "duration_s": 993.2,
+      "retries": 0,
+      "session_id": "848954c4-6ad1-4d70-ad9c-64633d3697a3",
+      "summary": "Step 8 ipad-polish-device 완료. 산출물: ios/MacAgent/App/SplitRootView.swift 신규(NavigationSplitView(columnVisibility:) 3열: 사이드바 SessionsHomeView(selection: $appState.selectedSessionId), 콘텐츠 NavigationStack{TimelineView(sessionId:onToggleFiles:)} 또는 ContentUnavailableView(\"세션을 선택하세요\"), 디테일 FileBrowserView(showsCloseButton: false)·파일 버튼이 showsFiles 토글), RootView의 ConnectedRootView가 horizontalSizeClass regular면 SplitRootView·아니면 기존 SessionsHomeView(SessionsStore는 크기 변화에도 유지). AppState 확장: selectedSessionId, timelineModels/fileBrowserModels 세션별 보관(LRU maxTimelineModels=5, 퇴출 시 stop, disconnect·서버 변경 시 정리, @ObservationIgnored), timelineModel(for:client:)/fileBrowserModel(for:cwd:client:), MAM_UI_TEST_SERVER 환경변수 override(uiTestServerURL, 저장하지 않고 연결). TimelineScreen은 @State 대신 AppState 모델 사용. SessionsHomeView(selection:) init·selectHandler·open(_:)(compact push/사이드바 선택), ProjectSessionsView onSelect, SessionRowView onSelect/isSelected(Button+listRowBackground accent 14%·isSelected trait). 접근성: ItemCard accessibilityElement(.combine)+ItemAccessibility.summary(\"도구 실행 npm test, 완료\"; 도구·파일변경·계획·생각·오류만, 메시지·승인 카드는 합쳐진 본문 유지), ApprovalOptionButton hint(ApprovalBannerState.accessibilityHint: \"이 명령 실행을 허용합니다\")+identifier approval.option.<id>, 배너 버튼 행 ViewThatFits(가로→세로 폴백), 식별자 composer.input/send/stop·newSession.directory/customPath·timeline.files/info. 아이콘: ios/scripts/make-icon.swift(CoreGraphics, #0A84FF 배경+흰 둥근 막대+점, noneSkipLast 불투명 1024 PNG)→AppIcon.appiconset/AppIcon.png + Contents.json filename 연결. UI 테스트: project.yml에 MacAgentUITests(bundle.ui-testing, GENERATE_INFOPLIST_FILE) 타깃과 스킴 test 포함, 스킴 environmentVariables MAM_UI_TEST_SERVER=\"$(MAM_UI_TEST_SERVER)\"로 셸 변수 전달; ios/MacAgentUITests/ApprovalFlowUITests.swift(서버 없으면 XCTSkip; 연결→\"새 세션\"→Claude→디렉토리 피커 \"다른 경로\"→~/.mam→세션 시작→composer.input \"hello\"→composer.send→label==\"허용\" 버튼 30초 대기→탭→\"허용됨\" CONTAINS→\"초 ·\" CONTAINS; MAM_UI_TEST_CONTENT_SIZE 런치 인자·MAM_UI_TEST_SHOTS 옵션). 단위 테스트 ios/MacAgentTests/App/AppStateModelsTests.swift 8개(같은 인스턴스·LRU 퇴출·파일 모델 cwd·disconnect 정리·override 미저장·빈 override 무시·승인 힌트·상태 라벨). 문서: docs/RUNBOOK.md 3절에 \"iPhone에 설치\" 절(Local.xcconfig DEVELOPMENT_TEAM→기기 연결→개발자 모드→실행→VPN 및 기기 관리 신뢰→무료 계정 7일 재설치→Tailscale 앱→https://<MagicDNS>, TestFlight는 Phase 3), README 테스트 절에 iOS(xcodegen·시뮬레이터·단위 테스트·UI 테스트 명령). 문구: TimelineView 미연결 ContentUnavailableView에 다음 행동 description 추가. AC: iPhone 17 Pro xcodebuild test 전체 통과(단위 8개 추가, UI 테스트 서버 없이 skip), iPad 빌드는 'iPad Pro 13-inch (M4)' 이름이 2개라 xcodebuild가 거부해 id 97FF24C8-8F01-4DD1-B73B-3A1109A3EAD5 로 빌드 성공, dev-smoke --keep 서버로 UI 테스트 passed(31초)·서버 종료 후 agent-host 잔류 없음, AppIcon.png 존재, bash scripts/test.sh exit 0(TS 309 passed). 점검: 다크모드+UICTContentSizeCategoryAccessibilityXL 런치 인자로 UI 테스트 재실행 passed(컴포저·배너 버튼 동작 확인, 스크린샷 육안 점검은 시뮬레이터 앱이 호스트 경로에 파일을 못 써 생략), reduce motion은 step 6 코드 그대로(identity 전환), SWIFT_EMIT_LOC_STRINGS 빌드로 stringsdata 91개 생성(Localizable.xcstrings는 Xcode 빌드에서만 갱신되어 비어 있음). 서버 코드·fixture·phases/ 미수정, 커밋 안 함.",
+      "completed_at": "2026-09-10T11:05:33+0900"
     }
   ],
   "created_at": "2026-09-10T09:04:40+0900"
