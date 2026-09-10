@@ -45,10 +45,28 @@
     {
       "step": 1,
       "name": "server-usage-core",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-10T13:50:04+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "e5fad8cd-3b68-41c3-a4c2-7c2e23f24dbb",
+          "cost_usd": 9.609576999999998,
+          "duration_s": 1093.3,
+          "num_turns": 28,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 9.609577,
+      "duration_s": 1093.3,
+      "retries": 0,
+      "session_id": "e5fad8cd-3b68-41c3-a4c2-7c2e23f24dbb",
+      "summary": "서버 코어 확장 완료. agents/types.ts에 usage 이벤트·TokenDelta·ContextSnapshot·RateLimitObservation·AgentUsageSnapshot·AgentModel·setModel/setEffort·listModels/usage·StartOptions.effort 추가. SessionManager: 델타 누적, context 교체(percent 클램프), cost null 유지, turn.completed마다 turns+1(usage 없으면 0 객체 생성, 발행은 usage 이벤트만), model/effort 반영, sessions/<id>.json 영속·복구, session.usage 발행(첫 관측 즉시 + 300ms 트레일링 디바운스, close/shutdown 시 flush), patch model/effort(listModels 검증 400, 라이브면 setModel/setEffort, 아니면 다음 start()의 StartOptions.model/effort, 새 모델이 effort 미지원이면 effort null, 목록 실패 시 경고 후 검증 생략, closed면 409). 신규: src/usage/rate-limit-store.ts(원자적 save/load, Date 복원, maxAgeMs 캐시), src/fs/mkdir.ts makeDirectory(조상·결과 모두 resolveInsideHome, 부모 생성, 409/403/400), routes/usage.ts(limitStatus/limitLabel/toAgentUsage, 실패 어댑터는 limits []), routes/models.ts(5분 캐시, 어댑터 없으면 503), routes/fs.ts POST /fs/mkdir 201. Fake: 턴 끝 usage(1200/300/800/100, $0.012, context 4200+턴수*900/200000, model/effort), FAKE_MODELS(fake-1 기본 low/medium/high, fake-mini efforts []), usage() five_hour 42%/seven_day 81%, models/efforts 이력. Claude/Codex 어댑터는 컴파일 스텁만(listModels→[], usage→빈 스냅샷, setModel/setEffort→pendingModel/pendingEffort 저장) — step 2·3이 채운다. 주의: 매니저가 turn.completed 처리 중 idle을 먼저 내므로 Fake는 usage를 turn.completed 뒤에 보내며 이벤트 순서는 turn.completed → session.status(idle) → session.usage. 테스트: test/sessions/manager-usage.test.ts(10), test/fs/mkdir.test.ts(5), test/usage/rate-limit-store.test.ts(3), rest.test.ts +4, ws.test.ts +1, 기존 manager.test.ts 시퀀스에 session.usage 추가(lastSeq 20). AC: typecheck 통과, vitest 414 passed(2 skipped), dev-smoke OK(dev-smoke.mjs 수정 없음), packages/protocol·docs 수정 없음.",
+      "completed_at": "2026-09-10T14:08:17+0900"
     },
     {
       "step": 2,
