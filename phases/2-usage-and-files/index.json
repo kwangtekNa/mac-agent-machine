@@ -123,10 +123,28 @@
     {
       "step": 4,
       "name": "ios-models-client",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-10T14:32:29+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "bdf0ab28-bba5-4f66-b8ee-92da237e6652",
+          "cost_usd": 6.8387649999999995,
+          "duration_s": 532.2,
+          "num_turns": 48,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 6.838765,
+      "duration_s": 532.2,
+      "retries": 0,
+      "session_id": "bdf0ab28-bba5-4f66-b8ee-92da237e6652",
+      "summary": "iOS 모델·클라이언트를 2026-09-10 계약에 맞춤(UI 없음). Session.swift: Session.effort/usage(decodeIfPresent, 멤버와이즈 init 끝에 기본값 파라미터로 추가해 기존 테스트 헬퍼 호환), SessionUsage{inputTokens,outputTokens,cacheReadTokens,cacheWriteTokens,costUsd?,turns,context?,updatedAt}·ContextUsage{tokens,window,percent}, PatchSessionRequest.model/effort(nil은 키 생략), Usage.cacheWriteTokens?. ServerEvent.swift: SessionUsageEvent + 엄격 판별자 .sessionUsage(\"session.usage\"), type/seq/sessionId/ts 스위치 반영. REST.swift: FsMkdirRequest/FsMkdirResponse, UsageLimit(Identifiable), AgentUsage, UsageResponse, ModelOption(Identifiable), ModelsResponse. Enums.swift: UsageLimitStatus(lenient ok/warning/exceeded/unknown). APIClient.swift: makeDirectory(path:) POST /fs/mkdir→entry, usage() GET /usage, models(agent:) GET /models?agent=→[ModelOption]; patchSession은 기존대로(합성 인코더가 nil 키 생략), 409는 기존 serverError가 .conflict로 매핑. TimelineModel.apply: 완전 스위치 때문에 .sessionUsage 케이스 추가(session?.usage만 갱신). 테스트: ProtocolFixturesTests 매핑표 46개(rest 18/ws 23/client 5, TS ADDED_2026_09_10 집합 단언 포함)+usage/models/mkdir/session.usage/percent 21/sessions[1].usage nil/UsageLimitStatus 미지값→.unknown 단언, LenientEnumTests에 effort/usage null·키누락 및 costUsd/context null, cacheWriteTokens 케이스, APIClientTests에 mkdir 본문·201 디코드, 409→.server(.conflict), usage()·models(agent:) 쿼리·디코드, patchSession model/effort 인코딩(빈 필드 생략, 400 매핑), TimelineModelTests에 session.usage 적용 1건. 검증: AC 커맨드(xcodegen+xcodebuild test) 186 passed/2 skipped(통합·UI 테스트는 dev 서버 없어 skip)/0 failed, bash scripts/test.sh OK(typecheck, vitest 442 passed, iOS 포함 — 이제 MAM_TEST_SKIP_IOS 불필요). packages/protocol, docs, phases 미수정(phases index.json 변경은 executor의 기존 변경).",
+      "completed_at": "2026-09-10T14:41:21+0900"
     },
     {
       "step": 5,
