@@ -26,3 +26,6 @@ ios/Packages/
 !.env.example
 .DS_Store
 *.log
+
+# ios signing (local only)
+ios/Local.xcconfig

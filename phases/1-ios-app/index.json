@@ -1,0 +1,51 @@
+{
+  "project": "mac-agent-machine",
+  "phase": "1-ios-app",
+  "steps": [
+    {
+      "step": 0,
+      "name": "xcodegen-project",
+      "status": "pending"
+    },
+    {
+      "step": 1,
+      "name": "api-models",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "api-client",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "connect-settings-ui",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "sessions-ui",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "timeline-ui",
+      "status": "pending"
+    },
+    {
+      "step": 6,
+      "name": "approvals-ui",
+      "status": "pending"
+    },
+    {
+      "step": 7,
+      "name": "file-browser-ui",
+      "status": "pending"
+    },
+    {
+      "step": 8,
+      "name": "ipad-polish-device",
+      "status": "pending"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "test_command": "bash scripts/test.sh",
   "test_timeout": 900,
-  "step_budget_usd": 5.0,
+  "step_budget_usd": 8.0,
   "fallback_model": "sonnet"
 }

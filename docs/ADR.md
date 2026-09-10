@@ -33,6 +33,7 @@
 - 결정: TypeScript, Node 24(설치됨), ESM, npm workspaces(`packages/*`, `apps/*`). agent-host HTTP는 Fastify 5 + `@fastify/websocket`. 스키마는 zod 4(Agent SDK peer dep과 일치). 테스트 vitest, 개발 실행 tsx, 빌드 tsc.
 - 근거: Codex가 app-server 프로토콜의 TS 바인딩을 생성해 주고(`codex app-server generate-ts`), Claude Agent SDK가 TS다. 웹 대시보드와 `@mam/protocol`을 공유한다.
 - 결과: Python 하네스 tdd-guard 규칙은 `.py`에만 적용되므로 이 프로젝트와 무관하다.
+- 보완(Phase 0 step 6 인터뷰): Codex가 생성한 TS 바인딩이 확장자 없는 상대 import를 쓰기 때문에 `tsconfig.base.json`을 `module: ESNext`, `moduleResolution: Bundler`로 바꿨다. 직접 작성하는 코드는 계속 상대 import에 `.js` 확장자를 붙인다(런타임은 tsc 출력 + Node ESM).
 
 ## ADR-006 Claude는 Agent SDK로 구동
 
@@ -75,8 +76,8 @@
 
 ## ADR-012 iOS 앱 스택
 
-- 결정: Swift 6, SwiftUI, 최소 iOS 17(`@Observable`, `NavigationSplitView`). 프로젝트는 XcodeGen `ios/project.yml`로 생성하고 `*.xcodeproj`는 커밋하지 않는다. 네트워킹은 URLSession(`URLSessionWebSocketTask`). 마크다운은 `AttributedString(markdown:)` 기본, 코드 하이라이트 라이브러리는 Phase 1 파일 뷰어 step에서 결정한다. 서명은 `ios/Local.xcconfig`(gitignore)의 `DEVELOPMENT_TEAM`으로 개인 기기 설치.
-- 결과: 시뮬레이터(iPhone 17 Pro, iOS 26.2)에서 `xcodebuild test`로 AC를 검증한다.
+- 결정(2026-09-10 인터뷰로 확정): 앱 이름 `MacAgent`, 번들 ID `dev.mam.MacAgent`. Swift 6, SwiftUI, 최소 iOS 17(`@Observable`, `NavigationSplitView`). 프로젝트는 XcodeGen `ios/project.yml`로 생성하고 `*.xcodeproj`는 커밋하지 않는다. 네트워킹은 URLSession(`URLSessionWebSocketTask`)만 쓰고 서드파티 네트워킹·상태관리 패키지는 없다. UI 패키지는 둘만 허용한다: `swift-markdown-ui`(2.4.x, 에이전트 메시지의 코드블록·표·목록 렌더링)와 `Highlightr`(2.3.x, 파일 뷰어 하이라이트). 시각 방향은 애플 네이티브(시스템 폰트, SF Symbols, 시스템 색, 표준 컨트롤)이며 이벤트 종류를 아이콘과 색으로 구분하는 데만 의견을 싣는다. 세부는 `docs/IOS.md`. 서명은 `ios/Local.xcconfig`(gitignore)의 `DEVELOPMENT_TEAM`으로 개인 기기 설치.
+- 결과: 시뮬레이터(iPhone 17 Pro, iOS 26.2)에서 `xcodebuild test`로 AC를 검증한다. 개발 백엔드는 `bash scripts/dev-smoke.sh --keep`이 띄우는 Fake 어댑터 서버다.
 
 ## ADR-013 웹 대시보드는 Vite + React, gateway가 서빙
 
@@ -96,6 +97,4 @@
 |---|---|
 | `claude setup-token`을 PTY에서 구동해 URL 출력·코드 입력을 받을 수 있는지 | Phase 0 `auth-login-flow` step |
 | Agent SDK `interrupt()`의 실제 중단 동작 | Phase 0 `claude-adapter` step 통합 테스트 |
-| iOS 코드 하이라이트 라이브러리 | Phase 1 `file-browser-ui` step |
-| 프로젝트/앱 표시 이름(현재 `MacAgent`, 번들 ID `dev.mam.MacAgent`) | Phase 1 `xcodegen-project` step |
 | 유휴 종료 시간 기본값(현재 30분) | 운영 후 조정 |

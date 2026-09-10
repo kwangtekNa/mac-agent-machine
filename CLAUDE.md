@@ -8,6 +8,8 @@ Mac 한 대를 여러 사용자의 에이전트 코딩 서버로 만드는 프�
 - `docs/ARCHITECTURE.md` 프로세스 구조, 저장소 구조, 런타임 경로, 보안 모델
 - `docs/PROTOCOL.md` REST/WS 계약과 TimelineItem 모델. iOS와 서버가 공유하는 유일한 계약
 - `docs/ADR.md` 기술 결정과 근거
+- `docs/IOS.md` iOS 앱 구조, 내비게이션, 디자인 시스템, 상태 흐름. `ios/` 아래 작업의 기준
+- `docs/RUNBOOK.md` 설치·사용자 추가·운영
 
 ## 기술 스택
 
@@ -16,7 +18,7 @@ Mac 한 대를 여러 사용자의 에이전트 코딩 서버로 만드는 프�
 | 서버 | TypeScript, Node 24, ESM, npm workspaces, Fastify 5, `ws`(`@fastify/websocket`), zod 4, vitest |
 | Claude | `@anthropic-ai/claude-agent-sdk` (스트리밍 입력 모드, `canUseTool`) |
 | Codex | `codex app-server` 자식 프로세스, 줄 단위 JSON-RPC over stdio |
-| iOS | Swift 6, SwiftUI, iOS 17+, XcodeGen(`ios/project.yml`), 서드파티 네트워킹 라이브러리 없음 |
+| iOS | Swift 6, SwiftUI, iOS 17+, XcodeGen(`ios/project.yml`), URLSession만 사용. SwiftPM은 `swift-markdown-ui`와 `Highlightr` 둘만 허용. 서명은 `ios/Local.xcconfig`(gitignore) |
 | 웹 (Phase 2) | Vite, React, TypeScript, `@mam/protocol` 재사용 |
 | 네트워크 | Tailscale(whois 신원, `tailscale cert` TLS), sshd 공개키 전용 |
 | 데몬 | launchd LaunchDaemon `dev.mam.gateway`, 사용자 프로세스는 gateway가 `sudo -u`로 생성 |
@@ -29,6 +31,7 @@ npm run build --workspaces --if-present  # TS 빌드
 npm test --workspaces --if-present       # TS 테스트
 bash scripts/test.sh                     # 전체 게이트 (TS + iOS). MAM_TEST_SKIP_IOS=1 로 iOS 생략
 npm run dev -w @mam/server -- gateway --dev   # 개발 모드 gateway (http://127.0.0.1:7777)
+bash scripts/dev-smoke.sh --keep         # iOS/웹 개발용 Fake 어댑터 백엔드 (http://127.0.0.1:7777), Ctrl-C 로 종료
 cd ios && xcodegen generate && xcodebuild test -scheme MacAgent -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
