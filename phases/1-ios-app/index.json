@@ -5,7 +5,25 @@
     {
       "step": 0,
       "name": "xcodegen-project",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-10T09:04:40+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "442bb791-5b77-4667-acc4-8636e7e27ecf",
+          "cost_usd": 3.7663420000000003,
+          "duration_s": 619.4,
+          "num_turns": 28,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 3.766342,
+      "duration_s": 619.4,
+      "retries": 0,
+      "session_id": "442bb791-5b77-4667-acc4-8636e7e27ecf",
+      "summary": "xcodegen 2.46.0(brew) 설치. ios/project.yml(MacAgent 앱 dev.mam.MacAgent + MacAgentTests, MarkdownUI 2.4.1·Highlightr 2.3.0만, fixtures 폴더 참조), Local.xcconfig.example(커밋)/Local.xcconfig(gitignore, Z2XN5A7534 = 인증서 OU 확인), App/MacAgentApp.swift·RootView.swift, 빈 Assets.xcassets(AppIcon 1024 슬롯·AccentColor)·Localizable.xcstrings, MacAgentTests/SmokeTests.swift(fixtures rest/me.json 읽기 + 두 패키지 링크, 3개 통과) 생성. scripts/test.sh iOS 블록에 Local.xcconfig 자동 복사와 `xcrun simctl bootstatus -b` 부팅 대기 추가(콜드 부팅 직후 \"preflight checks Busy\" 경합으로 1회 실패 관찰 후 조치), README에 ios/ 행·docs/IOS.md 추가. 스펙 외 필수 결정: 테스트 타깃 GENERATE_INFOPLIST_FILE=YES(없으면 Xcode 26.2 서명 실패), 생성물 ios/MacAgent/Info.plist를 .gitignore에 추가. AC 전부 통과, 전체 게이트(TS 309 + iOS 3) 통과, 팀 ID 빈 xcconfig로도 빌드 통과. 커밋 안 함, phases/ 미수정.",
+      "completed_at": "2026-09-10T09:14:59+0900"
     },
     {
       "step": 1,
@@ -47,5 +65,6 @@
       "name": "ipad-polish-device",
       "status": "pending"
     }
-  ]
+  ],
+  "created_at": "2026-09-10T09:04:40+0900"
 }
