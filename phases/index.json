@@ -7,7 +7,8 @@
     },
     {
       "dir": "1-ios-app",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-09-10T11:05:33+0900"
     }
   ]
 }
