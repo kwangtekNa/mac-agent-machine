@@ -71,6 +71,7 @@ describe("SessionManager", () => {
     await manager.respondApproval(session.id, approval!.approvalId, "allow_session");
     await c.waitFor(isStatus("idle"));
     await c.waitFor(isType("turn.completed"));
+    await c.waitFor(isType("session.usage"));
 
     expect(c.events.map((e) => e.type)).toEqual([
       "session.status", // idle (create)
@@ -92,6 +93,7 @@ describe("SessionManager", () => {
       "item.started", // turn_summary
       "turn.completed",
       "session.status", // idle
+      "session.usage", // Fake 가 턴 끝에 내는 usage → 누적 후 발행
     ]);
     expect(contiguous(c.events, 1)).toBe(true);
     expect(c.events.every((e) => e.sessionId === session.id)).toBe(true);
@@ -114,7 +116,7 @@ describe("SessionManager", () => {
     expect(apr.kind === "approval" && apr.payload.resolution?.optionId).toBe("allow_session");
     expect(detail.session.preview).toBe("안녕하세요. 요청하신 명령을 실행하겠습니다.");
     expect(detail.session.pendingApprovals).toBe(0);
-    expect(detail.session.lastSeq).toBe(19);
+    expect(detail.session.lastSeq).toBe(20);
     await manager.shutdown();
   });
 

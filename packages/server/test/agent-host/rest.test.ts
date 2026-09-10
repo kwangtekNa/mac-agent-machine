@@ -1,7 +1,19 @@
+import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
-import { MeResponseSchema, ProjectsResponseSchema, type Session } from "@mam/protocol";
+import {
+  FsMkdirResponseSchema,
+  MeResponseSchema,
+  ModelsResponseSchema,
+  ProjectsResponseSchema,
+  SessionDetailResponseSchema,
+  SessionsResponseSchema,
+  UsageResponseSchema,
+  type Session,
+} from "@mam/protocol";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/agent-host/app.js";
+import { limitStatus, toAgentUsage } from "../../src/agent-host/routes/usage.js";
+import type { AgentAdapter } from "../../src/agents/types.js";
 import { H, USER, makeFixture, until, type Fixture } from "./helpers.js";
 
 let fx: Fixture;
@@ -186,5 +198,91 @@ describe("auth stubs and response validation", () => {
       await bad.close();
       await fx2.cleanup();
     }
+  });
+});
+
+describe("usage, models, mkdir and patch model/effort (2026-09-10)", () => {
+  it("POST /fs/mkdir creates a directory (201), then 409/403/400", async () => {
+    const res = await post("/api/v1/fs/mkdir", { path: "~/work/newdir" });
+    expect(res.statusCode).toBe(201);
+    const body = FsMkdirResponseSchema.parse(res.json());
+    expect(body.entry).toMatchObject({ name: "newdir", path: join(fx.workspaceRoot, "newdir"), type: "dir", gitStatus: null });
+    expect((await post("/api/v1/fs/mkdir", { path: "~/work/newdir" })).json().error.code).toBe("conflict");
+    expect((await post("/api/v1/fs/mkdir", { path: "/etc/mam-x" })).statusCode).toBe(403);
+    expect((await post("/api/v1/fs/mkdir", { path: "~/work/a//b" })).statusCode).toBe(400);
+    expect((await post("/api/v1/fs/mkdir", {})).statusCode).toBe(400);
+  });
+
+  it("GET /usage reports fake limits with computed status and labels; a failing adapter yields limits []", async () => {
+    const res = await get("/api/v1/usage");
+    expect(res.statusCode).toBe(200);
+    const body = UsageResponseSchema.parse(res.json());
+    expect(body.agents).toHaveLength(1);
+    expect(body.agents[0]).toMatchObject({ kind: "claude", plan: "fake", live: true });
+    expect(body.agents[0]!.observedAt).not.toBeNull();
+    expect(body.agents[0]!.limits).toMatchObject([
+      { id: "five_hour", label: "5시간", usedPercent: 42, windowMinutes: 300, status: "ok" },
+      { id: "seven_day", label: "주간", usedPercent: 81, windowMinutes: 10080, status: "warning" },
+    ]);
+    expect(body.agents[0]!.limits.every((l) => l.resetsAt !== null)).toBe(true);
+
+    expect(limitStatus(79, false)).toBe("ok");
+    expect(limitStatus(80, false)).toBe("warning");
+    expect(limitStatus(100, false)).toBe("exceeded");
+    expect(limitStatus(5, true)).toBe("exceeded");
+    expect(toAgentUsage("codex", { plan: null, live: true, observedAt: null, limits: [{ id: "primary", usedPercent: 12.6, windowMinutes: 60, resetsAt: null }] })).toEqual({
+      kind: "codex", plan: null, live: true, observedAt: null,
+      limits: [{ id: "primary", label: "1시간", usedPercent: 13, windowMinutes: 60, resetsAt: null, status: "ok" }],
+    });
+
+    const failing: AgentAdapter = {
+      kind: "codex",
+      probe: () => fx.adapter.probe(),
+      start: (o) => fx.adapter.start(o),
+      listModels: () => fx.adapter.listModels(),
+      usage: () => Promise.reject(new Error("boom")),
+    };
+    const app2 = buildApp({ user: USER, email: null, home: fx.home, workspaceRoot: fx.workspaceRoot, manager: fx.manager, adapters: { claude: fx.adapter, codex: failing }, serverVersion: "x" });
+    try {
+      const res2 = await app2.inject({ method: "GET", url: "/api/v1/usage", headers: H });
+      const body2 = UsageResponseSchema.parse(res2.json());
+      expect(body2.agents.map((a) => a.kind)).toEqual(["claude", "codex"]);
+      expect(body2.agents[1]).toEqual({ kind: "codex", plan: null, live: false, observedAt: null, limits: [] });
+    } finally {
+      await app2.close();
+    }
+  });
+
+  it("GET /models validates the query and lists adapter models", async () => {
+    const res = await get("/api/v1/models?agent=claude");
+    expect(res.statusCode).toBe(200);
+    const { models } = ModelsResponseSchema.parse(res.json());
+    expect(models.map((m) => m.id)).toEqual(["fake-1", "fake-mini"]);
+    expect(models[0]).toMatchObject({ isDefault: true, efforts: ["low", "medium", "high"] });
+    expect(models[1]).toMatchObject({ isDefault: false, efforts: [], defaultEffort: null });
+    expect((await get("/api/v1/models?agent=codex")).statusCode).toBe(503);
+    expect((await get("/api/v1/models")).statusCode).toBe(400);
+    expect((await get("/api/v1/models?agent=gpt")).statusCode).toBe(400);
+  });
+
+  it("PATCH model/effort and session responses carry usage/effort that pass the schema", async () => {
+    const { id } = await createSession();
+    const patch = (payload: unknown) => app.inject({ method: "PATCH", url: `/api/v1/sessions/${id}`, headers: H, payload });
+    expect((await patch({ effort: "high" })).json()).toMatchObject({ model: null, effort: "high" });
+    expect((await patch({ model: "fake-mini" })).json()).toMatchObject({ model: "fake-mini", effort: null });
+    expect((await patch({ effort: "low" })).statusCode).toBe(400);
+    expect((await patch({ model: "nope" })).statusCode).toBe(400);
+    expect((await patch({ model: "fake-1", effort: "medium" })).json()).toMatchObject({ model: "fake-1", effort: "medium" });
+
+    await fx.manager.startTurn(id, { text: "run" });
+    await until(() => fx.manager.pendingApprovals(id).length > 0);
+    await fx.manager.respondApproval(id, fx.manager.pendingApprovals(id)[0]!.approvalId, "allow");
+    await until(() => fx.manager.get(id)!.usage?.inputTokens === 1200 && fx.manager.get(id)!.status === "idle");
+
+    const list = SessionsResponseSchema.parse((await get("/api/v1/sessions")).json());
+    expect(list.sessions[0]!.usage).toMatchObject({ turns: 1, inputTokens: 1200, context: { percent: 3 } });
+    expect(list.sessions[0]).toMatchObject({ model: "fake-1", effort: "medium" });
+    const detail = SessionDetailResponseSchema.parse((await get(`/api/v1/sessions/${id}`)).json());
+    expect(detail.session.usage!.costUsd).toBeCloseTo(0.012, 6);
   });
 });

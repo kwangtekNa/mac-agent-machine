@@ -1,7 +1,7 @@
 import type { AgentKind } from "@mam/protocol";
-import type { AgentAdapter, AgentProbe, StartOptions } from "../types.js";
+import type { AgentAdapter, AgentModel, AgentProbe, AgentUsageSnapshot, StartOptions } from "../types.js";
 import { defaultScript, type FakeScript } from "./script.js";
-import { FakeSession } from "./session.js";
+import { FAKE_MODELS, FakeSession } from "./session.js";
 
 export interface FakeAdapterOptions {
   /** 어댑터 종류. 기본 `claude`. */
@@ -48,8 +48,27 @@ export class FakeAdapter implements AgentAdapter {
     this.sessions.push(session);
     return session;
   }
+
+  async listModels(): Promise<AgentModel[]> {
+    return FAKE_MODELS.map((m) => ({ ...m, efforts: [...m.efforts] }));
+  }
+
+  /** 고정 한도 두 개: 5시간 42%(ok), 주간 81%(warning). */
+  async usage(): Promise<AgentUsageSnapshot> {
+    const now = (this.options.now ?? (() => new Date()))();
+    const at = now.getTime();
+    return {
+      plan: "fake",
+      live: true,
+      observedAt: now,
+      limits: [
+        { id: "five_hour", usedPercent: 42, windowMinutes: 300, resetsAt: new Date(at + 3 * 3600_000) },
+        { id: "seven_day", usedPercent: 81, windowMinutes: 10080, resetsAt: new Date(at + 4 * 86400_000) },
+      ],
+    };
+  }
 }
 
-export { FakeSession } from "./session.js";
+export { FAKE_MODELS, FakeSession } from "./session.js";
 export { defaultScript, FAKE_FAIL_MESSAGE } from "./script.js";
 export type { ApprovalResponse, FakeScript, ScriptContext } from "./script.js";

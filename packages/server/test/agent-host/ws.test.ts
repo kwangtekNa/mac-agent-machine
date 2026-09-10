@@ -116,6 +116,32 @@ describe("agent-host websocket", () => {
     for (const ws of [a.ws, b.ws, c.ws]) ws.close();
   });
 
+  it("emits session.usage after turn.completed and replays it on reconnect with since", async () => {
+    const { id } = await createSession();
+    const a = connect(id);
+    await a.waitFor((e) => e.type === "session.snapshot");
+    a.send({ type: "turn.start", text: "usage please" });
+    const req = await a.waitFor((e) => e.type === "approval.requested");
+    if (req.type !== "approval.requested") throw new Error("unreachable");
+    a.send({ type: "approval.respond", approvalId: req.approval.approvalId, optionId: "allow" });
+    const done = await a.waitFor((e) => e.type === "turn.completed");
+    await a.waitFor((e) => e.type === "session.status" && e.status === "idle" && e.seq > done.seq);
+    const usage = await a.waitFor((e) => e.type === "session.usage");
+    if (usage.type !== "session.usage") throw new Error("unreachable");
+    expect(usage.seq).toBeGreaterThan(done.seq);
+    expect(usage.usage).toMatchObject({ turns: 1, inputTokens: 1200, outputTokens: 300, context: { tokens: 5100, window: 200000, percent: 3 } });
+
+    const b = connect(id, usage.seq - 1);
+    const snap = await b.waitFor((e) => e.type === "session.snapshot");
+    if (snap.type !== "session.snapshot") throw new Error("unreachable");
+    expect(snap.session.usage).toEqual(usage.usage);
+    const replayed = await b.waitFor((e) => e.type === "session.usage");
+    expect(replayed).toEqual(usage);
+    expect(seqs(b.events)).toEqual(seqs(a.events).filter((s) => s >= usage.seq));
+    a.ws.close();
+    b.ws.close();
+  });
+
   it("invalid JSON yields a recoverable error event and the connection stays open", async () => {
     const { id } = await createSession();
     const c = connect(id);

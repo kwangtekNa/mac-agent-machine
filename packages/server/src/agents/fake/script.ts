@@ -14,6 +14,10 @@ export interface ScriptContext {
   turnId: string;
   nativeId: string;
   mode: SessionMode;
+  /** 이 세션의 몇 번째 턴인지(1부터). */
+  turnNumber: number;
+  model: string;
+  effort: string | undefined;
   autoApprove: boolean;
   signal: AbortSignal;
   now(): string;
@@ -249,5 +253,13 @@ export const defaultScript: FakeScript = async (ctx) => {
     },
   });
   ctx.emit({ type: "turn.completed", turnId, ...summary });
+  // 턴 끝 사용량(2026-09-10). turn.completed 뒤에 보내 매니저가 turns 를 올린 뒤 한 번에 발행하게 한다.
+  ctx.emit({
+    type: "usage",
+    delta: { inputTokens: 1200, outputTokens: 300, cacheReadTokens: 800, cacheWriteTokens: 100, costUsd: 0.012 },
+    context: { tokens: 4200 + ctx.turnNumber * 900, window: 200000 },
+    model: ctx.model,
+    ...(ctx.effort !== undefined ? { effort: ctx.effort } : {}),
+  });
   ctx.emit({ type: "status", status: "idle" });
 };

@@ -1,9 +1,19 @@
 import type { Approval, SessionMode, TurnInput } from "@mam/protocol";
 import { ulid } from "ulid";
 import { newId } from "../../ids.js";
-import type { AgentEvent, AgentSession, ItemDraft, StartOptions } from "../types.js";
+import type { AgentEvent, AgentModel, AgentSession, ItemDraft, StartOptions } from "../types.js";
 import { AsyncQueue } from "./async-queue.js";
 import type { ApprovalResponse, FakeScript, ScriptContext } from "./script.js";
+
+/** Fake 모델 목록. `fake-1` 기본(effort 지원), `fake-mini` 는 effort 미지원. */
+export const FAKE_MODELS: readonly AgentModel[] = [
+  { id: "fake-1", displayName: "Fake 1", description: "테스트용 기본 모델", isDefault: true, efforts: ["low", "medium", "high"], defaultEffort: "medium" },
+  { id: "fake-mini", displayName: "Fake Mini", description: null, isDefault: false, efforts: [], defaultEffort: null },
+];
+
+function supportsEffort(model: string): boolean {
+  return (FAKE_MODELS.find((m) => m.id === model)?.efforts.length ?? 0) > 0;
+}
 
 export interface FakeSessionConfig {
   autoApprove: boolean;
@@ -37,10 +47,15 @@ export class FakeSession implements AgentSession {
   /** 테스트 검증용: 받은 턴 입력과 모드 변경 이력. */
   readonly turns: TurnInput[] = [];
   readonly modes: SessionMode[] = [];
+  /** 테스트 검증용: setModel/setEffort 이력. */
+  readonly models: string[] = [];
+  readonly efforts: string[] = [];
 
   private readonly queue = new AsyncQueue<AgentEvent>();
   private readonly pending = new Map<string, PendingApproval>();
   private mode: SessionMode;
+  private model: string;
+  private effort: string | undefined;
   private turn: Turn | undefined;
   private closedFlag = false;
 
@@ -50,6 +65,8 @@ export class FakeSession implements AgentSession {
   ) {
     this.nativeId = options.resumeNativeId ?? `fake-${ulid()}`;
     this.mode = options.mode;
+    this.model = options.model ?? FAKE_MODELS[0]!.id;
+    this.effort = supportsEffort(this.model) ? options.effort : undefined;
     this.events = this.queue;
     this.queue.push({ type: "native_id", nativeId: this.nativeId });
   }
@@ -103,6 +120,18 @@ export class FakeSession implements AgentSession {
     this.modes.push(mode);
   }
 
+  /** 기록만 하고 다음 usage 이벤트의 `model` 에 반영. effort 미지원 모델이면 effort 를 지운다. */
+  async setModel(model: string): Promise<void> {
+    this.model = model;
+    this.models.push(model);
+    if (!supportsEffort(model)) this.effort = undefined;
+  }
+
+  async setEffort(effort: string): Promise<void> {
+    this.effort = effort;
+    this.efforts.push(effort);
+  }
+
   async close(): Promise<void> {
     if (this.closedFlag) return;
     this.closedFlag = true;
@@ -122,6 +151,9 @@ export class FakeSession implements AgentSession {
       turnId: newId("trn"),
       nativeId: this.nativeId,
       mode: this.mode,
+      turnNumber: this.turns.length,
+      model: this.model,
+      effort: this.effort,
       autoApprove: this.config.autoApprove,
       signal,
       now: () => this.config.now().toISOString(),

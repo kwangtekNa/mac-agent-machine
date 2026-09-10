@@ -18,7 +18,7 @@ import { AgentBusyError, ConflictError } from "../../errors.js";
 import { newId } from "../../ids.js";
 import { AsyncQueue } from "../fake/async-queue.js";
 import { resolveBinary } from "../resolve-bin.js";
-import type { AgentAdapter, AgentEvent, AgentProbe, AgentSession, ItemDraft, StartOptions } from "../types.js";
+import type { AgentAdapter, AgentEvent, AgentModel, AgentProbe, AgentSession, AgentUsageSnapshot, ItemDraft, StartOptions } from "../types.js";
 import { detectLogin, readOauthToken } from "./credentials.js";
 import { approvalKindFor, buildFilePatch, ClaudeEventMapper, toolTitle } from "./mapping.js";
 
@@ -405,6 +405,18 @@ export class ClaudeSession implements AgentSession {
     if (this.q) await this.q.setPermissionMode(toPermissionMode(mode));
   }
 
+  /** 스텁(step 2 에서 적용). 지금은 저장만 한다. */
+  pendingModel: string | undefined;
+  pendingEffort: string | undefined;
+
+  async setModel(model: string): Promise<void> {
+    this.pendingModel = model;
+  }
+
+  async setEffort(effort: string): Promise<void> {
+    this.pendingEffort = effort;
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -449,6 +461,15 @@ export class ClaudeAdapter implements AgentAdapter {
     if (binPath) probe.binPath = binPath;
     if (login.warning) probe.detail = login.warning;
     return probe;
+  }
+
+  /** 스텁(step 2 이 채운다). */
+  async listModels(): Promise<AgentModel[]> {
+    return [];
+  }
+
+  async usage(): Promise<AgentUsageSnapshot> {
+    return { plan: null, live: false, observedAt: null, limits: [] };
   }
 
   async start(start: StartOptions): Promise<ClaudeSession> {

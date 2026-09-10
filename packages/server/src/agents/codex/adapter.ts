@@ -8,7 +8,7 @@ import { newId } from "../../ids.js";
 import { SERVER_VERSION } from "../../index.js";
 import { AsyncQueue } from "../fake/async-queue.js";
 import { resolveBinary } from "../resolve-bin.js";
-import type { AgentAdapter, AgentEvent, AgentProbe, AgentSession, ItemDraft, StartOptions } from "../types.js";
+import type { AgentAdapter, AgentEvent, AgentModel, AgentProbe, AgentSession, AgentUsageSnapshot, ItemDraft, StartOptions } from "../types.js";
 import type { InitializeParams } from "./generated/InitializeParams.js";
 import type { InitializeResponse } from "./generated/InitializeResponse.js";
 import type { AskForApproval } from "./generated/v2/AskForApproval.js";
@@ -255,6 +255,18 @@ export class CodexSession implements AgentSession {
     this.mode = mode;
   }
 
+  /** 스텁(step 3 에서 적용). 지금은 저장만 한다. */
+  pendingModel: string | undefined;
+  pendingEffort: string | undefined;
+
+  async setModel(model: string): Promise<void> {
+    this.pendingModel = model;
+  }
+
+  async setEffort(effort: string): Promise<void> {
+    this.pendingEffort = effort;
+  }
+
   private onExit(detail: string): void {
     if (this.closed) return;
     this.closed = true;
@@ -309,6 +321,15 @@ export class CodexAdapter implements AgentAdapter {
       probe.version = (await firstLine(binPath, ["--version"])) ?? "unknown";
     }
     return probe;
+  }
+
+  /** 스텁(step 3 이 채운다). */
+  async listModels(): Promise<AgentModel[]> {
+    return [];
+  }
+
+  async usage(): Promise<AgentUsageSnapshot> {
+    return { plan: null, live: false, observedAt: null, limits: [] };
   }
 
   async start(start: StartOptions): Promise<CodexSession> {

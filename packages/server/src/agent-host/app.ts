@@ -9,6 +9,8 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerFsRoutes } from "./routes/fs.js";
 import { registerGitRoutes } from "./routes/git.js";
 import { registerMeRoutes } from "./routes/me.js";
+import { registerModelsRoutes } from "./routes/models.js";
+import { registerUsageRoutes } from "./routes/usage.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerSessionsRoutes } from "./routes/sessions.js";
 import { registerWsRoutes, type WsOptions } from "./ws.js";
@@ -77,6 +79,8 @@ export function buildApp(ctx: AgentHostContext, opts: { ws?: WsOptions } = {}): 
       registerFsRoutes(api, host);
       registerGitRoutes(api, host);
       registerAuthRoutes(api, host);
+      registerUsageRoutes(api, host);
+      registerModelsRoutes(api, host);
       registerWsRoutes(api, host, opts.ws);
     },
     { prefix: API_PREFIX },

@@ -8,12 +8,14 @@ import {
   type PatchSessionRequest,
   type ServerEvent,
   type Session,
+  type SessionContext,
   type SessionMode,
   type SessionStatus,
+  type SessionUsage,
   type TimelineItem,
   type TurnInput,
 } from "@mam/protocol";
-import type { AgentAdapter, AgentEvent, AgentKind, AgentSession, DistributiveOmit } from "../agents/types.js";
+import type { AgentAdapter, AgentEvent, AgentKind, AgentModel, AgentSession, ContextSnapshot, DistributiveOmit } from "../agents/types.js";
 import {
   AgentUnavailableError,
   ApprovalAlreadyResolvedError,
@@ -67,16 +69,37 @@ interface Runtime {
   lastActivityAt: number;
   persistDirty: boolean;
   persistChain: Promise<void>;
+  /** session.usage 디바운스: 마지막 발행 시각(ms)과 대기 중인 타이머. */
+  lastUsageEmitAt?: number;
+  usageTimer?: NodeJS.Timeout;
 }
 
 const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_RING_BUFFER_SIZE = 500;
 const DEFAULT_DETAIL_LIMIT = 200;
 const PREVIEW_MAX = 120;
+/** 300ms 안에 연속으로 온 usage 관측은 마지막 것만 발행한다. */
+const USAGE_DEBOUNCE_MS = 300;
 const BUSY_STATUSES: ReadonlySet<SessionStatus> = new Set(["starting", "running", "waiting_approval"]);
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function emptyUsage(at: string): SessionUsage {
+  return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null, turns: 0, context: null, updatedAt: at };
+}
+
+/** `percent = round(tokens/window*100)` 을 0~100 으로 클램프. 창을 모르면 null. */
+function toContext(snapshot: ContextSnapshot | null): SessionContext | null {
+  if (!snapshot || !(snapshot.window > 0)) return null;
+  const tokens = Math.max(0, Math.round(snapshot.tokens));
+  const window = Math.max(1, Math.round(snapshot.window));
+  return { tokens, window, percent: Math.min(100, Math.max(0, Math.round((tokens / window) * 100))) };
+}
+
+function cloneUsage(usage: SessionUsage): SessionUsage {
+  return { ...usage, context: usage.context ? { ...usage.context } : null };
 }
 
 export class SessionManager {
@@ -113,6 +136,8 @@ export class SessionManager {
         const session = parsed.data;
         if (session.status !== "closed") session.status = "idle";
         session.pendingApprovals = 0;
+        session.effort ??= null;
+        session.usage ??= null;
         manager.runtimes.set(session.id, manager.newRuntime(session, false));
       } catch (err) {
         manager.logger.warn(`[sessions] 세션 메타 로드 실패, 건너뜀: ${name}: ${errorMessage(err)}`);
@@ -145,6 +170,7 @@ export class SessionManager {
       title: req.title ?? basename(req.cwd),
       mode: req.mode ?? "ask",
       model: req.model ?? null,
+      effort: null,
       status: "starting",
       nativeId: req.resumeNativeId ?? null,
       createdAt: at,
@@ -152,6 +178,7 @@ export class SessionManager {
       lastSeq: 0,
       pendingApprovals: 0,
       preview: null,
+      usage: null,
     };
     const rt = this.newRuntime(session, true);
     this.runtimes.set(session.id, rt);
@@ -174,7 +201,58 @@ export class SessionManager {
       this.schedulePersist(rt);
     }
     if (patch.mode !== undefined) await this.setMode(id, patch.mode);
+    if (patch.model !== undefined || patch.effort !== undefined) await this.setModelEffort(rt, patch.model, patch.effort);
     return { ...rt.session };
+  }
+
+  /**
+   * 모델·effort 변경. `listModels()` 로 검증(400)하고 라이브 어댑터 세션이 있으면 전달한다. 없으면 저장만 하고
+   * 다음 `start()` 의 StartOptions 로 넘긴다. 새 모델이 현재 effort 를 지원하지 않으면 effort 를 지운다.
+   */
+  private async setModelEffort(rt: Runtime, model: string | undefined, effort: string | undefined): Promise<void> {
+    if (rt.session.status === "closed") throw new SessionClosedError(rt.session.id);
+    const models = await this.listModelsForValidation(rt.session.agent);
+    let nextEffort: string | null | undefined = effort;
+    if (models) {
+      if (model !== undefined && !models.some((m) => m.id === model)) throw new InvalidRequestError(`지원하지 않는 모델입니다: ${model}`);
+      const targetId = model ?? rt.session.model;
+      const target = targetId === null ? models.find((m) => m.isDefault) : models.find((m) => m.id === targetId);
+      if (effort !== undefined) {
+        const allowed = target ? target.efforts : models.flatMap((m) => m.efforts);
+        if (!allowed.includes(effort)) throw new InvalidRequestError(`지원하지 않는 사고 수준입니다: ${effort}`);
+      } else if (model !== undefined && rt.session.effort != null && target && !target.efforts.includes(rt.session.effort)) {
+        nextEffort = null;
+      }
+    }
+    const live = rt.live?.agent;
+    if (live) {
+      if (model !== undefined) await live.setModel(model);
+      if (typeof nextEffort === "string") await live.setEffort(nextEffort);
+    }
+    let changed = false;
+    if (model !== undefined && rt.session.model !== model) {
+      rt.session.model = model;
+      changed = true;
+    }
+    if (nextEffort !== undefined && rt.session.effort !== nextEffort) {
+      rt.session.effort = nextEffort;
+      changed = true;
+    }
+    if (changed) {
+      rt.session.updatedAt = this.iso();
+      this.schedulePersist(rt);
+    }
+  }
+
+  private async listModelsForValidation(kind: AgentKind): Promise<AgentModel[] | undefined> {
+    const adapter = this.adapters[kind];
+    if (!adapter) return undefined;
+    try {
+      return await adapter.listModels();
+    } catch (err) {
+      this.logger.warn(`[sessions] 모델 목록 조회 실패, 검증 생략 agent=${kind}: ${errorMessage(err)}`);
+      return undefined;
+    }
   }
 
   async setMode(id: string, mode: SessionMode): Promise<void> {
@@ -192,6 +270,7 @@ export class SessionManager {
     this.clearIdleTimer(rt);
     this.resolvePendingBySystem(rt);
     await this.closeLive(rt);
+    this.flushUsage(rt);
     this.setStatus(rt, "closed");
     await rt.persistChain;
     return { ...rt.session };
@@ -307,6 +386,7 @@ export class SessionManager {
     for (const rt of this.runtimes.values()) {
       this.clearIdleTimer(rt);
       await this.closeLive(rt);
+      this.flushUsage(rt);
       await rt.persistChain;
       await rt.log.flush();
     }
@@ -371,6 +451,7 @@ export class SessionManager {
       cwd: rt.session.cwd,
       mode: rt.session.mode,
       model: rt.session.model ?? undefined,
+      effort: rt.session.effort ?? undefined,
       resumeNativeId,
     });
     const live: Live = { agent, closing: false };
@@ -442,13 +523,79 @@ export class SessionManager {
           ...(ev.costUsd !== undefined ? { costUsd: ev.costUsd } : {}),
           stopReason: ev.stopReason,
         }));
+        this.bumpTurns(rt);
         this.setStatus(rt, "idle");
         return;
       case "error":
         this.emit(rt, () => ({ type: "error", message: ev.message, recoverable: ev.recoverable }));
         if (!ev.recoverable) this.failSession(rt, ev.message);
         return;
+      case "usage":
+        this.onUsageEvent(rt, ev);
+        return;
     }
+  }
+
+  /** 델타 누적, 컨텍스트 교체, 모델·effort 반영 → 영속화 → 디바운스된 `session.usage` 발행. */
+  private onUsageEvent(rt: Runtime, ev: Extract<AgentEvent, { type: "usage" }>): void {
+    const at = this.iso();
+    const next = rt.session.usage ? cloneUsage(rt.session.usage) : emptyUsage(at);
+    if (ev.delta) {
+      next.inputTokens += Math.max(0, ev.delta.inputTokens);
+      next.outputTokens += Math.max(0, ev.delta.outputTokens);
+      next.cacheReadTokens += Math.max(0, ev.delta.cacheReadTokens);
+      next.cacheWriteTokens += Math.max(0, ev.delta.cacheWriteTokens);
+      // 비용은 어댑터가 준 델타만 더한다. 한 번도 안 줬으면 null 유지(Codex 구독).
+      if (ev.delta.costUsd !== undefined) next.costUsd = (next.costUsd ?? 0) + Math.max(0, ev.delta.costUsd);
+    }
+    if (ev.context !== undefined) next.context = toContext(ev.context);
+    next.updatedAt = at;
+    rt.session.usage = next;
+    if (ev.model !== undefined) rt.session.model = ev.model;
+    if (ev.effort !== undefined) rt.session.effort = ev.effort;
+    rt.session.updatedAt = at;
+    this.schedulePersist(rt);
+    this.scheduleUsageEmit(rt);
+  }
+
+  /** `turn.completed` 마다 turns +1. usage 가 없던 세션은 0 으로 시작하는 객체를 만든다. 발행은 usage 이벤트가 한다. */
+  private bumpTurns(rt: Runtime): void {
+    const at = this.iso();
+    const next = rt.session.usage ? cloneUsage(rt.session.usage) : emptyUsage(at);
+    next.turns += 1;
+    next.updatedAt = at;
+    rt.session.usage = next;
+    this.schedulePersist(rt);
+  }
+
+  /** 마지막 발행 후 300ms 가 지났으면 즉시, 아니면 남은 시간 뒤에 한 번만(마지막 상태로) 발행한다. */
+  private scheduleUsageEmit(rt: Runtime): void {
+    if (rt.usageTimer) return;
+    const elapsed = rt.lastUsageEmitAt === undefined ? Number.POSITIVE_INFINITY : this.now().getTime() - rt.lastUsageEmitAt;
+    if (elapsed >= USAGE_DEBOUNCE_MS) {
+      this.emitUsage(rt);
+      return;
+    }
+    rt.usageTimer = setTimeout(() => {
+      rt.usageTimer = undefined;
+      this.emitUsage(rt);
+    }, USAGE_DEBOUNCE_MS - elapsed);
+    rt.usageTimer.unref?.();
+  }
+
+  private emitUsage(rt: Runtime): void {
+    const usage = rt.session.usage;
+    if (!usage) return;
+    rt.lastUsageEmitAt = this.now().getTime();
+    this.emit(rt, () => ({ type: "session.usage", usage: cloneUsage(usage) }));
+  }
+
+  /** 대기 중인 디바운스 발행을 지금 내보낸다(close/shutdown). */
+  private flushUsage(rt: Runtime): void {
+    if (!rt.usageTimer) return;
+    clearTimeout(rt.usageTimer);
+    rt.usageTimer = undefined;
+    this.emitUsage(rt);
   }
 
   /** seq/sessionId/ts 를 붙여 인덱스 갱신 → 링버퍼 → 로그 append → 동기 팬아웃. */
