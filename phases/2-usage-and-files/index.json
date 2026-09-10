@@ -71,10 +71,28 @@
     {
       "step": 2,
       "name": "claude-usage-models",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         1
-      ]
+      ],
+      "started_at": "2026-09-10T14:08:18+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "644b5f99-89a9-45fe-a3bb-5139a6886311",
+          "cost_usd": 8.219981749999999,
+          "duration_s": 739.8,
+          "num_turns": 46,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 8.219982,
+      "duration_s": 739.8,
+      "retries": 0,
+      "session_id": "644b5f99-89a9-45fe-a3bb-5139a6886311",
+      "summary": "Claude 어댑터에 사용량·한도·모델 기능 추가. mapping.ts: system/init → usage{model, effort}(init.effort 우선, 없으면 세션 effort), result → turn.completed 뒤 usage{delta(result.usage 토큰 + total_cost_usd 차분, 음수 0, 프로세스 재오픈 시 기준 0 리셋), context(tokens=input+cache_read+cache_creation, window=max modelUsage.contextWindow, modelUsage 비면 키 생략)}, usage 없는 SDKResultError는 이벤트 없음; mapRateLimitInfo(utilization ≤1이면 ×100, resetsAt epoch초→Date, five_hour 300/seven_day* 10080/그 외 null, rejected=status==='rejected'); rate_limit_event는 세션이 가로채 저장. adapter.ts: dataDir 옵션(기본 ~/.mam), ClaudeUsageTracker가 rateLimitType별 1건씩 RateLimitStore(usage/claude.json)에 직렬화 저장, usage()는 live:false 스냅샷, plan은 세션 첫 init 직후 accountInfo().subscriptionType 1회(실패 시 미변경=null), 같은 시점에 supportedModels()로 models/claude.json(24h) 캐시; listModels: 신선한 캐시 → 라이브 supportedModels → 오래된 캐시 → 정적 sonnet/opus/haiku(efforts 5종, defaultEffort high); toAgentModels: 첫 항목 isDefault, supportedEffortLevels 또는 supportsEffort===false→[]; setModel은 q.setModel 후 usage{model}(다음 프로세스 Options.model에도 반영), setEffort는 다음 sendTurn 전 discard+resume 재시작(Options.effort) 후 usage{effort}; StartOptions.model/effort→Options.model/effort; 턴 중 init의 status idle은 억제(resume 재시작이 세션을 idle로 흔들지 않음); close()가 백그라운드 저장을 기다림. server.ts: defaultAdapters(env, dataDir)로 ClaudeAdapter에 dataDir 전달. 테스트: test/helpers/fake-claude-query.ts(공용 가짜 Query), test/agents/claude/usage.test.ts 14개, integration.test.ts에 usage/models/rate_limit 검증 추가. 검증: npm ci OK, typecheck OK, vitest 428 passed(2 skipped), MAM_IT_CLAUDE=1 통합 28 passed, MAM_TEST_SKIP_IOS=1 bash scripts/test.sh OK(ios/ 미수정, step 0·1과 동일 방식). 통합 관측(값 형태만): init model 'claude-opus-5[1m]'; pong 턴 delta input 2/output 4/cacheWrite 15201, context 15203/1000000, cost 0.153; supportedModels 첫 항목 id 'default'(\"Default (recommended)\"), 이어 'opus[1m]', 'claude-fable-5-1[1m]' 등 efforts 5종; accountInfo.subscriptionType='Claude Max'; rate_limit_event 1건 {status:'allowed', rateLimitType:'five_hour', resetsAt:1789030800(epoch 초 확인), utilization: 없음} → allowed 이벤트에 utilization이 실리지 않아 비율/백분율 여부는 실측 미확정(휴리스틱 유지, usedPercent 0으로 저장). 저장 파일에 이메일·토큰 없음(테스트로 확인). packages/protocol, ios/, docs, phases 미수정.",
+      "completed_at": "2026-09-10T14:20:37+0900"
     },
     {
       "step": 3,
