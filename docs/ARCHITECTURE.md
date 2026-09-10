@@ -32,7 +32,7 @@
 - 감독(supervisor): 사용자별 agent-host 프로세스를 lazy하게 만든다. 생성 명령은 `/usr/bin/sudo -u <user> -H -n -- <node> <mam cli> agent-host --socket /var/run/mam/<user>/agent.sock`. 소켓 디렉토리는 gateway가 만들고 `chown user`, 모드 0700. 크래시 시 백오프 재시작. 마지막 요청 후 `agentHost.idleTimeoutMinutes`(기본 30) 동안 요청이 없고 라이브 세션이 없으면 종료.
 - 프록시: `node:http`의 `request({ socketPath })`로 HTTP를, `upgrade` 이벤트에서 `net.connect(socketPath)`로 WebSocket을 바이트 단위로 양방향 파이프한다. 프록시 라이브러리를 쓰지 않는다. 업스트림 요청에 `X-MAM-User: <macUser>`, `X-MAM-Email`을 붙인다. 클라이언트가 보낸 같은 이름의 헤더는 제거한다.
 - 정적 파일: Phase 2부터 `apps/web/dist`를 `/`에서 서빙한다. `/api/*`와 `/ws`만 프록시한다.
-- 개발 모드 `mam gateway --dev`: `http://127.0.0.1:7777`, TLS 없음, 신원은 `MAM_DEV_USER`(기본 현재 사용자), agent-host를 현재 사용자로 직접 spawn, 소켓은 `$TMPDIR/mam-dev/agent.sock`. 하네스 AC와 시뮬레이터 테스트가 이 모드를 쓴다.
+- 개발 모드 `mam gateway --dev`: `http://127.0.0.1:7777`, TLS 없음, 신원은 현재 사용자로 고정, agent-host를 현재 사용자로 직접 spawn, 소켓은 `$TMPDIR/mam-dev/agent.sock`. 하네스 AC와 시뮬레이터 테스트가 이 모드를 쓴다. `MAM_DEV_PORT`로 포트를, `MAM_DEV_BIND`로 바인딩 주소(`tailscale` 또는 IPv4 리터럴)를 바꿀 수 있다. 같은 Wi-Fi나 핫스팟에 있는 iPhone에서 붙어 볼 때 `MAM_DEV_BIND=<Mac의 LAN IP>`를 쓴다. 신원이 고정되므로 그 주소에 닿는 기기는 전부 현재 사용자로 취급된다. 신뢰할 수 있는 네트워크에서만 쓴다.
 
 ### 2.2 agent-host (`mam agent-host --socket <path>`)
 

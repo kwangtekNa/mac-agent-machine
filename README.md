@@ -40,6 +40,12 @@ bash scripts/dev-smoke.sh --keep   # 빌드 → Fake 어댑터로 gateway 기동
 
 `--keep`으로 띄운 서버는 Phase 1(iOS)과 Phase 2(웹) 개발 백엔드로 그대로 쓸 수 있다(`http://127.0.0.1:7777`). Ctrl-C로 종료한다.
 
+같은 Wi-Fi나 핫스팟에 있는 실제 iPhone에서 붙어 보려면 Mac의 LAN IP로 바인딩한다(신원이 현재 사용자로 고정되므로 신뢰할 수 있는 네트워크에서만):
+
+```bash
+MAM_DEV_BIND=$(ipconfig getifaddr en0) node packages/server/dist/cli.js gateway --dev   # 앱에는 http://<그 IP>:7777 입력
+```
+
 ```bash
 curl -s -H 'X-MAM-Protocol: 1' http://127.0.0.1:7777/api/v1/me
 curl -s -H 'X-MAM-Protocol: 1' -H 'Content-Type: application/json' \

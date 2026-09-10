@@ -39,6 +39,18 @@ export function devPortOverride(env: NodeJS.ProcessEnv): Partial<ConfigInput> {
   return Number.isInteger(port) ? { port } : {};
 }
 
+/**
+ * `MAM_DEV_BIND`: 개발 모드 바인딩 주소. "tailscale"(tailnet IPv4) 또는 IPv4 리터럴
+ * (예: 172.20.10.2 — 같은 Wi-Fi/핫스팟에 있는 iPhone 에서 접속할 때). 없거나 형식이 틀리면 기본 127.0.0.1.
+ * 주의: 개발 모드는 신원을 고정(StaticIdentityResolver)하므로 그 주소에 닿는 기기는 모두 현재 사용자로 취급된다.
+ */
+export function devBindOverride(env: NodeJS.ProcessEnv): Partial<ConfigInput> {
+  const raw = env.MAM_DEV_BIND?.trim();
+  if (!raw) return {};
+  if (raw === "tailscale") return { bind: raw };
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(raw) ? { bind: raw } : {};
+}
+
 /** 어댑터 probe 결과를 JSON 으로 stdout 에 쓴다(`mam doctor` 가 sudo -u 로 호출). */
 export async function probeAgents(): Promise<Record<AgentKind, AgentProbe>> {
   const adapters = defaultAdapters();
@@ -89,7 +101,7 @@ export function createProgram(io: CliIo = processIo()): Command {
   program
     .command("gateway")
     .description("root 로 도는 gateway: 접속 수락, tailscale whois 신원, agent-host 감독, 프록시")
-    .option("--dev", "개발 모드 (http://127.0.0.1:7777, 현재 사용자, TLS 없음)")
+    .option("--dev", "개발 모드 (http://127.0.0.1:7777, 현재 사용자, TLS 없음. MAM_DEV_PORT / MAM_DEV_BIND 로 포트·바인딩 주소 변경)")
     .option("--config <path>", "설정 파일 (기본 $MAM_CONFIG 또는 /etc/mam/config.json)")
     .action(async (o: { dev?: boolean; config?: string }) => {
       const dev = o.dev === true;
@@ -97,7 +109,9 @@ export function createProgram(io: CliIo = processIo()): Command {
         io.err("gateway 는 root 로 실행해야 합니다 (개발 모드는 --dev)");
         io.exit(1);
       }
-      const config = dev ? devConfig(devPortOverride(process.env)) : await loadConfig(o.config);
+      const config = dev
+        ? devConfig({ ...devPortOverride(process.env), ...devBindOverride(process.env) })
+        : await loadConfig(o.config);
       const logger = makeLogger();
       const users = new UserDirectory(config.users);
       let identity: IdentityResolver;

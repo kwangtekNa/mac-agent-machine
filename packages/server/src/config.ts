@@ -27,7 +27,8 @@ export const UserEntrySchema = z.object({
 export const ConfigSchema = z.object({
   /** 0 은 OS 가 고르는 임시 포트(테스트용). */
   port: z.number().int().min(0).max(65535).default(443),
-  bind: z.union([z.literal("tailscale"), z.literal("127.0.0.1")]).default("tailscale"),
+  /** "tailscale"(tailnet IPv4 자동) 또는 IPv4 리터럴. 개발 모드 기본은 127.0.0.1, 같은 Wi-Fi/핫스팟의 폰에서 붙을 때는 LAN IP. */
+  bind: z.union([z.literal("tailscale"), z.ipv4()]).default("tailscale"),
   hostname: z.string().min(1).optional(),
   tls: z.object({ cert: z.string().min(1), key: z.string().min(1) }).optional(),
   users: z.array(UserEntrySchema).default([]),

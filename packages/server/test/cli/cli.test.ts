@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createProgram, devPortOverride } from "../../src/cli/program.js";
+import { createProgram, devBindOverride, devPortOverride } from "../../src/cli/program.js";
+import { devConfig } from "../../src/config.js";
 import type { CliIo } from "../../src/cli/common.js";
 
 class ExitError extends Error { constructor(readonly code: number) { super(`exit ${code}`); } }
@@ -47,5 +48,16 @@ describe("mam cli", () => {
     expect(devPortOverride({})).toEqual({});
     expect(devPortOverride({ MAM_DEV_PORT: "8080" })).toEqual({ port: 8080 });
     expect(devPortOverride({ MAM_DEV_PORT: "not-a-number" })).toEqual({});
+  });
+
+  it("devBindOverride reads MAM_DEV_BIND (tailscale 또는 IPv4) for `gateway --dev` — 같은 핫스팟의 iPhone 접속용", () => {
+    expect(devBindOverride({})).toEqual({});
+    expect(devBindOverride({ MAM_DEV_BIND: "" })).toEqual({});
+    expect(devBindOverride({ MAM_DEV_BIND: "tailscale" })).toEqual({ bind: "tailscale" });
+    expect(devBindOverride({ MAM_DEV_BIND: "172.20.10.2" })).toEqual({ bind: "172.20.10.2" });
+    expect(devBindOverride({ MAM_DEV_BIND: "example.com" })).toEqual({});
+    expect(devConfig().bind).toBe("127.0.0.1");
+    expect(devConfig(devBindOverride({ MAM_DEV_BIND: "172.20.10.2" })).bind).toBe("172.20.10.2");
+    expect(() => devConfig({ bind: "999.1.1.1" as never })).toThrow();
   });
 });

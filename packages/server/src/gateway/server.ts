@@ -49,7 +49,8 @@ function sendRaw(socket: Duplex, status: number, body: string): void {
 export async function startGateway(deps: GatewayDeps): Promise<GatewayHandle> {
   const { config, supervisor } = deps;
   const logger = deps.logger ?? { info() {}, warn() {}, error() {} };
-  const host = deps.dev ? "127.0.0.1" : config.bind === "tailscale" ? await tailscaleIPv4(deps.exec) : config.bind;
+  // 개발 모드도 config.bind 를 따른다(devConfig 기본 127.0.0.1, MAM_DEV_BIND 로 LAN/tailnet IP 지정 가능).
+  const host = config.bind === "tailscale" ? await tailscaleIPv4(deps.exec) : config.bind;
   const server: Server = deps.dev ? createHttpServer() : createHttpsServer(await loadTls(config.tls));
   const upgraded = new Set<Duplex>();
 
