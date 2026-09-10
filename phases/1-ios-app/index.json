@@ -51,7 +51,25 @@
     {
       "step": 2,
       "name": "api-client",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-10T09:22:54+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "9cec9bd8-652f-416c-be24-d0dceeb58c3e",
+          "cost_usd": 6.79552975,
+          "duration_s": 820.5,
+          "num_turns": 20,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 6.79553,
+      "duration_s": 820.5,
+      "retries": 0,
+      "session_id": "9cec9bd8-652f-416c-be24-d0dceeb58c3e",
+      "summary": "ios/MacAgent/Networking/ 3개 파일 추가. APIClient.swift(모든 요청에 X-MAM-Protocol:1·Accept, 본문 시 Content-Type, /api/v1 접두, 쿼리는 URLComponents.queryItems + `+`→%2B 보정, 2xx 외는 ErrorResponse→.server / 426→.unsupportedProtocol / 디코드 불가→.server(.internalError,\"HTTP n\"), 30초·readFile 60초, health는 /healthz), SessionSocket.swift(WebSocketTransport 프로토콜 + URLSessionWebSocketTransport(delegate 로 101 대기, close code를 SocketError.closed 로 전달) + @MainActor @Observable SessionSocket: ws(s)://…/api/v1/sessions/<id>/ws?since=lastSeq, seq>0 만 lastSeq 갱신, pong 내부 소비, 디코드 실패 프레임 로그 후 무시, 1·2·4…30초+0~300ms 지터 백오프(프레임 수신 시 attempt 리셋), 4004→.closed(\"세션이 없습니다\"), 20초 ping, disconnect 후 재접속 없음(세대 카운터로 옛 루프 격리), send는 open 아니면 SocketError.notOpen), ServerConfigStore.swift(ServerConfig, UserDefaults 키 mam.server.config JSON, normalize: 스킴 없으면 https·끝 슬래시 제거·http는 loopback/RFC1918/localhost/*.local 만, wsBaseURL static+instance). 테스트 ios/MacAgentTests/Networking/ 6개 파일 28개(StubURLProtocol+Locked, APIClientTests 12개: 헤더·신원헤더 없음·한글/공백/+ 쿼리 인코딩·me fixture·403/426/500·transport·createSession/respondApproval 본문, FakeWebSocketTransport+FakeTransportFactory+SleepRecorder, SessionSocketTests 8개: 프레임 3개→이벤트 2개·lastSeq 37·since=0/37 재접속·백오프 [1,2,4]초·disconnect·4004·send JSON=fixture·ping, ServerConfigStoreTests 7개, APIClientIntegrationTests 1개 기본 XCTSkip). 수동 확인: dev-smoke --keep 서버에 TEST_RUNNER_MAM_IT_SERVER=http://127.0.0.1:7777 로 통합 테스트 실행 → health·/me(agents 2)·세션 생성(cwd=home)·WS session.snapshot 수신·close 까지 통과(0.08초), 서버 종료 확인. AC 통과: xcodegen+xcodebuild test 및 bash scripts/test.sh(TS 309 passed, iOS 전체 59개) OK. 서버 코드·fixture·phases/ 미수정, 커밋 안 함. 결정: attempt 는 프레임을 정상 수신하면 0으로 리셋(열렸다 바로 끊기는 연결도 백오프 증가 유지), ping 간격은 주입한 sleep 을 그대로 써서 테스트에서 20초 이상은 별도 처리, http 허용 사설 IP 에 Tailscale CGNAT(100.64/10)은 미포함(ATS 도 막으므로).",
+      "completed_at": "2026-09-10T09:36:34+0900"
     },
     {
       "step": 3,
