@@ -176,11 +176,47 @@
     {
       "step": 6,
       "name": "ios-usage-ui",
-      "status": "pending",
+      "status": "error",
       "depends_on": [
         1,
         4
-      ]
+      ],
+      "started_at": "2026-09-10T14:55:42+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "5055f718-2b69-4e80-9628-a7676443d695",
+          "cost_usd": 5.15809275,
+          "duration_s": 403.8,
+          "num_turns": 32,
+          "exit_code": 1,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "a05767b2-2eac-448f-8007-67be17ee630d",
+          "cost_usd": 0,
+          "duration_s": 4.0,
+          "num_turns": 1,
+          "exit_code": 1,
+          "timeout": false
+        },
+        {
+          "attempt": 3,
+          "session_id": "ce65439c-c318-45d1-9b09-6c1d359f2ab7",
+          "cost_usd": 0,
+          "duration_s": 3.8,
+          "num_turns": 1,
+          "exit_code": 1,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 5.158093,
+      "duration_s": 411.6,
+      "retries": 2,
+      "session_id": "ce65439c-c318-45d1-9b09-6c1d359f2ab7",
+      "error_message": "[3회 시도 후 실패] 세션이 구조화 결과를 반환하지 않았다 (subtype: success, exit code: 1). 작업 트리에 미완성 변경이 남아있을 수 있으니 git status로 확인한 뒤 이어서 작업하라.",
+      "failed_at": "2026-09-10T15:02:34+0900"
     },
     {
       "step": 7,
