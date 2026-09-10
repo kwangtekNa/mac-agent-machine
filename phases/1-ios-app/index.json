@@ -175,7 +175,25 @@
     {
       "step": 7,
       "name": "file-browser-ui",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-10T10:34:50+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "9c77e0a3-8b3b-44bc-ae84-476e1743d1b4",
+          "cost_usd": 5.623058499999998,
+          "duration_s": 849.5,
+          "num_turns": 16,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 5.623058,
+      "duration_s": 849.5,
+      "retries": 0,
+      "session_id": "9c77e0a3-8b3b-44bc-ae84-476e1743d1b4",
+      "summary": "Step 7 file-browser-ui 완료. 산출물: ios/MacAgent/Features/Files/ 4개 파일 — FileBrowserModel.swift(@MainActor @Observable; Directory(path·listing·error, Equatable/Hashable는 path만이라 listing 갱신에도 NavigationStack 화면 유지), rootPath=세션 cwd, stack/selectedFile(시트 닫아도 유지), load=메모리 캐시 먼저 표시 후 서버 refresh·실패 시 캐시 유지+오류만, push(연속 중복 무시)/pop, showHidden은 UserDefaults mam.files.showHidden·toggleShowHidden(), visibleEntries 서버 정렬 유지, isGitRepo=루트 listing; GitBadge.style M주황/A초록/D빨강/R청록/?회색/!secondary/nil·unknown→nil; FileIcon.symbol(확장자→doc.text/photo/doc.richtext/doc, dir folder.fill .blue, symlink link, other questionmark.folder); FileFormat.size ByteCountFormatter), FileBrowserView.swift(NavigationStack(path:$model.stack), principal 제목=마지막 컴포넌트+부제 전체 경로 monospaced, 행 아이콘·이름(숨김 secondary)·크기·git 캡슐, 디렉토리 NavigationLink(value:), 파일/symlink 탭→model.selectedFile→navigationDestination(item:)으로 FileViewerView push, 툴바 eye/eye.slash·arrow.clockwise·닫기, refreshable, 빈 폴더 \"비어 있는 폴더\", 오류 ContentUnavailableView+다시 시도, 캐시 있고 refresh 실패면 노란 배너 행), FileViewerView.swift(FileViewerLogic: highlightLimitBytes 200 KiB·shouldHighlight(size,language)·isImage/image(from:) base64→UIImage·showsTruncatedBanner·codeFontSize body×0.85·isUnsupportedMedia 415·canShowDiff(isGitRepo&&M/A/D); 뷰어: truncated \"앞 1 MiB만 표시합니다\" 배너, 415→ContentUnavailableView(\"미리 볼 수 없는 파일 형식\", doc.questionmark), 실패→메시지+다시 시도, 툴바 줄바꿈 토글(기본 끔)·ShareLink(텍스트만)·\"변경 보기\"→DiffSheet(gitDiff staged=false, 비면 staged=true 재조회, DiffTextView), 이미지 ZoomableImageView(MagnifyGesture 1~8×, 실패 \"이미지를 열 수 없습니다\"), 제목 파일명·부제 language · 크기), HighlightedCodeView.swift(CodeHighlighter.highlight: Highlightr, 라이트 \"xcode\"/다크 \"atom-one-dark\", monospacedSystemFont, AttributedString 반환; UIViewRepresentable→CodeTextView(UITextView 서브클래스, 비편집·선택 가능, TextKit1, wrapsLines=false면 layoutSubviews에서 usedRect 너비로 contentSize 확장→가로 스크롤), plain 텍스트 즉시 표시 후 Task.detached 하이라이트→메인 적용, key(text·language·dark·fontSize) 기반 중복 방지, colorScheme/dynamicTypeSize 변경 시 재적용, dismantle 시 취소) + ios/MacAgent/Shared/HighlightrLanguage.swift(서버 language→Highlightr 이름 24개: objective-c→objectivec, shell→bash, toml→ini, html→xml 등, plaintext·미지 값 nil). TimelineView: \"파일\" 버튼 활성화(세션 없으면 비활성), @State filesModel을 화면 생존 동안 유지(cwd 바뀌면 재생성), FileBrowserView 시트 presentationDetents([.large]); TimelineScreen이 client 보관. ErrorMessages.pathForbidden(\"접근할 수 없는 경로입니다.\")/pathNotFound/fileAccessMessage(for:) 추가. 테스트 ios/MacAgentTests/Features/Files/ 6개 파일 21개: FileBrowserModelTests 6(fixture 로드+path 쿼리 그대로 전송, 숨김 필터·서버 정렬·UserDefaults 기억, push/pop, 403/404 문구, 캐시→refresh→실패 시 캐시 유지, Directory 정체성), GitBadgeTests 2, HighlightrLanguageTests 3(전 매핑·nil·Highlightr supportedLanguages() 대조), FileIconTests 2, FileViewerLogicTests 6(크기 게이트·fs-read-image.json→1×1 UIImage·truncated·415·폰트·canShowDiff·fileAccessMessage), HighlightedCodeViewTests 2(UIWindow 호스팅: plain 먼저→백그라운드 하이라이트로 색 2종 이상 적용·줄바꿈 끔 가로 contentSize>bounds, 비활성 시 plain·줄바꿈 켬). 이 런타임 테스트가 잡은 결함(TextKit1 전환만으로는 UITextView contentSize 너비가 bounds에 고정돼 가로 스크롤 불가)을 CodeTextView 서브클래스로 수정. AC: xcodegen generate + xcodebuild test TEST SUCCEEDED(iOS 145+21), bash scripts/test.sh exit 0(TS 309 passed), 새 파일 경고 0. 체크리스트: 경로 조작·검증 없음(서버가 준 path 그대로 요청), Highlightr 외 하이라이트 없음·200 KiB 게이트·Task.detached 준수, 시스템 색+아이콘 병행. 미수행: 6절 dev-smoke 수동 탐색·스크린샷(예산 한도로 생략, XCTest 런타임 검사로 대체). 서버 코드·fixture·phases/ 미수정(index.json은 세션 전부터 수정 상태), 커밋 안 함.",
+      "completed_at": "2026-09-10T10:49:00+0900"
     },
     {
       "step": 8,
