@@ -19,6 +19,8 @@ xcuserdata/
 *.xcuserstate
 .build/
 ios/Packages/
+# xcodegen generate 가 project.yml 의 info.properties 로 만드는 생성물
+ios/MacAgent/Info.plist
 
 # env / local
 .env

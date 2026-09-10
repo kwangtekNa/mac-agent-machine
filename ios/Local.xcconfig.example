@@ -1,0 +1,2 @@
+// Local.xcconfig 로 복사한 뒤 Apple 팀 ID를 채운다. 시뮬레이터 빌드는 비워 둬도 된다(실기기 설치에만 필요).
+DEVELOPMENT_TEAM = 

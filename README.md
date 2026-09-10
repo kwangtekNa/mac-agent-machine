@@ -27,9 +27,9 @@ Mac 한 대를 여러 사용자의 에이전트 코딩 서버로 만드는 프�
 | `packages/protocol` | `@mam/protocol` — REST/WS 계약 zod 스키마, 타입, fixture. iOS와 서버가 공유하는 유일한 계약 |
 | `packages/server` | `@mam/server` — `mam` CLI(`gateway`, `agent-host`, `user`, `doctor`, `config`), gateway, agent-host, 세션 매니저, Claude/Codex/Fake 어댑터, fs/git 샌드박스 |
 | `apps/web` | Phase 2. Vite + React + TS 웹 대시보드 (`@mam/protocol` 재사용) |
-| `ios/` | Phase 1. SwiftUI 앱 (XcodeGen) |
+| `ios/` | Phase 1. `MacAgent` iOS 앱 — XcodeGen `project.yml`, `MacAgent/`(SwiftUI 소스), `MacAgentTests/`(XCTest, `packages/protocol/fixtures` 폴더 참조). `*.xcodeproj`는 생성물이라 커밋하지 않는다. 설계는 `docs/IOS.md` |
 | `scripts/` | `dev-smoke.sh`/`dev-smoke.mjs`(개발 e2e), `setup-server.sh`(설치), `test.sh`(전체 게이트) |
-| `docs/` | `PRD.md`, `ARCHITECTURE.md`, `PROTOCOL.md`, `ADR.md`, `RUNBOOK.md` |
+| `docs/` | `PRD.md`, `ARCHITECTURE.md`, `PROTOCOL.md`, `ADR.md`, `IOS.md`, `RUNBOOK.md` |
 
 ## 개발 빠른 시작
 
@@ -67,4 +67,5 @@ bash scripts/dev-smoke.sh  # 개발 모드 e2e (빌드 → 기동 → 검증 →
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 프로세스 구조, 저장소 구조, 런타임 경로, 보안 모델
 - [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — REST/WS 계약과 TimelineItem 모델
 - [`docs/ADR.md`](docs/ADR.md) — 기술 결정과 근거
+- [`docs/IOS.md`](docs/IOS.md) — iOS 앱 구조, 내비게이션, 디자인 시스템, 상태 흐름
 - [`docs/RUNBOOK.md`](docs/RUNBOOK.md) — 설치, 사용자 추가, 운영, 문제 해결
