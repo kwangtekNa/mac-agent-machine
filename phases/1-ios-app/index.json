@@ -28,7 +28,25 @@
     {
       "step": 1,
       "name": "api-models",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-10T09:14:59+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "0ad831f6-21ef-4b19-a027-9988de6916bf",
+          "cost_usd": 4.568601750000001,
+          "duration_s": 474.4,
+          "num_turns": 15,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 4.568602,
+      "duration_s": 474.4,
+      "retries": 0,
+      "session_id": "0ad831f6-21ef-4b19-a027-9988de6916bf",
+      "summary": "ios/MacAgent/Models/Protocol/ 10개 파일(JSONCoding, LenientEnum, Enums, JSONValue, Session, TimelineItem, Approval, ServerEvent, ClientMessage, REST)로 PROTOCOL.md 전체를 손으로 쓴 Codable로 미러. 판별자(TimelineItemKind, ServerEvent.type, ClientMessage.type)는 엄격, 나머지 17개 열거형은 LenientRawEnum(.unknown). 날짜는 ISO-8601 소수점 초 유무 둘 다 수용. ios/MacAgentTests/{FixtureLoader,ProtocolFixturesTests,LenientEnumTests}.swift 추가: 40개 fixture 전수 디코딩 + 폴더↔매핑표 대칭 검사 + client 5개 왕복 딕셔너리 비교 + 핵심 값 단언 + null/키누락/모르는 값 동작. iOS 31개 테스트 통과, 전체 게이트(TS 309 + iOS) 통과, 새 파일 경고 0. fixture·스키마·PROTOCOL.md·phases/ 미수정. 사소한 결정: FsReadResponse.encoding은 String(step 열거형 목록에 없어서).",
+      "completed_at": "2026-09-10T09:22:54+0900"
     },
     {
       "step": 2,
