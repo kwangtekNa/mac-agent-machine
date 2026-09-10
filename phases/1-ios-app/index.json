@@ -120,7 +120,34 @@
     {
       "step": 5,
       "name": "timeline-ui",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-10T09:56:08+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "27fb9d2d-501d-4525-8e25-bf4f27a4ab24",
+          "cost_usd": 8.115122000000001,
+          "duration_s": 764.9,
+          "num_turns": 25,
+          "exit_code": 1,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "17dfa8f0-fe16-46a2-a929-bc16033ff891",
+          "cost_usd": 5.00264125,
+          "duration_s": 700.8,
+          "num_turns": 47,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 13.117763,
+      "duration_s": 1465.7,
+      "retries": 1,
+      "session_id": "17dfa8f0-fe16-46a2-a929-bc16033ff891",
+      "summary": "Step 5 timeline-ui 완료(이전 시도가 예산 초과로 끊긴 작업 트리를 검증·보완). 산출물: ios/MacAgent/Features/Timeline/TimelineModel.swift(@MainActor @Observable, apply(_:)가 유일한 변경 경로: snapshot은 REST items와 병합(같은 id 교체·나머지 유지), item.started/completed upsert(id→index 딕셔너리), delta는 field별 text/output/patch append·대상 없으면 로그 후 무시, seq<=lastSeq 무시(seq 0 예외), approval.requested→pending 정렬+waiting, approval.resolved→pending 제거+아이템 resolution 반영, session.status→status/mode/fatalError, turn.completed 무시, error recoverable→transientError 3초/아니면 fatalError; start()=GET /sessions/:id → since=lastSeq 소켓, stop/resume, send(running이면 agentBusy 문구·\"session is busy\" 번역)/interrupt/setMode), Shared/ItemStyle.swift(5.2 표 그대로 + failed 빨강/cancelled secondary), Cards/ 11개(ItemCard 공통 컨테이너 24pt 아이콘열·mini ProgressView·HH:mm·cornerRadius 12·그림자 없음, UserMessage accent 10%·첨부 썸네일, AssistantMessage MarkdownUI gitHub 기반 시스템 폰트·monospaced 코드블록 가로 스크롤·commentary secondary·running 중 50ms 디바운스, Reasoning 접힘, ToolCall 도구별 스타일·exit 캡슐·출력 240pt 스크롤·truncated 캡션·입력 JSON 토글, FileChange 목록+DiffTextView 토글, Plan, Approval 읽기 전용(대기 노란 카드·\"아래 배너에서 응답하세요\"/처리됨 \"허용됨 · HH:mm\" 라벨 매핑), TurnSummaryRow, ErrorCard 다시 시도=컴포저 포커스, SystemRow), Shared/DiffTextView.swift(DiffLine.classify/split), TimelineView.swift(ScrollViewReader+LazyVStack, 이전 기록 캡션, 바닥 추적·\"새 이벤트\" 칩, fatal 배너+다시 시도, 재연결 바, safeAreaInset에 ApprovalBannerSlot(\"승인 대기 N건\" 자리표시자)+Composer, 툴바 제목/상태 부제·ModeMenu·folder disabled·세션 정보 시트(닫기→REST close→dismiss), scenePhase stop/resume), Composer.swift, ModeMenu.swift(full-auto confirmationDialog), Formatters duration/tokens/usd/clock, ErrorMessages agentBusy/sendFailed/sessionError/socketErrorMessage. 테스트: TimelineModelTests 17개(fixture 이벤트 apply 시나리오 전부+REST→socket since 검증), ItemStyleTests, DiffTextViewTests, FormattersTests 확장 → iOS 123개(122 통과·1 스킵·0 실패). AC: xcodegen+xcodebuild test 통과, 카드 11개, bash scripts/test.sh OK(exit 0). 수동 확인: 헤드리스라 시뮬레이터 탭 불가(AppleScript -1712, idb 없음)해서 임시 XCTest로 dev-smoke 서버에 붙은 TimelineView를 호스트 scene UIWindow에 올려 \"hello\" 전송→스트리밍·tool_call running·승인 대기 노란 카드+배너 슬롯, REST allow 후 \"허용됨 · 10:18\"+turn_summary \"1초 · 144 토큰 · $0.001\"을 PNG로 직접 확인(임시 파일 삭제). 이 과정에서 발견한 결함 수정: AssistantMessageCard의 디바운스 @State가 마지막 델타를 놓쳐 3번째 청크가 빠지던 문제를 running이 아니면 payload.text 직접 렌더+.task(id:) 디바운스로 해결. 주의: scripts/test.sh가 다른 세션에 의해 수정됨(게이트 동시 실행 방지 잠금 추가, 10:18) — 되돌리지 않았고 커밋에 포함될 것. 서버 코드·fixture·phases/ 미수정, 커밋 안 함.",
+      "completed_at": "2026-09-10T10:20:33+0900"
     },
     {
       "step": 6,
