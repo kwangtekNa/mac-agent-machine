@@ -1,12 +1,9 @@
 import { AgentUnavailableError } from "../../errors.js";
-import { SERVER_VERSION } from "../../index.js";
-import type { InitializeParams } from "../../agents/codex/generated/InitializeParams.js";
-import type { InitializeResponse } from "../../agents/codex/generated/InitializeResponse.js";
 import type { AccountLoginCompletedNotification } from "../../agents/codex/generated/v2/AccountLoginCompletedNotification.js";
 import type { CancelLoginAccountParams } from "../../agents/codex/generated/v2/CancelLoginAccountParams.js";
 import type { LoginAccountParams } from "../../agents/codex/generated/v2/LoginAccountParams.js";
 import type { LoginAccountResponse } from "../../agents/codex/generated/v2/LoginAccountResponse.js";
-import { spawnCodexAppServer } from "../../agents/codex/process.js";
+import { initializeAppServer, spawnCodexAppServer } from "../../agents/codex/process.js";
 import { resolveBinary } from "../../agents/resolve-bin.js";
 import type { LoginFlow } from "./flows.js";
 
@@ -37,12 +34,7 @@ export async function startCodexLogin(opts: CodexLoginOptions): Promise<LoginFlo
 
   let started: Extract<LoginAccountResponse, { type: "chatgptDeviceCode" }>;
   try {
-    const init: InitializeParams = {
-      clientInfo: { name: "mam", title: "mac-agent-machine", version: SERVER_VERSION },
-      capabilities: { experimentalApi: true, requestAttestation: false },
-    };
-    await proc.peer.request<InitializeResponse>("initialize", init);
-    proc.peer.notify("initialized");
+    await initializeAppServer(proc.peer);
     const params: LoginAccountParams = { type: "chatgptDeviceCode" };
     const res = await proc.peer.request<LoginAccountResponse>("account/login/start", params);
     if (res.type !== "chatgptDeviceCode") throw new Error(`예상하지 못한 응답 type=${res.type}`);

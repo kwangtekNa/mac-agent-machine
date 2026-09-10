@@ -35,7 +35,7 @@ export function defaultAdapters(env: NodeJS.ProcessEnv = process.env, dataDir?: 
   if (env.MAM_FAKE_AGENT === "1") {
     return { claude: new FakeAdapter({ kind: "claude" }), codex: new FakeAdapter({ kind: "codex" }) };
   }
-  return { claude: new ClaudeAdapter(dataDir ? { dataDir } : {}), codex: new CodexAdapter() };
+  return { claude: new ClaudeAdapter(dataDir ? { dataDir } : {}), codex: new CodexAdapter(dataDir ? { dataDir } : {}) };
 }
 
 async function realpathOr(path: string): Promise<string> {

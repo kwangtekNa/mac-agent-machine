@@ -1,4 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { SERVER_VERSION } from "../../index.js";
+import type { InitializeParams } from "./generated/InitializeParams.js";
+import type { InitializeResponse } from "./generated/InitializeResponse.js";
 import { JsonRpcPeer } from "./jsonrpc.js";
 
 type Logger = Pick<Console, "info" | "warn" | "error">;
@@ -74,4 +77,36 @@ export function spawnCodexAppServer(opts: SpawnCodexOptions): CodexProcess {
       timers.push(setTimeout(() => child.kill("SIGKILL"), 4000));
     });
   return { peer, child, kill };
+}
+
+/** ADR-007 핸드셰이크: `initialize` 요청 후 `initialized` 알림. 세션·로그인·임시 프로세스가 공유한다. */
+export async function initializeAppServer(peer: JsonRpcPeer): Promise<InitializeResponse> {
+  const init: InitializeParams = {
+    clientInfo: { name: "mam", title: "mac-agent-machine", version: SERVER_VERSION },
+    capabilities: { experimentalApi: true, requestAttestation: false },
+  };
+  const res = await peer.request<InitializeResponse>("initialize", init);
+  peer.notify("initialized");
+  return res;
+}
+
+export interface EphemeralAppServerOptions extends SpawnCodexOptions {
+  /** 테스트 주입. 기본 `spawnCodexAppServer`. */
+  spawnFn?: typeof spawnCodexAppServer;
+}
+
+/**
+ * 라이브 세션이 없을 때 `account/rateLimits/read`, `model/list` 같은 단발 요청용 임시 app-server.
+ * 핸드셰이크 뒤 `fn` 을 실행하고, 성공/실패와 무관하게 피어를 닫고 프로세스를 종료한다.
+ */
+export async function withEphemeralAppServer<T>(opts: EphemeralAppServerOptions, fn: (peer: JsonRpcPeer) => Promise<T>): Promise<T> {
+  const { spawnFn = spawnCodexAppServer, ...spawnOpts } = opts;
+  const proc = spawnFn(spawnOpts);
+  try {
+    await initializeAppServer(proc.peer);
+    return await fn(proc.peer);
+  } finally {
+    proc.peer.close();
+    await proc.kill();
+  }
 }

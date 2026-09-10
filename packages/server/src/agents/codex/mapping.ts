@@ -1,6 +1,6 @@
 import type { Approval } from "@mam/protocol";
 import { newId } from "../../ids.js";
-import type { AgentEvent, ItemDraft } from "../types.js";
+import type { AgentEvent, AgentModel, ContextSnapshot, ItemDraft, RateLimitObservation, TokenDelta } from "../types.js";
 import type { FileChange } from "./generated/FileChange.js";
 import type { ReviewDecision } from "./generated/ReviewDecision.js";
 import type { ServerNotification } from "./generated/ServerNotification.js";
@@ -9,8 +9,12 @@ import type { CommandExecutionRequestApprovalResponse } from "./generated/v2/Com
 import type { FileChangeRequestApprovalResponse } from "./generated/v2/FileChangeRequestApprovalResponse.js";
 import type { FileUpdateChange } from "./generated/v2/FileUpdateChange.js";
 import type { GrantedPermissionProfile } from "./generated/v2/GrantedPermissionProfile.js";
+import type { Model } from "./generated/v2/Model.js";
+import type { RateLimitSnapshot } from "./generated/v2/RateLimitSnapshot.js";
+import type { RateLimitWindow } from "./generated/v2/RateLimitWindow.js";
 import type { PermissionsRequestApprovalResponse } from "./generated/v2/PermissionsRequestApprovalResponse.js";
 import type { ThreadItem } from "./generated/v2/ThreadItem.js";
+import type { ThreadTokenUsage } from "./generated/v2/ThreadTokenUsage.js";
 import type { TokenUsageBreakdown } from "./generated/v2/TokenUsageBreakdown.js";
 import type { ToolRequestUserInputResponse } from "./generated/v2/ToolRequestUserInputResponse.js";
 import type { Turn } from "./generated/v2/Turn.js";
@@ -33,8 +37,59 @@ export interface MappedApproval {
 export interface CodexMapperOptions {
   threadId: string;
   cwd: string;
+  /** `thread/resume` 로 열었으면 첫 `thread/tokenUsage/updated` 는 기준선으로만 쓴다(이전 프로세스에서 이미 누적). */
+  resumed?: boolean;
   now?: () => string;
   logger?: Pick<Console, "info" | "warn">;
+}
+
+/** PROTOCOL 5절: `total` 의 직전 관측치 대비 증가분. 음수는 0. 비용은 없다(구독). */
+export function tokenDelta(total: TokenUsageBreakdown, base: TokenUsageBreakdown | null): TokenDelta {
+  const diff = (k: keyof TokenUsageBreakdown): number => Math.max(0, (total[k] ?? 0) - (base?.[k] ?? 0));
+  return { inputTokens: diff("inputTokens"), outputTokens: diff("outputTokens"), cacheReadTokens: diff("cachedInputTokens"), cacheWriteTokens: diff("cacheWriteInputTokens") };
+}
+
+/** `last.totalTokens` / `modelContextWindow`. 창을 모르면 undefined(매니저가 기존 값을 유지). */
+export function contextSnapshot(usage: ThreadTokenUsage): ContextSnapshot | undefined {
+  const window = usage.modelContextWindow;
+  if (window === null || !Number.isFinite(window) || window <= 0) return undefined;
+  return { tokens: Math.max(0, usage.last.totalTokens), window };
+}
+
+function mapRateLimitWindow(id: "primary" | "secondary", w: RateLimitWindow, reached: boolean): RateLimitObservation {
+  const usedPercent = Number.isFinite(w.usedPercent) ? Math.max(0, w.usedPercent) : 0;
+  const windowMinutes = w.windowDurationMins !== null && Number.isFinite(w.windowDurationMins) && w.windowDurationMins > 0 ? w.windowDurationMins : null;
+  const resetsAt = w.resetsAt !== null && Number.isFinite(w.resetsAt) && w.resetsAt > 0 ? new Date(w.resetsAt * 1000) : null;
+  return { id, usedPercent, windowMinutes, resetsAt, rejected: reached || usedPercent >= 100 };
+}
+
+/**
+ * `account/rateLimits/read`·`account/rateLimits/updated` 의 `rateLimits` → 관측값(PROTOCOL 5절).
+ * `resetsAt` 은 epoch 초. `rateLimitReachedType` 이 있으면 모든 창을 거부 상태로 본다. 라벨은 라우트가 `windowMinutes` 로 붙인다.
+ */
+export function mapRateLimitSnapshot(s: RateLimitSnapshot): { plan: string | null; limits: RateLimitObservation[] } {
+  const reached = s.rateLimitReachedType !== null && s.rateLimitReachedType !== undefined;
+  const limits: RateLimitObservation[] = [];
+  if (s.primary) limits.push(mapRateLimitWindow("primary", s.primary, reached));
+  if (s.secondary) limits.push(mapRateLimitWindow("secondary", s.secondary, reached));
+  return { plan: typeof s.planType === "string" && s.planType.length > 0 ? s.planType : null, limits };
+}
+
+/** `model/list` 항목 → AgentModel. `hidden` 은 제외한다. */
+export function toAgentModels(models: Model[]): AgentModel[] {
+  return models
+    .filter((m) => !m.hidden)
+    .map((m) => {
+      const efforts = m.supportedReasoningEfforts.map((e) => e.reasoningEffort);
+      return {
+        id: m.id,
+        displayName: m.displayName || m.id,
+        description: m.description ? m.description : null,
+        isDefault: m.isDefault,
+        efforts,
+        defaultEffort: efforts.length > 0 && m.defaultReasoningEffort ? m.defaultReasoningEffort : null,
+      };
+    });
 }
 
 function clip(s: string, n: number): string {
@@ -121,6 +176,11 @@ export class CodexEventMapper {
   private readonly open = new Map<string, ItemDraft>();
   private usage: TokenUsageBreakdown | null = null;
   private usageAtTurnStart: TokenUsageBreakdown | null = null;
+  /** 마지막 컨텍스트 스냅샷. 턴 끝에 한 번 더 보내 매니저가 turns 를 반영한 상태를 발행하게 한다. */
+  private lastContext: ContextSnapshot | undefined;
+  private turnHadUsage = false;
+  /** resume 직후: 첫 관측을 기준선으로만 삼는다. */
+  private baselinePending: boolean;
   private skipUserMessages = 0;
   private readonly now: () => string;
   private readonly logger: Pick<Console, "info" | "warn">;
@@ -128,6 +188,7 @@ export class CodexEventMapper {
   constructor(private readonly opts: CodexMapperOptions) {
     this.now = opts.now ?? (() => new Date().toISOString());
     this.logger = opts.logger ?? console;
+    this.baselinePending = opts.resumed === true;
   }
 
   get currentTurnId(): string | null {
@@ -204,8 +265,7 @@ export class CodexEventMapper {
         return delta ? [{ type: "item.delta", itemId: item.id, field: "patch", delta }] : [];
       }
       case "thread/tokenUsage/updated":
-        this.usage = n.params.tokenUsage.total;
-        return [];
+        return this.mapTokenUsage(n.params.tokenUsage);
       case "error":
         return [this.completedItem("error", { message: n.params.error.message, recoverable: n.params.willRetry })];
       default:
@@ -222,6 +282,22 @@ export class CodexEventMapper {
     return events;
   }
 
+  /** PROTOCOL 5절 Codex 사용량: 델타 = total 증가분, 컨텍스트 = last/modelContextWindow. 비용 없음. */
+  private mapTokenUsage(usage: ThreadTokenUsage): AgentEvent[] {
+    const context = contextSnapshot(usage);
+    if (context) this.lastContext = context;
+    this.turnHadUsage = true;
+    const base = this.usage;
+    this.usage = usage.total;
+    if (this.baselinePending) {
+      // 이전 프로세스에서 이미 누적한 값이다. 기준선만 잡고 턴 요약도 같은 기준을 쓴다.
+      this.baselinePending = false;
+      if (this.codexTurnId !== null) this.usageAtTurnStart = usage.total;
+      return [{ type: "usage", ...(context ? { context } : {}) }];
+    }
+    return [{ type: "usage", delta: tokenDelta(usage.total, base), ...(context ? { context } : {}) }];
+  }
+
   private mapTurnCompleted(turn: Turn): AgentEvent[] {
     this.beginTurn(turn.id);
     const turnId = this.turnId as string;
@@ -235,6 +311,9 @@ export class CodexEventMapper {
     const stopReason = turn.status;
     events.push(this.completedItem("turn_summary", { durationMs, usage, stopReason }));
     events.push({ type: "turn.completed", turnId, durationMs, usage, stopReason });
+    // 매니저는 turn.completed 에서 turns 를 올리고 usage 이벤트에서만 발행하므로 턴 끝에 컨텍스트를 한 번 더 보낸다.
+    if (this.turnHadUsage) events.push({ type: "usage", ...(this.lastContext ? { context: this.lastContext } : {}) });
+    this.turnHadUsage = false;
     events.push({ type: "status", status: "idle" });
     this.turnId = null;
     this.codexTurnId = null;

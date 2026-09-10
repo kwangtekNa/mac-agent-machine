@@ -1,17 +1,24 @@
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { SessionMode, TurnInput } from "@mam/protocol";
+import { z } from "zod";
 import { AgentBusyError, AgentUnavailableError, ConflictError } from "../../errors.js";
 import { newId } from "../../ids.js";
-import { SERVER_VERSION } from "../../index.js";
+import { RateLimitStore } from "../../usage/rate-limit-store.js";
 import { AsyncQueue } from "../fake/async-queue.js";
 import { resolveBinary } from "../resolve-bin.js";
 import type { AgentAdapter, AgentEvent, AgentModel, AgentProbe, AgentSession, AgentUsageSnapshot, ItemDraft, StartOptions } from "../types.js";
-import type { InitializeParams } from "./generated/InitializeParams.js";
-import type { InitializeResponse } from "./generated/InitializeResponse.js";
+import type { AccountRateLimitsUpdatedNotification } from "./generated/v2/AccountRateLimitsUpdatedNotification.js";
 import type { AskForApproval } from "./generated/v2/AskForApproval.js";
+import type { GetAccountParams } from "./generated/v2/GetAccountParams.js";
+import type { GetAccountRateLimitsResponse } from "./generated/v2/GetAccountRateLimitsResponse.js";
+import type { GetAccountResponse } from "./generated/v2/GetAccountResponse.js";
+import type { ModelListParams } from "./generated/v2/ModelListParams.js";
+import type { ModelListResponse } from "./generated/v2/ModelListResponse.js";
+import type { RateLimitSnapshot } from "./generated/v2/RateLimitSnapshot.js";
 import type { SandboxMode } from "./generated/v2/SandboxMode.js";
 import type { SandboxPolicy } from "./generated/v2/SandboxPolicy.js";
 import type { ThreadResumeParams } from "./generated/v2/ThreadResumeParams.js";
@@ -22,8 +29,9 @@ import type { TurnInterruptParams } from "./generated/v2/TurnInterruptParams.js"
 import type { TurnStartParams } from "./generated/v2/TurnStartParams.js";
 import type { TurnStartResponse } from "./generated/v2/TurnStartResponse.js";
 import type { UserInput } from "./generated/v2/UserInput.js";
-import { CodexEventMapper, type MappedApproval } from "./mapping.js";
-import { spawnCodexAppServer, type CodexProcess } from "./process.js";
+import type { JsonRpcPeer } from "./jsonrpc.js";
+import { CodexEventMapper, mapRateLimitSnapshot, toAgentModels, type MappedApproval } from "./mapping.js";
+import { initializeAppServer, spawnCodexAppServer, withEphemeralAppServer, type CodexProcess } from "./process.js";
 
 type Logger = Pick<Console, "info" | "warn" | "error">;
 
@@ -33,10 +41,34 @@ export interface CodexAdapterOptions {
   /** 기본 `MAM_CODEX_BIN` → `resolveBinary('codex')`. */
   binPath?: string;
   home?: string;
+  /** 한도 캐시(`usage/codex.json`)·모델 캐시(`models/codex.json`) 디렉토리. 기본 `<home>/.mam`. */
+  dataDir?: string;
   logger?: Logger;
   env?: NodeJS.ProcessEnv;
   requestTimeoutMs?: number;
   now?: () => Date;
+}
+
+/** `usage()` 는 저장소에 이 시간 안의 조회 결과가 있으면 그것을 쓴다(ADR-016). */
+export const USAGE_CACHE_TTL_MS = 60_000;
+export const MODELS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+const ModelsCacheSchema = z.object({
+  savedAt: z.string(),
+  models: z.array(
+    z.object({
+      id: z.string(),
+      displayName: z.string(),
+      description: z.string().nullable(),
+      isDefault: z.boolean(),
+      efforts: z.array(z.string()),
+      defaultEffort: z.string().nullable(),
+    }),
+  ),
+});
+
+function cloneModels(models: readonly AgentModel[]): AgentModel[] {
+  return models.map((m) => ({ ...m, efforts: [...m.efforts] }));
 }
 
 const MODE_MAP: Record<SessionMode, { approvalPolicy: AskForApproval; sandbox: SandboxMode }> = {
@@ -120,8 +152,15 @@ interface SessionConfig {
   proc: CodexProcess;
   threadId: string;
   start: StartOptions;
+  /** `thread/start`·`thread/resume` 응답의 모델과 effort. */
+  model: string;
+  reasoningEffort: string | null;
+  resumed: boolean;
   logger: Logger;
   now: () => Date;
+  /** `account/rateLimits/updated` 알림. 어댑터가 저장소에 병합한다. */
+  onRateLimits?: (rateLimits: RateLimitSnapshot) => void;
+  onClose?: () => void;
 }
 
 interface PendingApproval extends MappedApproval {
@@ -135,15 +174,25 @@ export class CodexSession implements AgentSession {
   private readonly mapper: CodexEventMapper;
   private readonly pending = new Map<string, PendingApproval>();
   private mode: SessionMode;
+  /** PATCH 로 바뀐 값. 다음 `turn/start` 의 `model`/`effort` 로 간다(PROTOCOL PATCH). */
+  private model: string | undefined;
+  private effort: string | undefined;
   private turnActive = false;
   private closed = false;
 
   constructor(private readonly cfg: SessionConfig) {
     this.nativeId = cfg.threadId;
     this.mode = cfg.start.mode;
+    this.model = cfg.start.model;
+    this.effort = cfg.start.effort;
     this.events = this.out;
-    this.mapper = new CodexEventMapper({ threadId: cfg.threadId, cwd: cfg.start.cwd, now: () => cfg.now().toISOString(), logger: cfg.logger });
+    this.mapper = new CodexEventMapper({ threadId: cfg.threadId, cwd: cfg.start.cwd, resumed: cfg.resumed, now: () => cfg.now().toISOString(), logger: cfg.logger });
     cfg.proc.peer.onNotification((method, params) => {
+      if (method === "account/rateLimits/updated") {
+        const n = params as AccountRateLimitsUpdatedNotification;
+        if (n && typeof n === "object" && n.rateLimits) cfg.onRateLimits?.(n.rateLimits);
+        return;
+      }
       for (const ev of this.mapper.map(method, params)) this.emit(ev);
     });
     cfg.proc.peer.onRequest((method, params) => this.handleRequest(method, params));
@@ -151,6 +200,14 @@ export class CodexSession implements AgentSession {
     cfg.proc.child.on("error", (err) => this.onExit(err.message));
     this.out.push({ type: "native_id", nativeId: cfg.threadId });
     this.out.push({ type: "status", status: "idle" });
+    // 스레드 응답의 모델 → Session.model. effort 는 시작 옵션이 우선, 없으면 스레드가 보고한 값.
+    const effort = this.effort ?? (cfg.reasoningEffort ? cfg.reasoningEffort : undefined);
+    this.out.push({ type: "usage", model: cfg.model, ...(effort !== undefined ? { effort } : {}) });
+  }
+
+  /** 열려 있는 JSON-RPC 피어(어댑터의 `usage()`/`listModels()` 용). 닫혔으면 undefined. */
+  get livePeer(): JsonRpcPeer | undefined {
+    return this.closed || this.cfg.proc.peer.isClosed ? undefined : this.cfg.proc.peer;
   }
 
   private emit(ev: AgentEvent): void {
@@ -171,7 +228,8 @@ export class CodexSession implements AgentSession {
       cwd: this.cfg.start.cwd,
       approvalPolicy,
       sandboxPolicy: toSandboxPolicy(sandbox, this.cfg.start.cwd),
-      ...(this.cfg.start.model ? { model: this.cfg.start.model } : {}),
+      ...(this.model ? { model: this.model } : {}),
+      ...(this.effort ? { effort: this.effort } : {}),
     };
     this.mapper.expectUserMessage();
     try {
@@ -255,16 +313,17 @@ export class CodexSession implements AgentSession {
     this.mode = mode;
   }
 
-  /** 스텁(step 3 에서 적용). 지금은 저장만 한다. */
-  pendingModel: string | undefined;
-  pendingEffort: string | undefined;
-
+  /** 다음 `turn/start` 부터 적용. 즉시 `usage { model }` 로 알린다(PROTOCOL PATCH). */
   async setModel(model: string): Promise<void> {
-    this.pendingModel = model;
+    if (this.closed) throw new ConflictError("Codex 세션이 닫혔습니다");
+    this.model = model;
+    this.out.push({ type: "usage", model });
   }
 
   async setEffort(effort: string): Promise<void> {
-    this.pendingEffort = effort;
+    if (this.closed) throw new ConflictError("Codex 세션이 닫혔습니다");
+    this.effort = effort;
+    this.out.push({ type: "usage", effort });
   }
 
   private onExit(detail: string): void {
@@ -275,6 +334,7 @@ export class CodexSession implements AgentSession {
     this.out.push({ type: "error", message: `Codex 프로세스가 예기치 않게 종료되었습니다 (${detail})`, recoverable: false });
     this.turnActive = false;
     this.out.end();
+    this.cfg.onClose?.();
     // 대기 승인의 cancel 회신이 마이크로태스크로 써진 뒤 피어를 닫는다.
     setImmediate(() => this.cfg.proc.peer.close());
   }
@@ -288,6 +348,7 @@ export class CodexSession implements AgentSession {
     await this.cfg.proc.kill();
     this.cfg.proc.peer.close();
     this.out.end();
+    this.cfg.onClose?.();
   }
 }
 
@@ -295,13 +356,24 @@ export class CodexAdapter implements AgentAdapter {
   readonly kind = "codex" as const;
   private readonly spawnFn: typeof spawnCodexAppServer;
   private readonly home: string;
+  private readonly dataDir: string;
   private readonly logger: Logger;
+  private readonly now: () => Date;
+  private readonly store: RateLimitStore;
+  private readonly sessions = new Set<CodexSession>();
+  /** 저장소 쓰기 직렬화(세션의 알림과 usage() 가 동시에 저장할 수 있다). */
+  private chain: Promise<void> = Promise.resolve();
+  private inflightUsage: Promise<AgentUsageSnapshot> | undefined;
+  private inflightModels: Promise<AgentModel[]> | undefined;
   private binPromise: Promise<string | null> | undefined;
 
   constructor(private readonly opts: CodexAdapterOptions = {}) {
     this.spawnFn = opts.spawnFn ?? spawnCodexAppServer;
     this.home = opts.home ?? homedir();
+    this.dataDir = opts.dataDir ?? join(this.home, ".mam");
     this.logger = opts.logger ?? console;
+    this.now = opts.now ?? (() => new Date());
+    this.store = new RateLimitStore(this.dataDir, { now: this.now });
   }
 
   private resolveBin(): Promise<string | null> {
@@ -323,13 +395,167 @@ export class CodexAdapter implements AgentAdapter {
     return probe;
   }
 
-  /** 스텁(step 3 이 채운다). */
-  async listModels(): Promise<AgentModel[]> {
-    return [];
+  private livePeer(): JsonRpcPeer | undefined {
+    for (const s of this.sessions) {
+      const peer = s.livePeer;
+      if (peer) return peer;
+    }
+    return undefined;
   }
 
-  async usage(): Promise<AgentUsageSnapshot> {
-    return { plan: null, live: false, observedAt: null, limits: [] };
+  /** 라이브 세션의 피어가 있으면 그것으로, 없으면 임시 app-server(항상 종료)로 `fn` 을 실행한다. */
+  private async withPeer<T>(fn: (peer: JsonRpcPeer) => Promise<T>): Promise<T> {
+    const live = this.livePeer();
+    if (live) return fn(live);
+    const binPath = await this.resolveBin();
+    if (!binPath) throw new AgentUnavailableError("codex 실행파일을 찾을 수 없습니다");
+    return withEphemeralAppServer(
+      {
+        binPath,
+        cwd: this.home,
+        env: this.opts.env ?? process.env,
+        logger: this.logger,
+        spawnFn: this.spawnFn,
+        ...(this.opts.requestTimeoutMs !== undefined ? { requestTimeoutMs: this.opts.requestTimeoutMs } : {}),
+      },
+      fn,
+    );
+  }
+
+  private persist(mutate: (prev: AgentUsageSnapshot | null) => AgentUsageSnapshot | null): Promise<void> {
+    this.chain = this.chain
+      .then(async () => {
+        const next = mutate(await this.store.load("codex"));
+        if (next) await this.store.save("codex", next);
+      })
+      .catch((err: unknown) => this.logger.warn(`[codex] 한도 저장 실패: ${errorMessage(err)}`));
+    return this.chain;
+  }
+
+  /** `account/rateLimits/updated` 는 부분 갱신이다. 있는 창과 plan 만 덮어쓴다. */
+  private mergeRateLimits(rateLimits: RateLimitSnapshot): Promise<void> {
+    const { plan, limits } = mapRateLimitSnapshot(rateLimits);
+    return this.persist((prev) => {
+      const merged = prev ? [...prev.limits] : [];
+      for (const l of limits) {
+        const idx = merged.findIndex((m) => m.id === l.id);
+        if (idx >= 0) merged[idx] = l;
+        else merged.push(l);
+      }
+      return { plan: plan ?? prev?.plan ?? null, live: true, observedAt: this.now(), limits: merged };
+    });
+  }
+
+  /** `account/rateLimits/read` + `account/read`(plan, 실패는 null). */
+  private async readUsage(peer: JsonRpcPeer): Promise<AgentUsageSnapshot> {
+    const res = await peer.request<GetAccountRateLimitsResponse>("account/rateLimits/read");
+    const { plan: planFromLimits, limits } = mapRateLimitSnapshot(res.rateLimits);
+    let plan = planFromLimits;
+    try {
+      const params: GetAccountParams = { refreshToken: false };
+      const account = await peer.request<GetAccountResponse>("account/read", params);
+      if (account.account?.type === "chatgpt") plan = account.account.planType || plan;
+      else if (account.account) plan = null;
+    } catch (err) {
+      this.logger.warn(`[codex] account/read 실패: ${errorMessage(err)}`);
+    }
+    return { plan, live: true, observedAt: this.now(), limits };
+  }
+
+  /** 60초 캐시 → 라이브/임시 피어로 즉시 조회(`live: true`) → 실패 시 마지막 저장값(`live: false`) 또는 빈 스냅샷. */
+  usage(): Promise<AgentUsageSnapshot> {
+    if (!this.inflightUsage) {
+      this.inflightUsage = this.usageUncached().finally(() => {
+        this.inflightUsage = undefined;
+      });
+    }
+    return this.inflightUsage;
+  }
+
+  private async usageUncached(): Promise<AgentUsageSnapshot> {
+    await this.chain;
+    const cached = await this.store.load("codex", USAGE_CACHE_TTL_MS);
+    if (cached) return cached;
+    try {
+      const snapshot = await this.withPeer((peer) => this.readUsage(peer));
+      await this.persist(() => snapshot);
+      return snapshot;
+    } catch (err) {
+      this.logger.warn(`[codex] 한도 조회 실패: ${errorMessage(err)}`);
+      const last = await this.store.load("codex");
+      return last ? { ...last, live: false } : { plan: null, live: false, observedAt: null, limits: [] };
+    }
+  }
+
+  private modelsCachePath(): string {
+    return join(this.dataDir, "models", "codex.json");
+  }
+
+  private async loadModelsCache(): Promise<{ models: AgentModel[]; ageMs: number } | null> {
+    let raw: string;
+    try {
+      raw = await readFile(this.modelsCachePath(), "utf8");
+    } catch {
+      return null;
+    }
+    let json: unknown;
+    try {
+      json = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    const parsed = ModelsCacheSchema.safeParse(json);
+    if (!parsed.success || parsed.data.models.length === 0) return null;
+    return { models: parsed.data.models, ageMs: this.now().getTime() - Date.parse(parsed.data.savedAt) };
+  }
+
+  private async saveModelsCache(models: AgentModel[]): Promise<void> {
+    const path = this.modelsCachePath();
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    const tmp = `${path}.${randomBytes(4).toString("hex")}.tmp`;
+    await writeFile(tmp, JSON.stringify({ savedAt: this.now().toISOString(), models }, null, 2), { encoding: "utf8", mode: 0o600 });
+    await rename(tmp, path);
+  }
+
+  /** `model/list { includeHidden: false }` 를 `nextCursor` 가 끝날 때까지 읽는다. */
+  private async readModels(peer: JsonRpcPeer): Promise<AgentModel[]> {
+    const models: AgentModel[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 50; page += 1) {
+      const params: ModelListParams = { includeHidden: false, ...(cursor ? { cursor } : {}) };
+      const res: ModelListResponse = await peer.request<ModelListResponse>("model/list", params);
+      models.push(...toAgentModels(res.data));
+      cursor = res.nextCursor;
+      if (!cursor) break;
+    }
+    if (models.length === 0) throw new Error("model/list 가 빈 목록을 돌려줬습니다");
+    return models;
+  }
+
+  /** 캐시(24시간) → 라이브/임시 피어의 `model/list` → 오래된 캐시 → 실패. */
+  listModels(): Promise<AgentModel[]> {
+    if (!this.inflightModels) {
+      this.inflightModels = this.listModelsUncached().finally(() => {
+        this.inflightModels = undefined;
+      });
+    }
+    return this.inflightModels;
+  }
+
+  private async listModelsUncached(): Promise<AgentModel[]> {
+    const cached = await this.loadModelsCache();
+    if (cached && cached.ageMs < MODELS_CACHE_TTL_MS) return cloneModels(cached.models);
+    try {
+      const models = await this.withPeer((peer) => this.readModels(peer));
+      await this.saveModelsCache(models);
+      return cloneModels(models);
+    } catch (err) {
+      if (cached) {
+        this.logger.warn(`[codex] 모델 목록 조회 실패, 오래된 캐시 사용: ${errorMessage(err)}`);
+        return cloneModels(cached.models);
+      }
+      throw err;
+    }
   }
 
   async start(start: StartOptions): Promise<CodexSession> {
@@ -344,25 +570,45 @@ export class CodexAdapter implements AgentAdapter {
     });
     const { approvalPolicy, sandbox } = toCodexPolicy(start.mode);
     let threadId: string;
+    let model: string;
+    let reasoningEffort: string | null;
+    const resumed = start.resumeNativeId !== undefined;
     try {
-      const init: InitializeParams = {
-        clientInfo: { name: "mam", title: "mac-agent-machine", version: SERVER_VERSION },
-        capabilities: { experimentalApi: true, requestAttestation: false },
-      };
-      await proc.peer.request<InitializeResponse>("initialize", init);
-      proc.peer.notify("initialized");
+      await initializeAppServer(proc.peer);
       if (start.resumeNativeId) {
         const params: ThreadResumeParams = { threadId: start.resumeNativeId, cwd: start.cwd, approvalPolicy, sandbox };
-        threadId = (await proc.peer.request<ThreadResumeResponse>("thread/resume", params)).thread.id;
+        const res = await proc.peer.request<ThreadResumeResponse>("thread/resume", params);
+        threadId = res.thread.id;
+        model = res.model;
+        reasoningEffort = res.reasoningEffort;
       } else {
         const params: ThreadStartParams = { cwd: start.cwd, approvalPolicy, sandbox, ...(start.model ? { model: start.model } : {}) };
-        threadId = (await proc.peer.request<ThreadStartResponse>("thread/start", params)).thread.id;
+        const res = await proc.peer.request<ThreadStartResponse>("thread/start", params);
+        threadId = res.thread.id;
+        model = res.model;
+        reasoningEffort = res.reasoningEffort;
       }
     } catch (err) {
       proc.peer.close();
       await proc.kill(false);
       throw new AgentUnavailableError(`Codex 시작 실패: ${errorMessage(err)}`);
     }
-    return new CodexSession({ proc, threadId, start, logger: this.logger, now: this.opts.now ?? (() => new Date()) });
+    let session: CodexSession | undefined;
+    session = new CodexSession({
+      proc,
+      threadId,
+      start,
+      model,
+      reasoningEffort,
+      resumed,
+      logger: this.logger,
+      now: this.now,
+      onRateLimits: (rateLimits) => void this.mergeRateLimits(rateLimits),
+      onClose: () => {
+        if (session) this.sessions.delete(session);
+      },
+    });
+    this.sessions.add(session);
+    return session;
   }
 }
