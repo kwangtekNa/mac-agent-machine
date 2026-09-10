@@ -1,0 +1,72 @@
+{
+  "project": "mac-agent-machine",
+  "phase": "2-usage-and-files",
+  "steps": [
+    {
+      "step": 0,
+      "name": "protocol-additions",
+      "status": "pending"
+    },
+    {
+      "step": 1,
+      "name": "server-usage-core",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 2,
+      "name": "claude-usage-models",
+      "status": "pending",
+      "depends_on": [
+        1
+      ]
+    },
+    {
+      "step": 3,
+      "name": "codex-usage-models",
+      "status": "pending",
+      "depends_on": [
+        1
+      ]
+    },
+    {
+      "step": 4,
+      "name": "ios-models-client",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 5,
+      "name": "ios-files-tab-mkdir",
+      "status": "pending",
+      "depends_on": [
+        1,
+        4
+      ]
+    },
+    {
+      "step": 6,
+      "name": "ios-usage-ui",
+      "status": "pending",
+      "depends_on": [
+        1,
+        4
+      ]
+    },
+    {
+      "step": 7,
+      "name": "verify-and-install",
+      "status": "pending",
+      "depends_on": [
+        2,
+        3,
+        5,
+        6
+      ]
+    }
+  ]
+}

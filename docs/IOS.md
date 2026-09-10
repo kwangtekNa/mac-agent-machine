@@ -141,6 +141,29 @@ iPad(regular): `NavigationSplitView` 3열. 사이드바 = 프로젝트·세션, 
 - UI: step 8에서 XCUITest 1개. `bash scripts/dev-smoke.sh --keep`으로 띄운 개발 서버(`MAM_UI_TEST_SERVER=http://127.0.0.1:7777` 환경변수)에 연결 → 새 세션 → "hello" 전송 → 승인 배너 표시 → 허용 → 완료 행 확인.
 - 게이트: `scripts/test.sh`가 `ios/project.yml`을 보고 `xcodegen generate && xcodebuild test -scheme MacAgent -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`를 돌린다. `MAM_TEST_SKIP_IOS=1`로 생략 가능.
 
-## 9. 범위 밖 (Phase 1)
+## 9. 2차 추가분 (2026-09-10, Phase `2-usage-and-files`)
+
+첫 실기기 사용 후 나온 요구: 파일 목록이 작업 중에 보여야 하고, 작업 디렉토리를 고를 때 폴더를 만들 수 있어야 하며, 컨텍스트·사용량·모델을 볼 수 있어야 한다.
+
+### 9.1 세션 화면의 "대화 | 파일" 세그먼트
+
+- 세션 화면 상단(내비게이션 바 바로 아래)에 `Picker(.segmented)`: **대화** / **파일**. 파일 쪽 라벨은 이 세션에서 변경된 파일 수를 붙인다(`파일 3`). 변경 수는 타임라인의 `file_change` 아이템에서 경로를 모아 센다(클라이언트 계산, 프로토콜 변경 없음). 0이면 그냥 "파일".
+- 파일 탭은 지금의 `FileBrowserView`를 시트가 아니라 **인라인**으로 보여준다(루트 = 세션 cwd). 탭을 오가도 탐색 위치가 유지된다(`FileBrowserModel`은 `AppState`가 세션별로 보관). 툴바의 폴더 아이콘은 없앤다.
+- 대화 탭의 컴포저와 승인 배너는 파일 탭에서도 하단에 그대로 남는다(승인을 놓치지 않게).
+- iPad(regular)는 3열 그대로이며 세그먼트는 숨긴다.
+
+### 9.2 디렉토리 피커와 새 폴더
+
+- 새 세션 시트의 "디렉토리" 행은 세 가지 진입점: 프로젝트 목록에서 선택, **찾아보기**(`DirectoryPickerView`), 직접 입력.
+- `DirectoryPickerView`: 홈(`~`)에서 시작하는 디렉토리 전용 브라우저(`FileBrowserModel`의 dirs-only 모드, 숨김 폴더 토글, git 배지). 하단 고정 버튼 "이 폴더 선택". 툴바 **새 폴더** → 이름 입력 알림 → `POST /fs/mkdir` → 만든 폴더로 들어간다. 이름 검증(빈 값, `/`, 제어 문자)은 제출 전에 막고 서버 400/409 메시지도 그대로 보여준다.
+
+### 9.3 컨텍스트·사용량·모델
+
+- **컨텍스트 게이지**: 세션 화면 제목 아래 부제를 `컨텍스트 21% · 42k/200k`로 바꾸고 얇은 `ProgressView(value:)`를 붙인다. 색은 60% 미만 기본(`.tint`), 60% 이상 `.yellow`, 85% 이상 `.red`. `usage.context`가 `null`이면 부제는 기존 상태 텍스트. 탭하면 세션 정보 시트.
+- **세션 정보 시트** 확장: 섹션 "사용량"(입력·출력·캐시 읽기·캐시 쓰기 토큰, 비용, 턴 수, 마지막 갱신), 섹션 "모델"(`GET /models`로 채운 `Picker`, 변경 즉시 `PATCH`), 섹션 "사고 수준"(선택 모델의 `efforts`가 비어 있지 않을 때만, `PATCH`), 섹션 "구독 한도"(요약 두 줄 + "설정에서 자세히").
+- **설정 > 구독 사용 한도**: 에이전트별 카드. 요금제 이름, 창마다 `ProgressView`와 `42% · 3시간 후 초기화`. Claude는 `live: false`라 "마지막 관측 HH:mm" 캡션, Codex는 새로고침 버튼으로 즉시 재조회. `warning`은 노랑, `exceeded`는 빨강 + "한도 도달". 화면 등장 시 1회 조회, 이후 60초마다.
+- 숫자 표기: 토큰은 `Formatters.tokens`(1.2k, 3.4M), 비용은 `$0.42`, 초기화 시각은 상대 시간.
+
+## 10. 범위 밖 (Phase 1)
 
 - 파일 편집·업로드, 터미널, 푸시 알림(APNs, Phase 3), 여러 서버 동시 관리(서버 1개만 저장), 세션 검색, 위젯·Live Activity, iPad 멀티윈도우.

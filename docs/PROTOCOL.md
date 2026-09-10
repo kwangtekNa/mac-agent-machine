@@ -54,19 +54,32 @@ Session:
   "cwd": "/Users/alice/work/app",
   "title": "로그인 버그 수정",
   "mode": "ask",
-  "model": null,
+  "model": "claude-opus-5",
+  "effort": "high",
   "status": "idle",
   "nativeId": "7f3c...",
   "createdAt": "2026-09-09T10:00:00Z",
   "updatedAt": "2026-09-09T10:12:00Z",
   "lastSeq": 42,
   "pendingApprovals": 0,
-  "preview": "테스트가 통과했습니다."
+  "preview": "테스트가 통과했습니다.",
+  "usage": {
+    "inputTokens": 12000,
+    "outputTokens": 3400,
+    "cacheReadTokens": 90000,
+    "cacheWriteTokens": 5000,
+    "costUsd": 0.42,
+    "turns": 3,
+    "context": { "tokens": 42000, "window": 200000, "percent": 21 },
+    "updatedAt": "2026-09-09T10:12:00Z"
+  }
 }
 ```
 
 - `status`: `starting | idle | running | waiting_approval | error | closed`
 - `mode`: `ask | auto-edit | full-auto | plan` (매핑은 4절)
+- `model`, `effort`: 어댑터가 보고한 현재 값. 모르면 `null`. `effort`는 `low | medium | high | xhigh | max`(Claude) 또는 Codex의 reasoning effort 문자열.
+- `usage`(2026-09-10 추가): 이 세션의 **누적** 토큰과 비용, 현재 컨텍스트 사용량. 첫 턴 전에는 `null`. `costUsd`는 어댑터가 추정값을 주지 않으면 `null`(Codex 구독 계정). `context`는 마지막 턴 기준 컨텍스트 크기(`tokens`)와 모델 컨텍스트 창(`window`), 백분율(`percent`, 정수 0~100). 모르면 `null`. 어댑터별 산출식은 5절.
 
 ### `POST /sessions`
 
@@ -78,7 +91,7 @@ Session:
 
 ### `PATCH /sessions/:id`
 
-`{ "title"?: "...", "mode"?: "..." }` → Session.
+`{ "title"?: "...", "mode"?: "...", "model"?: "...", "effort"?: "..." }` → Session. `model`/`effort`는 `GET /models`가 준 값이어야 하며(400), 적용 시점은 어댑터가 정한다(Claude: 모델은 즉시, effort는 다음 턴에 프로세스를 `resume`으로 재시작해 적용. Codex: 둘 다 다음 `turn/start`).
 
 ### `POST /sessions/:id/close`
 
@@ -124,6 +137,46 @@ WS 없이도 응답할 수 있는 REST 경로. 본문은 WS `approval.respond`�
 
 `{ "patch": "diff --git a/... " }` unified diff. `path` 생략 시 전체.
 
+### `POST /fs/mkdir` (2026-09-10 추가)
+
+요청 `{ "path": "/Users/alice/work/new-app" }` 또는 `~/work/new-app`. 홈 아래여야 하고(403) 부모 디렉토리는 함께 만든다. 이미 있으면 409 `conflict`. 이름에 제어 문자가 있거나 빈 세그먼트면 400. → 201 `{ "entry": <FsEntry> }`.
+
+### `GET /usage` (2026-09-10 추가)
+
+에이전트별 구독 사용 한도. Codex는 호출 시점에 조회(`live: true`), Claude는 세션 실행 중 관측된 마지막 값(`live: false`, `observedAt`이 관측 시각).
+
+```json
+{
+  "agents": [
+    {
+      "kind": "claude", "plan": "max", "live": false, "observedAt": "2026-09-10T03:40:00Z",
+      "limits": [
+        { "id": "five_hour", "label": "5시간", "usedPercent": 42, "windowMinutes": 300, "resetsAt": "2026-09-10T06:00:00Z", "status": "ok" },
+        { "id": "seven_day", "label": "주간", "usedPercent": 81, "windowMinutes": 10080, "resetsAt": "2026-09-14T00:00:00Z", "status": "warning" }
+      ]
+    },
+    {
+      "kind": "codex", "plan": "plus", "live": true, "observedAt": "2026-09-10T04:10:00Z",
+      "limits": [
+        { "id": "primary", "label": "5시간", "usedPercent": 12, "windowMinutes": 300, "resetsAt": "...", "status": "ok" },
+        { "id": "secondary", "label": "주간", "usedPercent": 35, "windowMinutes": 10080, "resetsAt": "...", "status": "ok" }
+      ]
+    }
+  ]
+}
+```
+
+- `status`: `usedPercent < 80` → `ok`, `80 이상` → `warning`, `100 이상` 또는 어댑터가 거부 상태를 보고하면 `exceeded`.
+- 관측값이 전혀 없으면 `limits: []`, `observedAt: null`. `plan`은 모르면 `null`. `windowMinutes`, `resetsAt`은 모르면 `null`.
+
+### `GET /models?agent=claude|codex` (2026-09-10 추가)
+
+```json
+{ "models": [ { "id": "claude-opus-5", "displayName": "Opus 5", "description": "가장 뛰어난 모델", "isDefault": true, "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high" } ] }
+```
+
+`efforts`가 빈 배열이면 그 모델은 effort 조절을 지원하지 않는다. `description`, `defaultEffort`는 모르면 `null`.
+
 ### 로그인 플로우
 
 - `POST /auth/:agent/login` → `{ "flowId": "flw_...", "url": "https://...", "instructions": "브라우저에서 열고 코드를 붙여넣으세요", "needsCode": true }`
@@ -148,6 +201,7 @@ WS 없이도 응답할 수 있는 REST 경로. 본문은 WS `approval.respond`�
 | `approval.requested` | `approval` | 승인 요청. 세션 상태는 `waiting_approval` |
 | `approval.resolved` | `approvalId`, `optionId`, `by`: `client | timeout | system` | 승인 처리 완료 |
 | `session.status` | `status`, `mode`, `reason`? | 상태 변화 |
+| `session.usage` | `usage` (Session.usage 와 같은 객체) | 누적 사용량·컨텍스트 갱신(2026-09-10 추가). 턴 종료 시, Codex는 턴 중에도 |
 | `turn.completed` | `turnId`, `durationMs`, `usage`: `{ inputTokens, outputTokens, cacheReadTokens? }`, `costUsd`?, `stopReason` | 턴 종료 |
 | `error` | `message`, `recoverable` | 세션 오류 |
 | `pong` | | ping 응답 |
@@ -232,6 +286,8 @@ Claude Agent SDK → TimelineItem:
 - `canUseTool` → `approval` (kind: Bash → `command`, Edit/Write → `file_change`, 나머지 → `permission`). `options`: `allow`, `allow_session`(suggestions가 있을 때만), `deny`
 - `result` → `turn_summary` + `turn.completed`
 - `system/init` → `session.status` (`idle`), `compact_boundary` → `system`
+- 사용량(2026-09-10 추가): `result.usage`(이번 턴의 메인 루프)에서 토큰 델타 = `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`. 비용 델타 = `result.total_cost_usd`(프로세스 누적)에서 직전 값을 뺀 것. 컨텍스트 `tokens` = 이번 턴의 `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`, `window` = `result.modelUsage[*].contextWindow` 중 최댓값. 구독 한도는 `rate_limit_event`(`rate_limit_info.rateLimitType`(`five_hour | seven_day | …`), `utilization`, `resetsAt`, `status`)를 관측해 사용자별로 저장한다. 모델 목록은 `Query.supportedModels()`(`value`, `displayName`, `description`, `supportedEffortLevels`). 모델 변경은 `Query.setModel()`, effort는 `Options.effort`로 프로세스 재시작(`resume`) 시 적용
+- `system/init.model` → `Session.model`
 
 Codex app-server → TimelineItem:
 
@@ -241,3 +297,5 @@ Codex app-server → TimelineItem:
 - `account/login/start { type: "chatgptDeviceCode" }` → `{ loginId, verificationUrl, userCode }`, 완료는 `account/login/completed` 알림. 로그인 플로우(1절)의 Codex 구현은 이것을 쓴다
 - `turn/completed` → `turn_summary` + `turn.completed`, `thread/tokenUsage/updated` → usage 누적
 - `turn/started` → `session.status(running)`, `error` 알림 → `error`
+- 사용량(2026-09-10 추가): `thread/tokenUsage/updated { tokenUsage: { total, last, modelContextWindow } }`. 토큰 델타는 `total`의 이전 관측치 대비 증가분(`inputTokens`, `outputTokens`, `cachedInputTokens`, `cacheWriteInputTokens`), 컨텍스트 `tokens` = `last.totalTokens`, `window` = `modelContextWindow`. 비용은 `null`(구독). 구독 한도는 `account/rateLimits/read` → `rateLimits.primary/secondary { usedPercent, windowDurationMins, resetsAt(epoch 초) }`와 `account/rateLimits/updated` 알림. `plan`은 `account/read`의 `account.planType`. 모델 목록은 `model/list`(`hidden` 제외; `id`, `displayName`, `description`, `isDefault`, `supportedReasoningEfforts[].reasoningEffort`, `defaultReasoningEffort`). 모델·effort 변경은 다음 `turn/start`의 `model`, `effort`
+- `thread/start` 응답의 모델 → `Session.model`

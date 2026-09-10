@@ -91,6 +91,12 @@
 
 - 결정: `ask`, `auto-edit`, `full-auto`, `plan`. 매핑은 `docs/PROTOCOL.md` 4절. `full-auto`는 앱에서 별도 확인 후에만 설정 가능하며 서버는 기본값을 `ask`로 강제한다.
 
+## ADR-016 사용량·컨텍스트는 어댑터가 관측한 값을 누적, 구독 한도는 관측/조회 혼합
+
+- 배경: 사용자가 폰에서 컨텍스트 사용률, 누적 토큰·비용, 모델·사고 수준, 구독 한도를 보고 싶어 한다. Claude Agent SDK는 `result.usage`(턴별)와 `result.modelUsage[*].contextWindow`, `rate_limit_event`(5시간/주간 창 이용률)를 세션 실행 중에만 준다. Codex app-server는 `thread/tokenUsage/updated`(누적·마지막·컨텍스트 창)와 언제든 호출 가능한 `account/rateLimits/read`, `model/list`를 준다.
+- 결정: (1) 세션 누적 사용량은 SessionManager가 어댑터의 `usage` 이벤트(턴별 델타 + 컨텍스트 스냅샷)를 더해 `Session.usage`로 영속화하고 `session.usage` 이벤트로 내보낸다. (2) 구독 한도는 `GET /usage`로 통일하되 Claude는 마지막 관측값(`~/.mam/usage/claude.json`, `live: false`), Codex는 즉시 조회(`live: true`)다. (3) 모델 목록은 `GET /models`로 통일하고 Claude는 라이브 세션에서 `supportedModels()`를 캐시, 없으면 정적 기본 목록. (4) 모델·effort 변경은 `PATCH /sessions/:id`이며 적용 시점은 어댑터가 정한다.
+- 결과: 프로토콜은 추가만 있고 기존 클라이언트는 깨지지 않는다. Claude 한도는 턴을 한 번 돌려야 갱신되며 앱은 관측 시각을 표시한다. 비용은 추정치이며 Codex 구독 계정은 `null`.
+
 ## 미결 사항
 
 | 항목 | 결정 시점 |
