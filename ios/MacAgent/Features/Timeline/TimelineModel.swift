@@ -16,6 +16,9 @@ enum ApprovalSubmitState: Equatable, Sendable {
 final class TimelineModel {
     typealias SocketFactory = @MainActor (_ sessionId: String, _ since: Int) -> SessionSocket
 
+    /// `GET /models` 캐시 시간.
+    static let modelsCacheDuration: TimeInterval = 5 * 60
+
     let sessionId: String
     private(set) var session: Session?
     /// seq 오름차순.
@@ -40,7 +43,17 @@ final class TimelineModel {
     /// 이 세션의 `file_change` 아이템이 바꾼 경로 집합(IOS.md 9.1 "파일 N" 배지). upsert 때마다 더하고 전체를 다시 세지 않는다.
     private(set) var changedFilePaths: Set<String> = []
 
+    /// `PATCH /sessions/:id`(모델·사고 수준) 진행 중. 피커는 이 동안 비활성.
+    private(set) var isPatching = false
+    /// `GET /models?agent=` 결과. 시트를 열 때 읽고 `modelsCacheDuration` 동안 캐시한다.
+    private(set) var models: [ModelOption] = []
+    private(set) var modelsError: String?
+    private(set) var isLoadingModels = false
+
     var changedFileCount: Int { changedFilePaths.count }
+
+    /// 마지막 턴 기준 컨텍스트(IOS.md 9.3). `usage.context` 가 없으면 nil.
+    var contextUsage: ContextUsage? { session?.usage?.context }
 
     var socketState: SessionSocket.State { socket?.state ?? .idle }
 
@@ -53,6 +66,9 @@ final class TimelineModel {
     @ObservationIgnored private var indexById: [String: Int] = [:]
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
     @ObservationIgnored private var transientTask: Task<Void, Never>?
+    /// `session.usage` 가 스냅샷보다 먼저 왔을 때 보관. 스냅샷의 `lastSeq` 보다 새로우면 스냅샷 위에 덮는다.
+    @ObservationIgnored private var pendingUsage: (seq: Int, usage: SessionUsage)?
+    @ObservationIgnored private var modelsLoadedAt: Date?
     @ObservationIgnored private let logger = Logger(subsystem: "dev.mam.MacAgent", category: "TimelineModel")
 
     init(
@@ -156,7 +172,12 @@ final class TimelineModel {
             fatalError = e.status == .error ? (e.reason ?? ErrorMessages.sessionError) : nil
         case .sessionUsage(let e):
             // 누적 사용량·컨텍스트만 갱신한다. 아이템·상태는 바뀌지 않는다.
-            session?.usage = e.usage
+            // 세션이 아직 없으면(스냅샷 전) 보관했다가 스냅샷보다 새로울 때만 적용한다.
+            if session != nil {
+                session?.usage = e.usage
+            } else {
+                pendingUsage = (seq: e.seq, usage: e.usage)
+            }
         case .turnCompleted:
             break
         case .error(let e):
@@ -186,6 +207,11 @@ final class TimelineModel {
     }
 
     private func applySession(_ s: Session) {
+        var s = s
+        if let pending = pendingUsage {
+            if pending.seq > s.lastSeq { s.usage = pending.usage }
+            pendingUsage = nil
+        }
         session = s
         status = s.status
         mode = s.mode
@@ -389,6 +415,45 @@ final class TimelineModel {
             try await socket?.send(.sessionSetMode(mode: mode))
         } catch {
             showTransient(ErrorMessages.sendFailed)
+        }
+    }
+
+    // MARK: - 모델·사고 수준 (IOS.md 9.3)
+
+    /// `PATCH /sessions/:id { model }`. 응답 Session 으로 교체한다(낙관적 갱신 없음). 실패는 배너 문구.
+    func setModel(_ model: String) async {
+        await patch(PatchSessionRequest(model: model))
+    }
+
+    /// `PATCH /sessions/:id { effort }`. 적용 시점은 어댑터가 정한다(다음 턴부터).
+    func setEffort(_ effort: String) async {
+        await patch(PatchSessionRequest(effort: effort))
+    }
+
+    private func patch(_ request: PatchSessionRequest) async {
+        guard !isPatching else { return }
+        isPatching = true
+        defer { isPatching = false }
+        do {
+            let updated = try await client.patchSession(id: sessionId, request)
+            applySession(updated)
+        } catch {
+            showTransient(ErrorMessages.message(for: error))
+        }
+    }
+
+    /// `GET /models?agent=`. 세션(에이전트)을 모르면 읽지 않는다. `force` 가 아니면 `modelsCacheDuration` 안에는 캐시를 쓴다.
+    func loadModels(force: Bool = false, now: Date = .now) async {
+        guard let agent = session?.agent else { return }
+        if !force, let loadedAt = modelsLoadedAt, now.timeIntervalSince(loadedAt) < Self.modelsCacheDuration { return }
+        isLoadingModels = true
+        defer { isLoadingModels = false }
+        do {
+            models = try await client.models(agent: agent)
+            modelsLoadedAt = now
+            modelsError = nil
+        } catch {
+            modelsError = ErrorMessages.message(for: error)
         }
     }
 }

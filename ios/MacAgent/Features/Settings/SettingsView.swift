@@ -5,6 +5,8 @@ struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var loginAgent: AgentKind?
+    /// 구독 사용 한도 요약(설정 행 인라인)과 상세 화면이 같은 모델을 쓴다.
+    @State private var usageModel: UsageLimitsModel?
 
     var body: some View {
         NavigationStack {
@@ -12,6 +14,7 @@ struct SettingsView: View {
                 if case .connected(let me) = appState.connection {
                     serverSection(me)
                     agentsSection(me)
+                    usageSection
                 }
                 infoSection
             }
@@ -24,6 +27,12 @@ struct SettingsView: View {
             }
             .sheet(item: $loginAgent) { agent in
                 AgentLoginView(agent: agent)
+            }
+            .task {
+                guard usageModel == nil, let client = appState.client else { return }
+                let model = UsageLimitsModel(client: client)
+                usageModel = model
+                await model.load()
             }
         }
     }
@@ -49,6 +58,26 @@ struct SettingsView: View {
                     info: me.agents.first { $0.kind == kind },
                     login: { loginAgent = kind }
                 )
+            }
+        }
+    }
+
+    /// "구독 사용 한도" → 상세 화면. 인라인 요약은 에이전트별 가장 높은 `usedPercent` 한 줄(IOS.md 9.3).
+    @ViewBuilder
+    private var usageSection: some View {
+        if let usageModel {
+            Section("구독 사용 한도") {
+                NavigationLink {
+                    UsageLimitsView(model: usageModel)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("사용 한도 보기")
+                        if let summary = UsageLimitsModel.summaryLine(usageModel.agents) {
+                            Text(summary).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .accessibilityIdentifier("settings.usageLimits")
             }
         }
     }

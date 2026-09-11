@@ -68,3 +68,47 @@ extension Formatters {
         return String(format: "%.1f", rounded)
     }
 }
+
+/// 2026-09-10 추가분(IOS.md 9.3): 컨텍스트 부제·시트 표기, 구독 한도 초기화 시각.
+extension Formatters {
+    /// 세션 제목 아래 부제 `컨텍스트 21% · 42k/200k`.
+    static func contextLine(tokens: Int, window: Int, percent: Int) -> String {
+        String(localized: "컨텍스트 \(percent)% · \(Self.tokens(tokens))/\(Self.tokens(window))")
+    }
+
+    /// 세션 정보 시트의 컨텍스트 행 `42k / 200k (21%)`.
+    static func contextDetail(tokens: Int, window: Int, percent: Int) -> String {
+        "\(Self.tokens(tokens)) / \(Self.tokens(window)) (\(percent)%)"
+    }
+
+    /// 구독 한도 한 줄 `42% · 3시간 후 초기화`. `resetsAt` 이 없으면 백분율만.
+    static func resetLine(usedPercent: Int, resetsAt: Date?, now: Date = .now, calendar: Calendar = .current) -> String {
+        guard let resetsAt else { return "\(usedPercent)%" }
+        let when = resetDescription(resetsAt, now: now, calendar: calendar)
+        return String(localized: "\(usedPercent)% · \(when) 초기화")
+    }
+
+    /// 초기화 시각의 상대 표현: 지났으면 "곧", 1시간 안이면 "25분 후", 같은 날이면 "3시간 후",
+    /// 다음 날이면 "내일 09:00", 그 뒤는 "9월 14일 12:00". 날짜 경계는 `relativeTime` 처럼 달력 기준이다.
+    static func resetDescription(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
+        let seconds = date.timeIntervalSince(now)
+        if seconds < 60 { return String(localized: "곧") }
+        if seconds < 3600 { return String(localized: "\(Int(seconds / 60))분 후") }
+
+        let dayDistance = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)
+        ).day ?? 0
+        if dayDistance <= 0 { return String(localized: "\(Int(seconds / 3600))시간 후") }
+
+        let time = clock(date, calendar: calendar)
+        if dayDistance == 1 { return String(localized: "내일 \(time)") }
+        let components = calendar.dateComponents([.month, .day], from: date)
+        return String(localized: "\(components.month ?? 0)월 \(components.day ?? 0)일 \(time)")
+    }
+
+    /// `HH:mm`. 달력(시간대)을 지정할 수 있어 테스트가 결정적이다.
+    static func clock(_ date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        return String(format: "%02d:%02d", components.hour ?? 0, components.minute ?? 0)
+    }
+}

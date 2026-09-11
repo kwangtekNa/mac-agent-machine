@@ -97,9 +97,14 @@ private struct TimelineScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 0) {
-                    Text(title).font(.headline).lineLimit(1)
-                    Text(statusText).font(.caption).foregroundStyle(.secondary)
+                // 부제는 컨텍스트(idle/running)가 있으면 `컨텍스트 21% · 42k/200k`, 아니면 상태 텍스트(IOS.md 9.3).
+                ContextGaugeView(
+                    title: title,
+                    statusText: statusText,
+                    gauge: ContextGaugeState.make(status: model.status, context: model.contextUsage),
+                    tint: model.contextTint
+                ) {
+                    showsInfo = true
                 }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -124,7 +129,7 @@ private struct TimelineScreen: View {
             }
         }
         .sheet(isPresented: $showsInfo) {
-            SessionInfoSheet(session: currentSession, onClose: closeSession)
+            SessionInfoSheet(model: model, session: currentSession, client: client, onClose: closeSession)
         }
         .sheet(item: $detailApproval) { approval in
             ApprovalSheet(model: model, approvalId: approval.approvalId)
@@ -264,56 +269,6 @@ private struct TimelineItemRow: View {
         case .turnSummary(let p): TurnSummaryRow(payload: p)
         case .error(let p): ErrorCard(item: item, payload: p, onRetry: onRetry)
         case .system(let p): SystemRow(payload: p)
-        }
-    }
-}
-
-/// 세션 정보 시트: cwd, agent, nativeId, 생성 시각, "세션 닫기".
-private struct SessionInfoSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let session: Session?
-    let onClose: () async -> Void
-    @State private var isClosing = false
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if let session {
-                    Section {
-                        LabeledContent("디렉토리") {
-                            Text(session.cwd).font(.caption.monospaced()).multilineTextAlignment(.trailing)
-                        }
-                        LabeledContent("에이전트", value: session.agent.displayName)
-                        LabeledContent("모드", value: session.mode.rawValue)
-                        LabeledContent("상태", value: session.status.label)
-                        LabeledContent("네이티브 ID") {
-                            Text(session.nativeId ?? String(localized: "없음")).font(.caption.monospaced())
-                        }
-                        LabeledContent("생성", value: session.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    }
-                    if session.status != .closed {
-                        Section {
-                            Button("세션 닫기", role: .destructive) {
-                                Task {
-                                    isClosing = true
-                                    await onClose()
-                                    isClosing = false
-                                }
-                            }
-                            .disabled(isClosing)
-                        }
-                    }
-                } else {
-                    ContentUnavailableView("세션을 찾을 수 없습니다", systemImage: "questionmark.circle")
-                }
-            }
-            .navigationTitle("세션 정보")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("완료") { dismiss() }
-                }
-            }
         }
     }
 }
