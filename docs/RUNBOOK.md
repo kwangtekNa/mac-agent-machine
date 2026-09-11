@@ -48,6 +48,7 @@ authorized_keys 에 공개키 추가
 3. Claude 로그인: SSH 세션에서 `claude login`이면 충분하다. Keychain이 잠긴 SSH 세션에서는 Claude Code가 자격증명을 `~/.claude/.credentials.json`에 자동 저장하며 서버가 이를 그대로 읽는다(ADR-008). 대안으로 앱에서 로그인하는 흐름(`claude setup-token`)이 있다. 앱 로그인이 만드는 `~/.mam/secrets/claude-oauth-token`은 `/login` 자격증명보다 우선하므로 계정을 바꾸려면 이 파일을 지워야 한다. 이 토큰은 1년 후 만료된다.
 4. Codex 로그인: SSH에서 `codex login`(출력된 URL을 브라우저에서 열기) 또는 앱의 device code 흐름.
 5. MacAgent 앱에 `https://<hostname>`을 입력한다. 로그인 화면은 없다. 접속 기기의 Tailscale 신원으로 자동 매핑된다.
+6. 앱에서 사용 한도 보기: 설정 > 구독 사용 한도(또는 세션 정보 시트의 "구독 한도"). Codex 는 열 때마다 즉시 조회되지만, Claude 한도는 세션을 한 번 돌려야(턴을 보내야) 관측값이 갱신되며 카드에 "마지막 관측 HH:mm" 이 표시된다.
 
 
 ### iPhone에 설치 (개발 빌드, TestFlight 는 Phase 3)

@@ -56,6 +56,28 @@ final class FileBrowserModelTests: XCTestCase {
         Data("{\"error\":{\"code\":\"\(code)\",\"message\":\"\(message)\"}}".utf8)
     }
 
+    /// "파일" 탭의 제자리 탐색(IOS.md 9.1): 현재 디렉토리와 상위 이름은 stack 만 따라간다.
+    func testCurrentDirectoryPathAndParentNameFollowStack() {
+        let model = makeModel()
+        XCTAssertEqual(model.currentDirectoryPath, rootPath)
+        XCTAssertNil(model.parentName)
+
+        model.push(rootPath + "/src")
+        XCTAssertEqual(model.currentDirectoryPath, rootPath + "/src")
+        XCTAssertEqual(model.parentName, "app")
+
+        model.push(rootPath + "/src/lib")
+        XCTAssertEqual(model.currentDirectoryPath, rootPath + "/src/lib")
+        XCTAssertEqual(model.parentName, "src")
+
+        model.pop()
+        XCTAssertEqual(model.currentDirectoryPath, rootPath + "/src")
+        model.pop()
+        XCTAssertNil(model.parentName)
+        model.pop()
+        XCTAssertEqual(model.currentDirectoryPath, rootPath, "루트에서 pop 은 아무 일도 하지 않는다")
+    }
+
     func testLoadRootFromFixture() async throws {
         install([(200, try FixtureLoader.data("rest/fs-list.json"))])
         let model = makeModel()

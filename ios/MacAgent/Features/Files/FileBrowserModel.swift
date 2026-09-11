@@ -77,6 +77,17 @@ final class FileBrowserModel {
         stack.last?.path ?? serverPath(of: rootPath)
     }
 
+    /// 지금 보고 있는 디렉토리의 조회 키(루트 또는 `stack` 마지막). 세션 화면 "파일" 탭이 같은 자리에서 목록을 교체할 때 쓴다(IOS.md 9.1).
+    var currentDirectoryPath: String {
+        stack.last?.path ?? rootPath
+    }
+
+    /// 한 단계 위 디렉토리 이름. 루트를 보고 있으면 nil(루트 위로는 올라가지 않는다). "파일" 탭 상단 "‹ 상위" 버튼 라벨.
+    var parentName: String? {
+        guard !stack.isEmpty else { return nil }
+        return stack.count >= 2 ? stack[stack.count - 2].name : root.name
+    }
+
     /// 홈 절대 경로 아래의 `target` 까지 내려가는 중간 디렉토리 목록(홈 제외, target 포함). `~/x` 는 홈 기준으로 푼다.
     /// 홈 자신이나 홈 밖 경로는 빈 배열이다(피커는 홈 위로 가지 않는다).
     nonisolated static func pathsUnderHome(_ home: String, target: String) -> [String] {

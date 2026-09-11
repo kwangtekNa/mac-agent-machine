@@ -54,7 +54,9 @@ private struct TimelineScreen: View {
             if onToggleFiles == nil {
                 Picker("", selection: $tab) {
                     Text("대화").tag(SessionTab.chat)
+                        .accessibilityIdentifier("timeline.tab.chat")
                     Text(filesLabel).tag(SessionTab.files)
+                        .accessibilityIdentifier("timeline.tab.files")
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16)

@@ -40,11 +40,24 @@ final class ApprovalFlowUITests: XCTestCase {
             toggle.tap()
         }
         XCTAssertTrue(pathField.waitForExistence(timeout: 5))
-        pathField.tap()
+        // "직접 입력" 을 열면 선택돼 있던 프로젝트 경로가 미리 채워진다. 끝에 커서를 두고 지운 뒤 입력한다.
+        pathField.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+        if let existing = pathField.value as? String, !existing.isEmpty, existing != "~/work/my-app" {
+            pathField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count + 4))
+        }
         pathField.typeText("~/.mam")
         capture(app, shots, "1-new-session")
 
-        app.buttons["세션 시작"].tap()
+        // Form 은 지연 생성이라 프로젝트 목록이 길면 "세션 시작" 행이 화면 밖(키보드 아래)이라 트리에 없다. 아래로 스크롤해 드러낸다.
+        let start = app.buttons["세션 시작"]
+        if !start.waitForExistence(timeout: 2) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(start.waitForExistence(timeout: 10), "'세션 시작' 버튼이 없습니다")
+        if !start.isHittable {
+            app.swipeUp()
+        }
+        start.tap()
 
         // 컴포저에 hello → 보내기.
         let input = app.descendants(matching: .any).matching(identifier: "composer.input").firstMatch

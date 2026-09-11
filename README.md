@@ -51,6 +51,7 @@ curl -s -H 'X-MAM-Protocol: 1' http://127.0.0.1:7777/api/v1/me
 curl -s -H 'X-MAM-Protocol: 1' -H 'Content-Type: application/json' \
   -d '{"agent":"claude","cwd":"'"$HOME"'/work"}' \
   http://127.0.0.1:7777/api/v1/sessions
+curl -s -H 'X-MAM-Protocol: 1' http://127.0.0.1:7777/api/v1/usage   # 에이전트별 구독 사용 한도(Claude 는 세션을 한 번 돌린 뒤 관측값이 생긴다)
 ```
 
 테스트:
@@ -69,7 +70,8 @@ iOS 앱(`ios/`, 설계는 `docs/IOS.md`):
 cd ios && xcodegen generate                                   # MacAgent.xcodeproj 생성(생성물, 커밋하지 않음)
 open MacAgent.xcodeproj                                       # Xcode 에서 iPhone 17 Pro 시뮬레이터로 실행(⌘R)
 xcodebuild test -scheme MacAgent -destination 'platform=iOS Simulator,name=iPhone 17 Pro'   # 단위 테스트
-# UI 테스트: 다른 터미널에서 bash scripts/dev-smoke.sh --keep 으로 개발 서버를 띄운 뒤
+# UI 테스트 2개(ApprovalFlowUITests: hello → 승인 허용 → 완료, UsageAndFilesUITests: 찾아보기 → 새 폴더 → 파일 탭 → 컨텍스트 게이지 → 세션 정보 시트).
+# 다른 터미널에서 bash scripts/dev-smoke.sh --keep 으로 개발 서버를 띄운 뒤 실행한다. MAM_UI_TEST_SERVER 가 없으면 둘 다 XCTSkip.
 MAM_UI_TEST_SERVER=http://127.0.0.1:7777 xcodebuild test -scheme MacAgent \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:MacAgentUITests
 ```

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // 개발 모드 gateway(scripts/dev-smoke.sh 가 기동)에 대해 REST → WS → 승인 응답 → 완료를 검증한다.
 // docs/PROTOCOL.md 2절의 WS 이벤트 순서를 그대로 따라간다. 실패하면 단계와 받은 이벤트를 출력하고 exit 1.
+// 11~14단계는 2026-09-10 추가분(PROTOCOL.md: /fs/mkdir, Session.usage + session.usage, /usage, /models, PATCH model).
 import { strict as assert } from "node:assert";
 import { mkdir, rm } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
@@ -206,6 +207,70 @@ async function main() {
     assert.equal(closed.json.status, "closed", `close status field ${closed.json.status}`);
     await stream1.close();
     note("10. session closed OK");
+
+    step = "11. POST /api/v1/fs/mkdir → 201, 다시 → 409";
+    const subDir = path.join(cwd, "sub");
+    const made = await api("POST", "/api/v1/fs/mkdir", { path: subDir });
+    assert.equal(made.status, 201, `mkdir status ${made.status}: ${JSON.stringify(made.json)}`);
+    assert.equal(made.json.entry.type, "dir", `entry.type ${made.json.entry.type}`);
+    assert.equal(made.json.entry.path, subDir, `entry.path ${made.json.entry.path} !== ${subDir}`);
+    const again = await api("POST", "/api/v1/fs/mkdir", { path: subDir });
+    assert.equal(again.status, 409, `mkdir(again) status ${again.status}: ${JSON.stringify(again.json)}`);
+    assert.equal(again.json.error.code, "conflict", `mkdir(again) error.code ${again.json.error.code}`);
+    note("11. fs/mkdir OK (201 then 409 conflict)");
+
+    step = "12. 턴 완료 후 Session.usage + session.usage 이벤트";
+    // session.usage 는 turn.completed → session.status(idle) 뒤에 온다(첫 관측은 즉시 발행). 이미 받았으면 바로 통과.
+    const usageEvent = await stream1.waitFor((e) => e.type === "session.usage", 5000, "session.usage");
+    assert.equal(usageEvent.sessionId, sessionId, "session.usage.sessionId mismatch");
+    assert.equal(usageEvent.usage.turns, 1, `session.usage.usage.turns ${usageEvent.usage.turns} !== 1`);
+    const afterTurn = await api("GET", `/api/v1/sessions/${sessionId}`);
+    assert.equal(afterTurn.status, 200, `session detail status ${afterTurn.status}`);
+    const usage = afterTurn.json.session.usage;
+    assert.ok(usage, "session.usage 가 null 임");
+    assert.equal(usage.turns, 1, `usage.turns ${usage.turns} !== 1`);
+    assert.ok(usage.context, "usage.context 가 null 임");
+    assert.ok(
+      Number.isInteger(usage.context.percent) && usage.context.percent >= 0 && usage.context.percent <= 100,
+      `usage.context.percent ${usage.context.percent} 가 0~100 정수가 아님`,
+    );
+    assert.ok(usage.inputTokens > 0 && usage.outputTokens > 0, `누적 토큰이 비어 있음: ${JSON.stringify(usage)}`);
+    note(`12. usage OK (turns=${usage.turns}, context ${usage.context.tokens}/${usage.context.window} = ${usage.context.percent}%, session.usage seq=${usageEvent.seq})`);
+
+    step = "13. GET /api/v1/usage, GET /api/v1/models?agent=claude";
+    const limits = await api("GET", "/api/v1/usage");
+    assert.equal(limits.status, 200, `usage status ${limits.status}: ${JSON.stringify(limits.json)}`);
+    assert.equal(limits.json.agents.length, 2, `usage.agents.length ${limits.json.agents.length} !== 2`);
+    for (const agent of limits.json.agents) {
+      for (const limit of agent.limits) {
+        assert.ok(["ok", "warning", "exceeded"].includes(limit.status), `limit.status ${limit.status}`);
+        assert.ok(limit.usedPercent >= 0, `limit.usedPercent ${limit.usedPercent}`);
+      }
+    }
+    const models = await api("GET", "/api/v1/models?agent=claude");
+    assert.equal(models.status, 200, `models status ${models.status}: ${JSON.stringify(models.json)}`);
+    assert.ok(models.json.models.length >= 1, `models.length ${models.json.models.length} < 1`);
+    assert.ok(models.json.models.every((m) => typeof m.id === "string" && Array.isArray(m.efforts)), "model 항목 형태가 다름");
+    note(`13. /usage (agents=${limits.json.agents.map((a) => `${a.kind}:${a.limits.length}`).join(",")}) + /models (${models.json.models.map((m) => m.id).join(",")}) OK`);
+
+    step = "14. PATCH /api/v1/sessions/:id { model } → 200, 잘못된 모델 → 400";
+    // 닫힌 세션은 409 라 새 세션에서 검증한다(PROTOCOL.md: model 은 GET /models 가 준 값이어야 한다).
+    const patchCandidate = models.json.models.find((m) => m.id !== (afterTurn.json.session.model ?? "")) ?? models.json.models[0];
+    const second = await api("POST", "/api/v1/sessions", { agent: "claude", cwd });
+    assert.equal(second.status, 201, `second session status ${second.status}: ${JSON.stringify(second.json)}`);
+    try {
+      const patched = await api("PATCH", `/api/v1/sessions/${second.json.id}`, { model: patchCandidate.id });
+      assert.equal(patched.status, 200, `patch status ${patched.status}: ${JSON.stringify(patched.json)}`);
+      assert.equal(patched.json.model, patchCandidate.id, `patched.model ${patched.json.model} !== ${patchCandidate.id}`);
+      const bad = await api("PATCH", `/api/v1/sessions/${second.json.id}`, { model: "no-such-model" });
+      assert.equal(bad.status, 400, `patch(bad model) status ${bad.status}: ${JSON.stringify(bad.json)}`);
+      assert.equal(bad.json.error.code, "invalid_request", `patch(bad model) error.code ${bad.json.error.code}`);
+      const onClosed = await api("PATCH", `/api/v1/sessions/${sessionId}`, { model: patchCandidate.id });
+      assert.equal(onClosed.status, 409, `patch(closed session) status ${onClosed.status}`);
+      note(`14. PATCH model=${patchCandidate.id} → 200, no-such-model → 400, closed → 409 OK`);
+    } finally {
+      await api("POST", `/api/v1/sessions/${second.json.id}/close`);
+    }
   } finally {
     await rm(cwd, { recursive: true }).catch(() => {});
   }
