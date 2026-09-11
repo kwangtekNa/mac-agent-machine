@@ -12,7 +12,8 @@
     },
     {
       "dir": "2-usage-and-files",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-09-11T14:40:12+0900"
     }
   ]
 }
