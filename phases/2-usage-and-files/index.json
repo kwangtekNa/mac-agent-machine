@@ -230,13 +230,48 @@
     {
       "step": 7,
       "name": "verify-and-install",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         2,
         3,
         5,
         6
-      ]
+      ],
+      "started_at": "2026-09-11T13:59:23+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "06b031c5-1d90-4ba3-aee9-b68bc0989a1e",
+          "cost_usd": 8.92363625,
+          "duration_s": 1422.6,
+          "num_turns": 63,
+          "exit_code": 0,
+          "timeout": false,
+          "interview": true
+        },
+        {
+          "attempt": 1,
+          "session_id": "f846ce53-04c0-4402-b3fc-cd4168d0bc1b",
+          "cost_usd": 7.28098275,
+          "duration_s": 998.0,
+          "num_turns": 48,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 16.204619,
+      "duration_s": 2420.6,
+      "retries": 0,
+      "session_id": "f846ce53-04c0-4402-b3fc-cd4168d0bc1b",
+      "interviews": [
+        {
+          "question": "세션 화면 \"파일\" 탭(IOS.md 9.1)의 인라인 파일 브라우저를 어떤 구조로 바꿀까요? 현재 embedded FileBrowserView 가 자체 NavigationStack 을 바깥 NavigationStack 안에 중첩시켜, \"파일\" 세그먼트를 탭하는 순간 세션 화면이 세션 홈으로 pop 됩니다(시뮬레이터 스크린샷·접근성 트리로 확인). 설계 변경이라 고치지 않았습니다.",
+          "answer": "A",
+          "at": "2026-09-11T14:23:34+0900"
+        }
+      ],
+      "summary": "Phase 2 e2e 검증·설치 완료. 인터뷰 답변 A 반영: FileBrowserView embedded 모드가 내부 NavigationStack 없이 제자리 탐색(헤더에 폴더 이름·경로 + \"‹ 상위 폴더\" 버튼(fileBrowser.up), 위치는 FileBrowserModel.stack, 파일은 시트) — FileBrowserModel.currentDirectoryPath/parentName + FileBrowserModelTests 1건, docs/IOS.md 9.1 한 줄 추가. 이전 시도 산출물 유지: scripts/dev-smoke.mjs 11~14단계(mkdir 201/409, usage.turns=1·percent 0~100·session.usage 이벤트, /usage agents 2·/models≥1, PATCH model 200/400/409), ios/MacAgentUITests/UsageAndFilesUITests.swift(디버그 캡처 정리, 파일 탭에서 컴포저 잔존 단언 추가), TimelineView 세그먼트 식별자(timeline.tab.chat/files), README(/usage curl, UI 테스트 2개), RUNBOOK(앱에서 사용 한도 보기 + Claude 한도는 세션을 돌려야 갱신). ApprovalFlowUITests 최소 수정 2건(영속 세션으로 프로젝트 목록이 길어 \"세션 시작\" 스크롤 노출; \"직접 입력\" 열면 선택 프로젝트 경로가 미리 채워져 입력 전 삭제). 검증: npm ci+typecheck+test 442 passed/2 skipped; dev-smoke 14단계 OK; --keep 서버에서 UI 테스트 2/2 passed; kill 후 agent-host 잔여 없음; devicectl 기기 확인 OK; bash scripts/test.sh OK(iOS 227 passed/0 failed/3 skipped). 실제 어댑터(7778, MAM_CODEX_BIN=~/.nvm/.../bin/codex) Claude pong 1턴: session.usage 2건(초기 0 + 턴 후), delta input 2/output 4/cacheRead 11422/cacheWrite 15672, context 27096/1000000=3%, cost ≈$0.32, model 'claude-fable-5-1'; GET /usage → Claude plan 'Claude Max' live:false five_hour(라벨 \"5시간\") usedPercent 0 status ok(allowed 이벤트에 utilization 없음, step 2 휴리스틱 그대로), Codex plan 'prolite' live:true primary(라벨 \"주간\") 44% ok resetsAt 정상; models claude 5(default*/opus[1m]/fable[1m]/sonnet/haiku, efforts 5종 d=high), codex 6(gpt-6-astra* d=medium …). 서버 종료 완료. iPhone: xcodebuild 기기 빌드 + devicectl install 성공, process launch 는 기기 잠금(FBSOpenApplicationErrorDomain 7 Locked)으로 거부 — 잠금 해제 후 홈에서 실행 필요(서명·연결 문제 아님). 서버 코드·packages/protocol·phases 미수정, 커밋 없음.",
+      "completed_at": "2026-09-11T14:40:12+0900"
     }
   ],
   "created_at": "2026-09-10T13:26:25+0900"
