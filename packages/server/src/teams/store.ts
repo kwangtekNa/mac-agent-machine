@@ -1,14 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ChangeSetSchema, TeamSchema, TeamTemplateSchema, type ChangeSet, type Team, type TeamTemplate } from "@mam/protocol";
-import { z } from "zod";
+import { TeamSchema, TeamTemplateSchema, type Team, type TeamTemplate } from "@mam/protocol";
 import { InternalError } from "../errors.js";
 import { TeamRecordSchema, type TeamRecord } from "./types.js";
 
 /**
  * 팀 레코드·템플릿 파일 저장소. `<dataDir>/teams/<teamId>/team.json`, `<dataDir>/team-templates/<tplId>.json`.
  * 디렉토리는 0700, 쓰기는 tmp+rename. 세션·디스패치·git 은 모른다. 로그에 파일 내용을 남기지 않는다.
+ * ChangeSet 목록(`changes.json`)은 `changes.ts` 의 `ChangeStore` 가 맡는다.
  */
 
 const DIR_MODE = 0o700;
@@ -58,13 +58,13 @@ export function makeHandle(name: string, taken: ReadonlySet<string>, index: numb
   }
 }
 
-async function ensureDir(dir: string): Promise<void> {
+export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true, mode: DIR_MODE });
   await chmod(dir, DIR_MODE);
 }
 
 /** JSON 을 tmp 파일에 쓰고 rename 한다. */
-async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
+export async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
   const tmp = `${path}.${randomBytes(4).toString("hex")}.tmp`;
   try {
     await writeFile(tmp, JSON.stringify(value, null, 2), { encoding: "utf8", mode: 0o600 });
@@ -138,31 +138,6 @@ export class TeamStore {
     await ensureDir(this.teamsDir);
     await ensureDir(dir);
     await writeJsonAtomic(join(dir, "team.json"), record);
-  }
-
-  /** `teams/<teamId>/changes.json` 의 ChangeSet 배열. 없으면 `[]`, 손상됐으면 경고 후 `[]`. */
-  async loadChanges(teamId: string): Promise<ChangeSet[]> {
-    let raw: string;
-    try {
-      raw = await readFile(join(this.teamDir(teamId), "changes.json"), "utf8");
-    } catch (err) {
-      if (isEnoent(err)) return [];
-      throw err;
-    }
-    try {
-      const parsed = z.array(ChangeSetSchema).safeParse(JSON.parse(raw));
-      if (parsed.success) return parsed.data;
-    } catch {
-      // 아래에서 경고
-    }
-    this.logger.warn(`[teams] changes.json 손상, 무시: ${teamId}`);
-    return [];
-  }
-
-  async saveChanges(teamId: string, changes: ChangeSet[]): Promise<void> {
-    const dir = this.teamDir(teamId);
-    await ensureDir(dir);
-    await writeJsonAtomic(join(dir, "changes.json"), changes);
   }
 
   /** `team.json`·`changes.json` 과 `rooms/` 만 지운다. `worktrees/` 는 git 이 정리한다(step 5·6). 남은 것이 없으면 팀 디렉토리도 지운다. 멱등. */

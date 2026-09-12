@@ -76,10 +76,20 @@ async function revParse(dir: string, rev: string): Promise<string> {
   return result.stdout.trim();
 }
 
-/** 병합 충돌 상태(unmerged)인 파일 목록. `-z` 로 경로 인용을 피한다. */
-async function unmergedFiles(dir: string): Promise<string[]> {
+/** 병합 충돌 상태(unmerged)인 파일 목록. `-z` 로 경로 인용을 피한다. 진행 중 머지가 없으면 `[]`. */
+export async function unmergedFiles(dir: string): Promise<string[]> {
+  requireAbsolute(dir, "worktree 경로");
   const result = await gitOk(["-C", dir, "diff", "--name-only", "--diff-filter=U", "-z"], "git diff --diff-filter=U");
   return result.stdout.split("\0").filter((p) => p !== "");
+}
+
+/** `merge-base --is-ancestor <commit> <ref>`: commit 이 ref 에서 도달 가능하면 true. 모르는 커밋이면 git_failed. */
+export async function isAncestor(repo: string, commit: string, ref: string): Promise<boolean> {
+  requireAbsolute(repo, "저장소 경로");
+  const result = await runGit(["-C", repo, "merge-base", "--is-ancestor", commit, ref]);
+  if (result.code === 0) return true;
+  if (result.code === 1) return false;
+  throw gitFailed("git merge-base --is-ancestor", result);
 }
 
 /** 프로젝트 체크아웃의 현재 브랜치. detached 면 code "detached", 저장소가 아니면 "not_repo". */

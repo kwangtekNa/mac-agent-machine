@@ -6,6 +6,7 @@ import type {
   CreateTeamRequest,
   DispatchState,
   MemberInput,
+  MergeResult,
   PatchMemberRequest,
   PatchTeamRequest,
   Room,
@@ -30,12 +31,16 @@ import {
   commitAll,
   detectBaseBranch,
   hasMergeInProgress,
+  isAncestor,
+  mergeIntoBase,
   removeWorktree,
   syncFromBase,
+  unmergedFiles,
   worktreeIsDirty,
 } from "../git/worktree.js";
 import { newId } from "../ids.js";
 import type { SessionManager } from "../sessions/manager.js";
+import { ChangeStore, conflictNoteFor } from "./changes.js";
 import { DispatchQueue, hopExceeded, nextHop, route, type RunningItem } from "./dispatcher.js";
 import { buildTurnText } from "./format.js";
 import { parseMentions } from "./mentions.js";
@@ -47,7 +52,9 @@ import type { TeamMemberRecord, TeamRecord } from "./types.js";
 
 /**
  * 팀·팀원 생명주기(worktree + 지연 시작 세션), 방 메시지 → 디스패치 → 세션 턴 → 답변 게시, 승인 미러링,
- * 턴 종료 자동 커밋과 "변경 준비됨" ChangeSet(PROTOCOL 6, ADR-017). 머지·dismiss·충돌 정리는 step 6, HTTP/WS 는 step 7.
+ * 턴 종료 자동 커밋과 "변경 준비됨" ChangeSet, 사용자 승인 머지(`--no-ff`)·dismiss·충돌 해결 턴·stale 정리(PROTOCOL 6, ADR-017). HTTP/WS 는 step 7.
+ * 머지는 `merge()` 호출(사용자 액션)로만 일어나고 자동 머지는 없다. 충돌 시 베이스 체크아웃은 `merge --abort` 로 되돌리고
+ * 그 팀원 worktree 에만 마커를 남긴 뒤 DM 방에서 해결 턴을 디스패치한다. 서버는 마커를 직접 해결하지 않는다.
  * 세션 구독은 턴 동안만 유지한다(구독자가 있으면 세션 유휴 종료가 막힌다). 방 seq 는 RoomManager, 세션 seq 는 SessionManager 만 발급한다.
  * 메시지 본문·프롬프트는 로그에 남기지 않는다(CRITICAL 6). 모든 경로는 `resolveInsideHome` 을 거치고 git 은 `worktree.ts` 헬퍼만 쓴다.
  */
@@ -81,6 +88,10 @@ const RATE_LIMIT_RE = /rate limit|usage limit|too many requests|429/i;
 const RESTART_NOTICE = "서버가 다시 시작되어 진행 중이던 작업은 취소됐습니다";
 const RATE_LIMIT_NOTICE = "구독 사용 한도에 걸려 팀 작업을 멈췄습니다. 한도가 풀리면 메시지를 보내 다시 시작하세요";
 const BUSY_STATES: ReadonlySet<TeamMemberState> = new Set(["queued", "running", "waiting_approval"]);
+/** `GET /teams/:id` 의 `changes` 에 넣는 종료 상태(merged/dismissed/stale) ChangeSet 의 최대 수. 나머지는 파일에만 남는다. */
+const DETAIL_TERMINAL_CHANGES = 20;
+const TERMINAL_CHANGE_STATUSES: ReadonlySet<ChangeSet["status"]> = new Set(["merged", "dismissed", "stale"]);
+const MERGE_DIRTY_MESSAGE = "프로젝트에 커밋되지 않은 변경이 있어 머지할 수 없습니다. 먼저 커밋하거나 stash 하세요";
 
 type Outcome =
   | { kind: "completed" | "ended" | "interrupted"; turnId: string | null }
@@ -98,6 +109,7 @@ interface TeamRuntime {
   rooms: RoomManager;
   queue: DispatchQueue;
   changes: ChangeSet[];
+  changeStore: ChangeStore;
   paused: boolean;
   active: Map<string, ActiveRun>;
   attachments: Map<string, Attachment[]>;
@@ -106,6 +118,12 @@ interface TeamRuntime {
   persistDirty: boolean;
   persistChain: Promise<void>;
   changesChain: Promise<void>;
+  /** merge/dismiss 는 팀 단위로 직렬화한다(같은 ChangeSet 에 대한 동시 호출·베이스 체크아웃 경합 방지). */
+  mergeChain: Promise<void>;
+}
+
+function cloneChange(c: ChangeSet): ChangeSet {
+  return { ...c, files: c.files.map((f) => ({ ...f })), conflictFiles: [...c.conflictFiles] };
 }
 
 function errorMessage(err: unknown): string {
@@ -180,6 +198,7 @@ export class TeamManager {
         }
         await tm.persist(rt);
       }
+      await tm.reconcileChanges(rt);
     }
     return tm;
   }
@@ -197,13 +216,18 @@ export class TeamManager {
     return toTeam(this.require(teamId).record);
   }
 
+  /** `changes` 는 ready/conflict/merging 전부 + 종료 상태(merged/dismissed/stale) 최근 20개(원래 순서 유지). */
   detail(teamId: string): TeamDetail {
     const rt = this.require(teamId);
-    return { team: toTeam(rt.record), dispatch: rt.queue.state(), changes: rt.changes.map((c) => ({ ...c, files: c.files.map((f) => ({ ...f })), conflictFiles: [...c.conflictFiles] })) };
+    const terminal = rt.changes.filter((c) => TERMINAL_CHANGE_STATUSES.has(c.status));
+    const keep = new Set(terminal.slice(-DETAIL_TERMINAL_CHANGES).map((c) => c.id));
+    const changes = rt.changes.filter((c) => !TERMINAL_CHANGE_STATUSES.has(c.status) || keep.has(c.id)).map(cloneChange);
+    return { team: toTeam(rt.record), dispatch: rt.queue.state(), changes };
   }
 
+  /** `GET /teams/:id/changes`: 전부. */
   listChanges(teamId: string): ChangeSet[] {
-    return this.detail(teamId).changes;
+    return this.require(teamId).changes.map(cloneChange);
   }
 
   async roomDetail(teamId: string, roomId: string, limit?: number): Promise<RoomDetailResponse> {
@@ -385,6 +409,31 @@ export class TeamManager {
     return toTeam(rt.record);
   }
 
+  // ---- 변경 머지·거절 ----------------------------------------------------------
+
+  /**
+   * 사용자가 승인한 ChangeSet 을 베이스에 `--no-ff` 머지한다(PROTOCOL 6.5). `ready` 가 아니면 409.
+   * merging → mergeIntoBase → merged(팀원 worktree 동기화) | conflict(베이스 abort, 팀원 worktree 에 마커 + DM 해결 턴) |
+   * dirty/wrong_branch(ready 로 되돌리고 409). 브랜치는 유지한다.
+   */
+  async merge(teamId: string, changeId: string): Promise<MergeResult> {
+    const rt = this.require(teamId);
+    return this.serializeMerge(rt, () => this.mergeChange(rt, changeId));
+  }
+
+  /** `ready`·`conflict` → `dismissed`. 브랜치·커밋·worktree 는 그대로. 그 외 상태면 409. */
+  async dismiss(teamId: string, changeId: string): Promise<ChangeSet> {
+    const rt = this.require(teamId);
+    return this.serializeMerge(rt, async () => {
+      const change = this.requireChange(rt, changeId);
+      if (change.status !== "ready" && change.status !== "conflict") {
+        throw new ConflictError(`ready 또는 conflict 상태의 변경만 거절할 수 있습니다 (현재 ${change.status})`);
+      }
+      await this.updateChange(rt, change, { status: "dismissed" });
+      return cloneChange(change);
+    });
+  }
+
   // ---- 메시지·디스패치 ----------------------------------------------------------
 
   async postUserMessage(teamId: string, roomId: string, input: { text: string; attachments?: Attachment[] }): Promise<{ message: RoomMessage; dispatches: string[] }> {
@@ -486,11 +535,13 @@ export class TeamManager {
       room.lastSeq = current.lastSeq;
       room.lastMessageAt = current.lastMessageAt;
     }
+    const changeStore = new ChangeStore(this.store.teamDir(record.id), this.logger);
     const rt: TeamRuntime = {
       record,
       rooms,
       queue: new DispatchQueue({ maxConcurrent: record.settings.maxConcurrent, now: this.now, newId: (p) => newId(p) }),
-      changes: await this.store.loadChanges(record.id),
+      changes: await changeStore.load(),
+      changeStore,
       paused: false,
       active: new Map(),
       attachments: new Map(),
@@ -499,6 +550,7 @@ export class TeamManager {
       persistDirty: false,
       persistChain: Promise.resolve(),
       changesChain: Promise.resolve(),
+      mergeChain: Promise.resolve(),
     };
     rooms.onRoomChanged = (room: Room) => {
       const target = rt.record.rooms.find((r) => r.id === room.id);
@@ -567,10 +619,10 @@ export class TeamManager {
 
   private persistChanges(rt: TeamRuntime): Promise<void> {
     if (this.closed) return rt.changesChain;
-    const snapshot = rt.changes.map((c) => ({ ...c }));
+    const snapshot = rt.changes.map(cloneChange);
     rt.changesChain = rt.changesChain.then(async () => {
       try {
-        await this.store.saveChanges(rt.record.id, snapshot);
+        await rt.changeStore.save(snapshot);
       } catch (err) {
         this.logger.warn(`[teams] changes.json 저장 실패 team=${rt.record.id}: ${errorMessage(err)}`);
       }
@@ -879,16 +931,17 @@ export class TeamManager {
     }
   }
 
-  /** 깨끗하고 머지 중이 아닐 때만 베이스를 머지한다. 충돌이면 안내문을 돌려준다(세부 흐름은 step 6). */
+  /**
+   * 턴 전 동기화. 진행 중 머지(MERGE_HEAD)가 있으면 동기화하지 않고 남은 충돌 파일을 안내한다.
+   * 깨끗할 때만 `syncFromBase`; 충돌이면 마커를 남기고 안내문(`conflictNote`)을 돌려준다. 서버는 마커를 해결하지 않는다.
+   */
   private async syncWorktree(rt: TeamRuntime, member: TeamMemberRecord): Promise<string | undefined> {
+    const base = rt.record.baseBranch;
     try {
+      if (await hasMergeInProgress(member.worktreePath)) return conflictNoteFor(await unmergedFiles(member.worktreePath), base);
       if (await worktreeIsDirty(member.worktreePath)) return undefined;
-      if (await hasMergeInProgress(member.worktreePath)) return undefined;
-      const result = await syncFromBase(member.worktreePath, rt.record.baseBranch);
-      if (result.status === "conflict") {
-        const files = (result.conflictFiles ?? []).join(", ");
-        return `[#전체] 시스템: 베이스 브랜치(${rt.record.baseBranch})를 worktree 에 머지하다 충돌이 났습니다${files ? `: ${files}` : ""}. 충돌을 정리한 뒤 작업하세요.`;
-      }
+      const result = await syncFromBase(member.worktreePath, base);
+      if (result.status === "conflict") return conflictNoteFor(result.conflictFiles ?? [], base);
     } catch (err) {
       this.logger.warn(`[teams] worktree 동기화 실패 team=${rt.record.id} member=${member.id}: ${errorMessage(err)}`);
     }
@@ -1100,12 +1153,16 @@ export class TeamManager {
     this.setState(rt, member.id, "idle");
   }
 
-  /** 턴 종료 자동 커밋. 커밋이 생기고 베이스보다 앞서면 ChangeSet(ready)을 그룹방에 올리고 이전 ready 는 stale 로 바꾼다. */
+  /**
+   * 턴 종료 자동 커밋. 커밋이 생기고 베이스보다 앞서면 ChangeSet(ready)을 그룹방에 올리고 같은 팀원의 이전 ready/conflict 는 stale 로 바꾼다.
+   * 진행 중 머지(MERGE_HEAD)가 있어도 그대로 커밋한다 — git 이 머지 커밋을 만들어 충돌 해결이 완성된다.
+   */
   private async commitTurn(rt: TeamRuntime, member: TeamMemberRecord, sessionId: string, turnId: string, subjectSource: string | null): Promise<void> {
     try {
-      const subject = (subjectSource !== null ? firstLine(subjectSource) : "") || turnId;
+      const subject = ((subjectSource !== null ? firstLine(subjectSource) : "") || turnId).slice(0, COMMIT_SUBJECT_MAX);
+      const merging = await hasMergeInProgress(member.worktreePath);
       const sha = await commitAll(member.worktreePath, {
-        message: `${member.name}(${member.roleLabel}): ${subject.slice(0, COMMIT_SUBJECT_MAX)}`,
+        message: merging ? `${member.name}(${member.roleLabel}): merge ${rt.record.baseBranch} — ${subject}` : `${member.name}(${member.roleLabel}): ${subject}`,
         author: `${member.name} (mam-team) <${member.handle}@mam.local>`,
       });
       if (sha === null) return;
@@ -1133,14 +1190,8 @@ export class TeamManager {
         updatedAt: at,
       };
       for (const prev of rt.changes) {
-        if (prev.memberId !== member.id || prev.status !== "ready") continue;
-        prev.status = "stale";
-        prev.updatedAt = at;
-        try {
-          await rt.rooms.update(groupId, prev.messageId, { changes: { ...prev } });
-        } catch (err) {
-          this.logger.warn(`[teams] stale 카드 갱신 실패 team=${rt.record.id} change=${prev.id}: ${errorMessage(err)}`);
-        }
+        if (prev.memberId !== member.id || (prev.status !== "ready" && prev.status !== "conflict")) continue;
+        await this.updateChange(rt, prev, { status: "stale" }, { persist: false });
       }
       rt.changes.push(change);
       await rt.rooms.post(groupId, {
@@ -1156,6 +1207,159 @@ export class TeamManager {
       this.logger.warn(`[teams] 자동 커밋 실패 team=${rt.record.id} member=${member.id}: ${errorMessage(err)}`);
       await this.postSystem(rt, this.groupRoom(rt).id, `${member.name}의 변경을 커밋하지 못했습니다: ${errorMessage(err)}`);
     }
+  }
+
+  // ---- internals: 머지·ChangeSet 상태 ------------------------------------------------
+
+  private serializeMerge<T>(rt: TeamRuntime, fn: () => Promise<T>): Promise<T> {
+    const run = rt.mergeChain.then(fn, fn);
+    rt.mergeChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private requireChange(rt: TeamRuntime, changeId: string): ChangeSet {
+    const change = rt.changes.find((c) => c.id === changeId);
+    if (!change) throw new NotFoundError(`변경을 찾을 수 없습니다: ${changeId}`);
+    return change;
+  }
+
+  /** 상태를 바꾸고 그룹방 카드를 `room.message.updated` 로 갱신한 뒤 changes.json 에 저장한다. 카드 갱신 실패는 경고만. */
+  private async updateChange(
+    rt: TeamRuntime,
+    change: ChangeSet,
+    patch: Partial<Pick<ChangeSet, "status" | "conflictFiles">>,
+    opts: { persist?: boolean } = {},
+  ): Promise<void> {
+    if (patch.status !== undefined) change.status = patch.status;
+    change.conflictFiles = patch.conflictFiles !== undefined ? [...patch.conflictFiles] : change.status === "conflict" ? change.conflictFiles : [];
+    change.updatedAt = this.iso();
+    try {
+      await rt.rooms.update(this.groupRoom(rt).id, change.messageId, { changes: cloneChange(change) });
+    } catch (err) {
+      this.logger.warn(`[teams] 변경 카드 갱신 실패 team=${rt.record.id} change=${change.id}: ${errorMessage(err)}`);
+    }
+    if (opts.persist !== false) await this.persistChanges(rt);
+  }
+
+  private isRunning(rt: TeamRuntime, memberId: string): boolean {
+    return [...rt.active.values()].some((r) => r.item.memberId === memberId);
+  }
+
+  private async mergeChange(rt: TeamRuntime, changeId: string): Promise<MergeResult> {
+    const change = this.requireChange(rt, changeId);
+    if (change.status !== "ready") throw new ConflictError(`ready 상태의 변경만 머지할 수 있습니다 (현재 ${change.status})`);
+    const member = rt.record.members.find((m) => m.id === change.memberId);
+    const base = rt.record.baseBranch;
+    await this.updateChange(rt, change, { status: "merging" });
+
+    let result: Awaited<ReturnType<typeof mergeIntoBase>>;
+    try {
+      result = await mergeIntoBase({ repo: rt.record.cwd, base, branch: change.branch, message: `Merge ${change.branch} (${member?.name ?? change.memberId})` });
+    } catch (err) {
+      // 실패하면 사용자가 다시 시도할 수 있게 ready 로 되돌린다. 베이스 체크아웃은 mergeIntoBase 가 건드리지 않았거나 abort 했다.
+      await this.updateChange(rt, change, { status: "ready" });
+      if (err instanceof WorktreeError && err.code === "detached") throw new ConflictError(`현재 브랜치가 ${base} 가 아닙니다(detached HEAD)`);
+      throw err;
+    }
+
+    switch (result.status) {
+      case "dirty":
+        await this.updateChange(rt, change, { status: "ready" });
+        throw new ConflictError(MERGE_DIRTY_MESSAGE);
+      case "wrong_branch":
+        await this.updateChange(rt, change, { status: "ready" });
+        throw new ConflictError(`현재 브랜치가 ${base} 가 아닙니다(현재 ${result.current})`);
+      case "merged":
+        await this.updateChange(rt, change, { status: "merged" });
+        if (member) await this.syncAfterMerge(rt, member);
+        return { change: cloneChange(change), mergeCommit: result.sha };
+      case "conflict":
+        await this.updateChange(rt, change, { status: "conflict", conflictFiles: result.conflictFiles });
+        if (member) await this.dispatchConflictFix(rt, member, result.conflictFiles);
+        return { change: cloneChange(change), mergeCommit: null };
+    }
+  }
+
+  /** 머지 뒤 그 팀원 worktree 를 베이스와 맞춘다(깨끗하고 실행 중이 아닐 때만). 실행 중이면 다음 턴 전 동기화가 맡는다. */
+  private async syncAfterMerge(rt: TeamRuntime, member: TeamMemberRecord): Promise<void> {
+    if (this.isRunning(rt, member.id)) return;
+    try {
+      if (await hasMergeInProgress(member.worktreePath)) return;
+      if (await worktreeIsDirty(member.worktreePath)) return;
+      await syncFromBase(member.worktreePath, rt.record.baseBranch);
+    } catch (err) {
+      this.logger.warn(`[teams] 머지 후 worktree 동기화 실패 team=${rt.record.id} member=${member.id}: ${errorMessage(err)}`);
+    }
+  }
+
+  /**
+   * 충돌: 그 팀원 worktree 에 `syncFromBase` 로 마커를 남기고(깨끗하고 실행 중이 아닐 때만; 아니면 다음 턴 전 동기화가 남긴다),
+   * DM 방에 system 메시지(루트, hop 0)를 올려 그 팀원에게 해결 턴을 디스패치한다. 실행 중이면 큐에 들어간다.
+   */
+  private async dispatchConflictFix(rt: TeamRuntime, member: TeamMemberRecord, conflictFiles: string[]): Promise<void> {
+    const base = rt.record.baseBranch;
+    if (!this.isRunning(rt, member.id)) {
+      try {
+        if (!(await hasMergeInProgress(member.worktreePath)) && !(await worktreeIsDirty(member.worktreePath))) {
+          await syncFromBase(member.worktreePath, base);
+        }
+      } catch (err) {
+        this.logger.warn(`[teams] 충돌 마커 준비 실패 team=${rt.record.id} member=${member.id}: ${errorMessage(err)}`);
+      }
+    }
+    const dm = this.dmRoom(rt, member.id);
+    if (!dm) return;
+    const message = await rt.rooms.post(dm.id, {
+      author: { kind: "system" },
+      kind: "system",
+      text: `${base} 에 머지하는 중 충돌이 났습니다: ${conflictFiles.join(", ")}. worktree 에서 충돌을 해결하고 파일을 저장하세요.`,
+      hop: 0,
+      dispatchId: null,
+    });
+    rt.queue.enqueue({ rootId: message.id, memberId: member.id, roomId: dm.id, sourceMessageId: message.id, hop: nextHop(message.hop) });
+    this.markQueued(rt, member.id);
+    this.touch(rt);
+    await this.persist(rt);
+    await this.emitStatus(rt, this.statusRooms(rt, member.id));
+    this.pump(rt);
+  }
+
+  /**
+   * 재시작 시 ChangeSet 상태를 git 과 맞춘다: `merging` 은 브랜치 커밋이 베이스에 들어갔으면 merged, 아니면 ready 로.
+   * ready/conflict 는 브랜치 head 가 `commit` 과 다르거나 베이스보다 앞선 커밋이 없으면(브랜치가 사라진 경우 포함) stale.
+   */
+  private async reconcileChanges(rt: TeamRuntime): Promise<void> {
+    let changed = false;
+    for (const change of rt.changes) {
+      if (change.status === "merging") {
+        let merged = false;
+        try {
+          merged = await isAncestor(rt.record.cwd, change.commit, rt.record.baseBranch);
+        } catch (err) {
+          this.logger.warn(`[teams] merging 상태 확인 실패 team=${rt.record.id} change=${change.id}: ${errorMessage(err)}`);
+        }
+        await this.updateChange(rt, change, { status: merged ? "merged" : "ready" }, { persist: false });
+        changed = true;
+        if (merged) continue;
+      }
+      if (change.status !== "ready" && change.status !== "conflict") continue;
+      let stale = false;
+      try {
+        const diff = await changesVsBase(rt.record.cwd, rt.record.baseBranch, change.branch);
+        stale = diff.head !== change.commit || diff.commits <= 0;
+      } catch (err) {
+        this.logger.warn(`[teams] 변경 상태 확인 실패 team=${rt.record.id} change=${change.id}: ${errorMessage(err)}`);
+        stale = true;
+      }
+      if (stale) {
+        await this.updateChange(rt, change, { status: "stale" }, { persist: false });
+        changed = true;
+      }
+    }
+    if (changed) await this.persistChanges(rt);
   }
 }
 

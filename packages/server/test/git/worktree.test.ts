@@ -8,10 +8,12 @@ import {
   commitAll,
   detectBaseBranch,
   hasMergeInProgress,
+  isAncestor,
   isValidBranchName,
   mergeIntoBase,
   removeWorktree,
   syncFromBase,
+  unmergedFiles,
   worktreeIsDirty,
 } from "../../src/git/worktree.js";
 import { git, initRepo, makeTmpHome, removeTmp } from "../helpers/tmp-home.js";
@@ -440,5 +442,31 @@ describe("removeWorktree", () => {
   it("rejects relative paths as invalid_request", async () => {
     const repo = await repoWithCommit("remove-invalid");
     await expect(removeWorktree(repo, "relative/wt")).rejects.toMatchObject({ code: "invalid_request" });
+  });
+});
+
+describe("unmergedFiles / isAncestor (step 6)", () => {
+  it("lists conflicted files during an in-progress merge and nothing when clean", async () => {
+    const repo = await repoWithCommit("unmerged");
+    const { wt } = await worktreeFor(repo, "unmerged", "minsu");
+    expect(await unmergedFiles(wt)).toEqual([]);
+    await commitFile(wt, "shared.txt", "from-branch\n", "branch side");
+    await commitFile(repo, "shared.txt", "from-main\n", "main side");
+    expect(await syncFromBase(wt, "main")).toEqual({ status: "conflict", conflictFiles: ["shared.txt"] });
+    expect(await unmergedFiles(wt)).toEqual(["shared.txt"]);
+    await expect(unmergedFiles("relative/path")).rejects.toMatchObject({ code: "invalid_request" });
+  });
+
+  it("isAncestor tells whether a commit is reachable from a ref", async () => {
+    const repo = await repoWithCommit("ancestor");
+    const { wt, branch } = await worktreeFor(repo, "ancestor", "minsu");
+    await commitFile(wt, "feature.txt", "feature\n", "feat");
+    const head = (await git(repo, "rev-parse", branch)).trim();
+    expect(await isAncestor(repo, head, "main")).toBe(false);
+    expect(await isAncestor(repo, "main", head)).toBe(true);
+    const res = await mergeIntoBase({ repo, base: "main", branch, message: "m" });
+    expect(res.status).toBe("merged");
+    expect(await isAncestor(repo, head, "main")).toBe(true);
+    await expect(isAncestor(repo, "0000000000000000000000000000000000000000", "main")).rejects.toMatchObject({ code: "git_failed" });
   });
 });
