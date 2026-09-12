@@ -117,6 +117,38 @@ export async function addWorktree(opts: { repo: string; path: string; branch: st
   await gitOk(args, "git worktree add", LONG_GIT_TIMEOUT_MS);
 }
 
+/** `refs/heads/<branch>` 가 있으면 true. */
+export async function branchExists(repo: string, branch: string): Promise<boolean> {
+  requireAbsolute(repo, "저장소 경로");
+  requireBranch(branch, "브랜치");
+  const result = await runGit(["-C", repo, "rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]);
+  if (result.code === 0) return true;
+  if (result.code === 1) return false;
+  throw gitFailed("git rev-parse", result);
+}
+
+export type ChangedFileKind = "add" | "modify" | "delete";
+
+/** `diff --name-status --no-renames -z base...branch` → 경로별 종류(A→add, D→delete, 그 외→modify). */
+export async function changedFileKinds(repo: string, base: string, branch: string): Promise<Map<string, ChangedFileKind>> {
+  requireAbsolute(repo, "저장소 경로");
+  requireBranch(base, "베이스 브랜치");
+  requireBranch(branch, "브랜치");
+  const result = await gitOk(
+    ["-C", repo, "diff", "--name-status", "--no-renames", "--no-color", "--no-ext-diff", "-z", `${base}...${branch}`],
+    "git diff --name-status",
+  );
+  const parts = result.stdout.split("\0");
+  const out = new Map<string, ChangedFileKind>();
+  for (let i = 0; i + 1 < parts.length; i += 2) {
+    const status = parts[i]!;
+    const p = parts[i + 1]!;
+    if (status === "" || p === "") continue;
+    out.set(p, status.startsWith("A") ? "add" : status.startsWith("D") ? "delete" : "modify");
+  }
+  return out;
+}
+
 /** 추적 변경 또는 비추적(무시 제외) 파일이 있으면 true. */
 export async function worktreeIsDirty(wt: string): Promise<boolean> {
   requireAbsolute(wt, "worktree 경로");

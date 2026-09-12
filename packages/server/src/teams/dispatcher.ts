@@ -130,6 +130,27 @@ export class DispatchQueue {
     this.running.delete(dispatchId);
   }
 
+  /**
+   * 실행 항목을 같은 ID 로 큐 맨 뒤에 되돌린다(세션이 바빠 턴을 못 보냈을 때). 그 팀원의 대기 항목이 이미 있으면
+   * 거기에 합쳐진 것으로 보고 버린다. 모르는 ID 는 무시한다.
+   */
+  requeue(dispatchId: string): void {
+    const running = this.running.get(dispatchId);
+    if (!running) return;
+    this.running.delete(dispatchId);
+    if (this.queued.some((d) => d.memberId === running.memberId)) return;
+    this.queued.push({ ...this.strip(running), enqueuedAt: this.now().toISOString() });
+  }
+
+  /** 한 팀원의 대기 항목을 제거해 돌려준다(팀원 제거·세션 준비 실패). 실행 중 항목은 그대로다. */
+  removeQueued(memberId: string): DispatchItem[] {
+    const out: DispatchItem[] = [];
+    for (let i = this.queued.length - 1; i >= 0; i -= 1) {
+      if (this.queued[i]!.memberId === memberId) out.unshift(...this.queued.splice(i, 1));
+    }
+    return out.map((d) => ({ ...d }));
+  }
+
   /** 대기 항목을 전부 비우고 돌려준다. 실행 중인 항목은 그대로다(중단은 TeamManager 몫). */
   clear(): DispatchItem[] {
     return this.queued.splice(0).map((d) => ({ ...d }));

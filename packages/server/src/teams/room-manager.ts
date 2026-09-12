@@ -36,6 +36,8 @@ export interface RoomManagerOptions {
 }
 
 export interface RoomMessageDraft {
+  /** 호출자가 미리 만든 `msg_` ID(ChangeSet.messageId 처럼 본문이 자기 ID 를 참조할 때). 생략하면 발급한다. */
+  id?: string;
   author: RoomAuthor;
   kind: RoomMessageKind;
   text: string;
@@ -141,7 +143,7 @@ export class RoomManager {
     const seq = this.peekSeq(rs);
     const createdAt = this.iso();
     const candidate: RoomMessage = {
-      id: newId("msg"),
+      id: draft.id ?? newId("msg"),
       roomId,
       seq,
       author: draft.author,

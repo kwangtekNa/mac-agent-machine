@@ -178,7 +178,7 @@ export class SessionManager {
       title: req.title ?? basename(req.cwd),
       mode: req.mode ?? "ask",
       model: req.model ?? null,
-      effort: null,
+      effort: req.effort ?? null,
       status: "starting",
       nativeId: req.resumeNativeId ?? null,
       createdAt: at,
@@ -389,6 +389,19 @@ export class SessionManager {
       this.logger.warn(`[sessions] 승인 응답 전달 실패 session=${id} approval=${approvalId}: ${errorMessage(err)}`);
       throw err;
     }
+  }
+
+  /** 역할 프롬프트 교체(팀원 PATCH). 레코드에만 저장하고 다음 `start()`(reset·재개)부터 적용된다. 로그에 남기지 않는다. */
+  setInstructions(id: string, instructions: string): void {
+    const rt = this.require(id);
+    if (rt.instructions === instructions) return;
+    rt.instructions = instructions;
+    this.schedulePersist(rt);
+  }
+
+  /** 현재 라이브 구독자 수(테스트·진단용). */
+  subscriberCount(id: string): number {
+    return this.require(id).subscribers.size;
   }
 
   pendingApprovals(id: string): Approval[] {

@@ -19,6 +19,8 @@ export interface CreateSessionExtras {
   instructions?: string;
   /** 팀원 세션의 소속. 응답 `Session.team` 으로 나간다. */
   team?: { teamId: string; memberId: string };
+  /** 초기 사고 수준(팀원 세션). 검증 없이 저장하고 `StartOptions.effort` 로 넘긴다. */
+  effort?: string;
   /** true 면 어댑터를 띄우지 않고 `idle`, `nativeId: null` 로 등록·영속화만 한다. 첫 `startTurn` 이 프로세스를 연다. */
   deferStart?: boolean;
 }
