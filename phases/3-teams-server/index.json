@@ -1,0 +1,77 @@
+{
+  "project": "mac-agent-machine",
+  "phase": "3-teams-server",
+  "steps": [
+    {
+      "step": 0,
+      "name": "teams-protocol",
+      "status": "pending"
+    },
+    {
+      "step": 1,
+      "name": "adapter-instructions",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 2,
+      "name": "git-worktrees",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 3,
+      "name": "room-store",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 4,
+      "name": "dispatcher-core",
+      "status": "pending",
+      "depends_on": [
+        3
+      ]
+    },
+    {
+      "step": 5,
+      "name": "team-manager",
+      "status": "pending",
+      "depends_on": [
+        1,
+        2,
+        4
+      ]
+    },
+    {
+      "step": 6,
+      "name": "changes-and-merge",
+      "status": "pending",
+      "depends_on": [
+        5
+      ]
+    },
+    {
+      "step": 7,
+      "name": "teams-routes-ws",
+      "status": "pending",
+      "depends_on": [
+        6
+      ]
+    },
+    {
+      "step": 8,
+      "name": "teams-smoke-and-docs",
+      "status": "pending",
+      "depends_on": [
+        7
+      ]
+    }
+  ]
+}
