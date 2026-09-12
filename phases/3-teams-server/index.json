@@ -195,10 +195,28 @@
     {
       "step": 7,
       "name": "teams-routes-ws",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         6
-      ]
+      ],
+      "started_at": "2026-09-12T22:13:10+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "1f2df652-f2fd-41af-a772-29265a35bdce",
+          "cost_usd": 8.479959500000001,
+          "duration_s": 718.7,
+          "num_turns": 44,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 8.47996,
+      "duration_s": 718.7,
+      "retries": 0,
+      "session_id": "1f2df652-f2fd-41af-a772-29265a35bdce",
+      "summary": "Step 7 teams-routes-ws done: AgentHostContext.teams (TeamManager) + server.ts opens TeamManager.open({dataDir,home,manager}) after SessionManager and shuts down teams→manager (AgentHostHandle.teams); app.ts registers registerTeamRolesRoutes/registerTeamsRoutes/registerTeamTemplatesRoutes/registerRoomWsRoutes after existing routes. New routes/team-roles.ts (GET /team-roles), routes/teams.ts (PROTOCOL 6.2 table: list?cwd (cwd via resolveInsideHome), POST /teams 201 with cwd realpath'd via resolveInsideHome+statResolved, local CreateTeamBodySchema = CreateTeamRequestSchema.extend({members default []}) so templateId can fill members (template 404, body members win), detail/patch/delete?keepWorktrees=\"true\", members add(201)/patch/delete?keepWorktree/reset, stop, room detail?limit, POST messages 201 {message,dispatches}, changes list, merge → MergeResult (409 envelope from TeamManager ConflictError), dismiss → ChangeSet), routes/team-templates.ts over new src/teams/templates.ts (TeamTemplates list/get/create/patch/remove on TeamStore; validateTemplateMembers: exactly 1 lead + unique name/handle → 400; tpl_ ids; DEFAULT_TEAM_SETTINGS exported and used by TeamManager), agent-host/ws-rooms.ts (GET /teams/:teamId/rooms/:roomId/ws?since=: same ping/pong/onClose as ws.ts, 4004 for missing team/room, 1008 bad since, subscribeRoom → room.snapshot seq 0 {room, messages (detail 200 filtered seq>since), pendingApprovals, dispatch, members, replayFrom, truncated} → queue flush → live; room.send→postUserMessage (MamError → room.error recoverable seq 0), room.interrupt→interrupt(teamId,memberId?), ping→pong; parse failures → room.error). TeamManager additions: readonly templates, roomPendingApprovals(teamId,roomId), memberStates(teamId). Tests TDD RED→GREEN: test/agent-host/rest-teams.test.ts (14: roles, create 201/400 no lead/409 dup name/403 outside home/400 non-git/template fill + explicit members + 404, list?cwd/detail/patch/404, delete 409 dirty + keepWorktrees + clean, members add/patch/409/reset/remove/lead 400/404, stop, room message 201 → agent reply with work + limit/truncated + 404/400, changes merge 409→success→409 + dismiss + 404, template CRUD + 400/404, sessions list has team and no instructions), test/agent-host/ws-rooms.test.ts (6: 4004/1008, snapshot, send→user→agent(work)→status + since replay + bad JSON/bogus/pong, approval mirror → POST /sessions/:id/approvals/:approvalId → room.message.updated + pendingApprovals in late snapshot, room.interrupt, startAgentHost wiring), shared test/helpers/team-fixture.ts; existing makeFixture/rest.test/auth routes.test now inject teams. AC: npm ci OK, typecheck OK, npm test 748 passed/4 skipped, files exist, dev-smoke OK, bash scripts/test.sh (TS + iOS) OK. Checklist: no identity headers read in new routes/WS, cwd via resolveInsideHome, all responses via send() schema check, single error envelope, room WS mirrors session WS ping/close rules. gateway, packages/protocol, phases/ untouched (index.json diff predates session).",
+      "completed_at": "2026-09-12T22:25:08+0900"
     },
     {
       "step": 8,
