@@ -5,7 +5,25 @@
     {
       "step": 0,
       "name": "ios-team-models-fixtures",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T23:31:09+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "7b912d3c-c1b8-4268-ac3f-a0ae9df647a3",
+          "cost_usd": 9.038585,
+          "duration_s": 818.7,
+          "num_turns": 28,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 9.038585,
+      "duration_s": 818.7,
+      "retries": 0,
+      "session_id": "7b912d3c-c1b8-4268-ac3f-a0ae9df647a3",
+      "summary": "Added iOS team/room protocol models (Models/Protocol/Team.swift, Room.swift, RoomEvent.swift, RoomClientMessage.swift), Session.team (SessionTeamRef, decodeIfPresent, trailing default init param), and 21 team/room APIClient endpoints (PROTOCOL 6.2, query params only when set, body-less `call` helper). RoomAuthor.kind / RoomEvent.type / RoomClientMessage.type are strict; other enums lenient; TeamTemplateMember encodes nil model/effort as null (zod nullable-required). Tests: ProtocolFixturesTests decodes all 23 team/room fixtures with real types (69 files, allCases coverage, room-client round trip), new MacAgentTests/Models/TeamModelsTests.swift, APIClientTests team endpoint coverage. Gate `bash scripts/test.sh` passed (TS 754 passed; iOS 263 passed, 0 failed, 3 UI skipped). No fixtures or phases/ files changed.",
+      "completed_at": "2026-09-12T23:44:48+0900"
     },
     {
       "step": 1,
@@ -76,5 +94,6 @@
         7
       ]
     }
-  ]
+  ],
+  "created_at": "2026-09-12T23:31:09+0900"
 }
