@@ -169,10 +169,28 @@
     {
       "step": 6,
       "name": "changes-and-merge",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         5
-      ]
+      ],
+      "started_at": "2026-09-12T22:01:30+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "22fa0f17-6922-47d8-a5e7-a2f10239d826",
+          "cost_usd": 6.812,
+          "duration_s": 699.7,
+          "num_turns": 27,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 6.812,
+      "duration_s": 699.7,
+      "retries": 0,
+      "session_id": "22fa0f17-6922-47d8-a5e7-a2f10239d826",
+      "summary": "Step 6 changes-and-merge done: new packages/server/src/teams/changes.ts (ChangeStore(teamDir).load/save for changes.json — moved out of TeamStore, whose loadChanges/saveChanges were removed and ensureDir/writeJsonAtomic exported; conflictNoteFor(files, base) one-line \"머지 충돌: <files>. <base> 브랜치를 worktree 에 머지하다 충돌이 났다. worktree 안에서 충돌 마커(<<<<<<<, >>>>>>>)를 정리하고 파일을 저장하라. git 명령은 실행하지 마라.\"); worktree.ts exports unmergedFiles(wt) + new isAncestor(repo, commit, ref) (merge-base --is-ancestor). TeamManager: merge(teamId, changeId) → NotFoundError unknown, ConflictError 409 unless ready; merging card update → mergeIntoBase(message `Merge <branch> (<name>)`) → merged (status merged, MergeResult.mergeCommit, member worktree syncFromBase only when clean/idle/no MERGE_HEAD, else next-turn sync) | dirty → ready + 409 \"프로젝트에 커밋되지 않은 변경이 있어 머지할 수 없습니다. 먼저 커밋하거나 stash 하세요\" | wrong_branch/detached → ready + 409 \"현재 브랜치가 <base> 가 아닙니다(현재 X)\" | conflict → status conflict + conflictFiles, base already aborted clean, member worktree syncFromBase leaves markers (clean & idle only), DM room system message \"<base> 에 머지하는 중 충돌이 났습니다: <files>. worktree 에서 충돌을 해결하고 파일을 저장하세요.\" (hop 0, root) + dispatch to that member (hop 1, queued if running); dismiss(teamId, changeId) ready|conflict → dismissed (conflictFiles [] per protocol), else 409; merge/dismiss serialized per team (mergeChain); syncWorktree: MERGE_HEAD → no sync + conflictNote(unmergedFiles), dirty → none, clean → syncFromBase, conflict → note; commitTurn commits even with MERGE_HEAD (message \"<name>(<roleLabel>): merge <base> — <summary>\") and marks previous ready OR conflict of the member stale; open() reconcileChanges: merging → merged if isAncestor(commit, base) else ready (then stale check), ready/conflict → stale when head≠commit, commits 0 or branch missing, cards updated + persisted; detail() caps merged/dismissed/stale to most recent 20 (listChanges returns all); updateChange helper (status/conflictFiles/updatedAt + room.message.updated + persist). Tests TDD RED→GREEN: test/teams/changes.test.ts (8: ChangeStore, conflictNoteFor, merge success w/ --no-ff log, ^2 = branch head, worktree sync, card merging→merged; dirty/wrong_branch 409 with card merging→ready and later success; dismiss + 409s + NotFound; gated conflict round trip asserting base clean/no MERGE_HEAD, member worktree MERGE_HEAD+markers, other member untouched, DM system msg + running dispatch hop 1, turn text starts with conflictNote and ends \"Reply in this DM.\", merge commit with 2 parents/author/subject, conflict→stale + new ready commits 2, re-merge merged; dismiss of conflict; restart reconciliation merging→merged/ready, moved ready→stale, 28 entries → detail 21), test/git/worktree.test.ts +2 (unmergedFiles, isAncestor). AC: npm ci OK, npm run typecheck OK, npm test 728 passed/4 skipped, grep merge( OK, bash scripts/test.sh (TS + iOS) OK. Checklist: merge only via merge(); base checkout clean on every failure path (mergeIntoBase aborts); only the conflicting member's worktree touched; all git via worktree.ts spawn helpers; no squash/rebase/reset/force; no bodies in logs. packages/protocol, phases/, HTTP/WS untouched. Note for step 7: map NotFoundError/ConflictError from merge/dismiss straight to 404/409; POST .../merge returns MergeResult (200 even on conflict), .../dismiss returns ChangeSet.",
+      "completed_at": "2026-09-12T22:13:09+0900"
     },
     {
       "step": 7,
