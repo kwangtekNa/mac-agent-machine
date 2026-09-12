@@ -88,3 +88,15 @@ export class AgentBusyError extends ConflictError {
     super("에이전트가 이미 턴을 실행 중입니다");
   }
 }
+
+export class RoomNotFoundError extends NotFoundError {
+  constructor(roomId: string) {
+    super(`방을 찾을 수 없습니다: ${roomId}`);
+  }
+}
+
+export class RoomMessageNotFoundError extends NotFoundError {
+  constructor(messageId: string) {
+    super(`방 메시지를 찾을 수 없습니다: ${messageId}`);
+  }
+}
