@@ -308,6 +308,10 @@ export class ClaudeSession implements AgentSession {
       ...(this.model ? { model: this.model } : {}),
       ...(isEffortLevel(this.effort) ? { effort: this.effort } : {}),
       ...(this.cfg.binPath ? { pathToClaudeCodeExecutable: this.cfg.binPath } : {}),
+      // 역할 프롬프트(팀원 세션). Claude Code 기본 프롬프트(도구 규칙)를 유지하려고 preset + append 만 쓴다.
+      // `snapshot` 은 SDK 기본값(첫 요청에 기록)을 그대로 둔다: 시스템 프롬프트는 세션 첫 요청에 고정되므로
+      // 프롬프트 수정은 다음 세션(새 프로세스·reset)부터 적용된다(PROTOCOL.md 6.2 `appliesAt: "next_session"`, ADR-017).
+      ...(start.instructions ? { systemPrompt: { type: "preset", preset: "claude_code", append: start.instructions } } : {}),
       ...this.cfg.extraOptions,
     };
     const q = this.cfg.queryFn({ prompt, options });

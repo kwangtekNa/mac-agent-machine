@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
-  SessionSchema,
   type Approval,
   type CreateSessionRequest,
   type PatchSessionRequest,
@@ -29,6 +28,7 @@ import {
 } from "../errors.js";
 import { newId } from "../ids.js";
 import { EventLog } from "./event-log.js";
+import { SessionRecordSchema, type CreateSessionExtras, type SessionRecord } from "./types.js";
 
 export interface SessionManagerOptions {
   dataDir: string;
@@ -54,7 +54,10 @@ interface Live {
 }
 
 interface Runtime {
+  /** 응답으로 나가는 프로토콜 `Session`. `instructions` 는 여기 두지 않는다(CRITICAL 6, 응답 검증). */
   session: Session;
+  /** 역할 프롬프트. 레코드에만 저장하고 어댑터 `StartOptions.instructions` 로 넘긴다. 로그에 남기지 않는다. */
+  instructions?: string;
   log: EventLog;
   ring: ServerEvent[];
   items: Map<string, TimelineItem>;
@@ -128,17 +131,18 @@ export class SessionManager {
       if (!name.endsWith(".json")) continue;
       const path = join(manager.sessionsDir, name);
       try {
-        const parsed = SessionSchema.safeParse(JSON.parse(await readFile(path, "utf8")));
+        const parsed = SessionRecordSchema.safeParse(JSON.parse(await readFile(path, "utf8")));
         if (!parsed.success) {
           manager.logger.warn(`[sessions] 세션 메타 스키마 불일치, 건너뜀: ${name}`);
           continue;
         }
-        const session = parsed.data;
+        // instructions 는 레코드 전용이라 Session 에서 분리한다. team 은 프로토콜 필드라 그대로 둔다.
+        const { instructions, ...session } = parsed.data;
         if (session.status !== "closed") session.status = "idle";
         session.pendingApprovals = 0;
         session.effort ??= null;
         session.usage ??= null;
-        manager.runtimes.set(session.id, manager.newRuntime(session, false));
+        manager.runtimes.set(session.id, manager.newRuntime(session, false, instructions));
       } catch (err) {
         manager.logger.warn(`[sessions] 세션 메타 로드 실패, 건너뜀: ${name}: ${errorMessage(err)}`);
       }
@@ -158,7 +162,11 @@ export class SessionManager {
     return rt ? { ...rt.session } : undefined;
   }
 
-  async create(req: CreateSessionRequest): Promise<Session> {
+  /**
+   * 세션 생성. `instructions`/`team`/`deferStart` 는 팀 관리자용 확장이며 `POST /sessions` 는 넘기지 않는다.
+   * `deferStart` 면 어댑터를 띄우지 않고 `idle` 로 등록·영속화만 한다. 첫 `startTurn` 이 `startAgent` 로 프로세스를 연다.
+   */
+  async create(req: CreateSessionRequest & CreateSessionExtras): Promise<Session> {
     const adapter = this.adapters[req.agent];
     if (!adapter) throw new AgentUnavailableError(`${req.agent} 어댑터를 사용할 수 없습니다`);
     await this.assertDirectory(req.cwd);
@@ -179,10 +187,16 @@ export class SessionManager {
       pendingApprovals: 0,
       preview: null,
       usage: null,
+      // 일반 세션은 키 자체를 생략한다(PROTOCOL 1절 `team`).
+      ...(req.team ? { team: { teamId: req.team.teamId, memberId: req.team.memberId } } : {}),
     };
-    const rt = this.newRuntime(session, true);
+    const rt = this.newRuntime(session, true, req.instructions);
     this.runtimes.set(session.id, rt);
     this.schedulePersist(rt);
+    if (req.deferStart) {
+      this.setStatus(rt, "idle");
+      return { ...rt.session };
+    }
     try {
       await this.startAgent(rt, req.resumeNativeId);
     } catch (err) {
@@ -404,9 +418,10 @@ export class SessionManager {
     return this.now().toISOString();
   }
 
-  private newRuntime(session: Session, loaded: boolean): Runtime {
+  private newRuntime(session: Session, loaded: boolean, instructions?: string): Runtime {
     return {
       session,
+      ...(instructions !== undefined ? { instructions } : {}),
       log: new EventLog(join(this.sessionsDir, `${session.id}.events.jsonl`), this.logger),
       ring: [],
       items: new Map(),
@@ -453,6 +468,8 @@ export class SessionManager {
       model: rt.session.model ?? undefined,
       effort: rt.session.effort ?? undefined,
       resumeNativeId,
+      // 역할 프롬프트는 최초 시작과 재개 모두 넘긴다(Claude 는 첫 요청에 고정, Codex 는 thread/start·resume).
+      ...(rt.instructions !== undefined ? { instructions: rt.instructions } : {}),
     });
     const live: Live = { agent, closing: false };
     rt.live = live;
@@ -735,8 +752,10 @@ export class SessionManager {
       rt.persistDirty = false;
       const path = join(this.sessionsDir, `${rt.session.id}.json`);
       const tmp = `${path}.${randomBytes(4).toString("hex")}.tmp`;
+      // 레코드 = Session + instructions(있을 때만). 응답 Session 에는 instructions 가 없다.
+      const record: SessionRecord = { ...rt.session, ...(rt.instructions !== undefined ? { instructions: rt.instructions } : {}) };
       try {
-        await writeFile(tmp, JSON.stringify(rt.session, null, 2), "utf8");
+        await writeFile(tmp, JSON.stringify(record, null, 2), "utf8");
         await rename(tmp, path);
       } catch (err) {
         this.logger.warn(`[sessions] 세션 메타 저장 실패 session=${rt.session.id}: ${errorMessage(err)}`);

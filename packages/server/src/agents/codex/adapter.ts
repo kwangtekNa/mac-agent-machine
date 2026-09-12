@@ -573,16 +573,18 @@ export class CodexAdapter implements AgentAdapter {
     let model: string;
     let reasoningEffort: string | null;
     const resumed = start.resumeNativeId !== undefined;
+    // 역할 프롬프트(팀원 세션). thread/start 와 thread/resume 둘 다에 넣고 turn/start 에는 넣지 않는다.
+    const instructions = start.instructions ? { developerInstructions: start.instructions } : {};
     try {
       await initializeAppServer(proc.peer);
       if (start.resumeNativeId) {
-        const params: ThreadResumeParams = { threadId: start.resumeNativeId, cwd: start.cwd, approvalPolicy, sandbox };
+        const params: ThreadResumeParams = { threadId: start.resumeNativeId, cwd: start.cwd, approvalPolicy, sandbox, ...instructions };
         const res = await proc.peer.request<ThreadResumeResponse>("thread/resume", params);
         threadId = res.thread.id;
         model = res.model;
         reasoningEffort = res.reasoningEffort;
       } else {
-        const params: ThreadStartParams = { cwd: start.cwd, approvalPolicy, sandbox, ...(start.model ? { model: start.model } : {}) };
+        const params: ThreadStartParams = { cwd: start.cwd, approvalPolicy, sandbox, ...(start.model ? { model: start.model } : {}), ...instructions };
         const res = await proc.peer.request<ThreadStartResponse>("thread/start", params);
         threadId = res.thread.id;
         model = res.model;

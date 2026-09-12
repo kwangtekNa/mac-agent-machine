@@ -13,6 +13,8 @@ export interface ScriptContext {
   input: TurnInput;
   turnId: string;
   nativeId: string;
+  /** 세션 작업 디렉토리(2026-09-12 추가). worktree 에 파일을 쓰는 스크립트가 쓴다. */
+  cwd: string;
   mode: SessionMode;
   /** 이 세션의 몇 번째 턴인지(1부터). */
   turnNumber: number;

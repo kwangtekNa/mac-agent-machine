@@ -60,4 +60,31 @@ describe.skipIf(!IT)("codex integration (MAM_IT_CODEX=1)", () => {
       await rm(cwd, { recursive: true, force: true });
     }
   }, 120_000);
+
+  it("instructions(developerInstructions)가 답변에 반영된다 — PONG 으로 시작", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "mam-codex-it-instr-"));
+    const adapter = new CodexAdapter({ dataDir: join(cwd, ".mam") });
+    const session = await adapter.start({ cwd, mode: "plan", instructions: "Always start your reply with the word PONG." });
+    try {
+      const iter = session.events[Symbol.asyncIterator]();
+      await session.sendTurn({ text: "Say hello in one short sentence." });
+      let text = "";
+      let completed = false;
+      while (true) {
+        const r = await iter.next();
+        if (r.done) break;
+        const e = r.value;
+        if (e.type === "item.completed" && e.item.kind === "assistant_message") text += e.item.payload.text;
+        if (e.type === "turn.completed") completed = true;
+        if (e.type === "status" && e.status === "idle" && completed) break;
+        if (e.type === "error") throw new Error(e.message);
+      }
+      console.log(`[codex IT] instructions text=${JSON.stringify(text)}`);
+      expect(completed).toBe(true);
+      expect(text.trim().toUpperCase().startsWith("PONG")).toBe(true);
+    } finally {
+      await session.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  }, 120_000);
 });

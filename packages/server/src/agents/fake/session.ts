@@ -87,8 +87,31 @@ export class FakeSession implements AgentSession {
     const abort = new AbortController();
     const turn: Turn = { abort, open: new Map(), done: Promise.resolve() };
     this.turn = turn;
+    if (this.turns.length === 1) this.announceInstructions();
     const ctx = this.makeContext(input, turn);
     turn.done = this.run(ctx, turn);
+  }
+
+  /**
+   * 첫 턴 직전에 역할 프롬프트 주입을 `system` 아이템으로 알린다(instructions 가 있을 때만).
+   * 종단 테스트가 어댑터에 지시문이 전달됐는지 확인하는 용도다. 턴 밖 아이템이라 `turnId` 는 null.
+   */
+  private announceInstructions(): void {
+    const { instructions } = this.options;
+    if (!instructions) return;
+    const at = this.config.now().toISOString();
+    this.queue.push({
+      type: "item.started",
+      item: {
+        id: newId("itm"),
+        turnId: null,
+        kind: "system",
+        status: "completed",
+        createdAt: at,
+        completedAt: at,
+        payload: { text: `instructions: ${instructions}` },
+      },
+    });
   }
 
   async interrupt(): Promise<void> {
@@ -150,6 +173,7 @@ export class FakeSession implements AgentSession {
       input,
       turnId: newId("trn"),
       nativeId: this.nativeId,
+      cwd: this.options.cwd,
       mode: this.mode,
       turnNumber: this.turns.length,
       model: this.model,

@@ -63,4 +63,29 @@ describe.skipIf(!enabled)("ClaudeAdapter 통합(MAM_IT_CLAUDE=1)", () => {
       await rm(cwd, { recursive: true, force: true });
     }
   });
+
+  it("실제 SDK: instructions(systemPrompt append)가 답변에 반영된다 — PONG 으로 시작", { timeout: 120_000 }, async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "mam-it-claude-instr-"));
+    const dataDir = join(cwd, ".mam");
+    const logger = { info: () => undefined, warn: (m: string) => console.log("[it] warn", m), error: (m: string) => console.log("[it] error", m) };
+    const adapter = new ClaudeAdapter({ extraOptions: { maxTurns: 1, allowedTools: [] }, settingSources: [], dataDir, logger });
+    const s = await adapter.start({ cwd, mode: "ask", instructions: "Always start your reply with the word PONG." });
+    try {
+      await s.sendTurn({ text: "Say hello in one short sentence." });
+      let text = "";
+      let completed = false;
+      for await (const e of s.events) {
+        if (e.type === "item.completed" && e.item.kind === "assistant_message") text += e.item.payload.text;
+        if (e.type === "error") console.log("[it] error", e.message);
+        if (e.type === "turn.completed") completed = true;
+        if (e.type === "status" && e.status === "idle" && completed) break;
+      }
+      console.log(`[it] instructions text=${JSON.stringify(text)}`);
+      expect(completed).toBe(true);
+      expect(text.trim().toUpperCase().startsWith("PONG")).toBe(true);
+    } finally {
+      await s.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });

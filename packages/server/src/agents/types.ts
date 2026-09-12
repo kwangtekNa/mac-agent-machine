@@ -26,6 +26,11 @@ export interface StartOptions {
   /** 사고 수준(2026-09-10 추가). 재시작 시 PATCH 로 저장된 값을 넘긴다. */
   effort?: string;
   resumeNativeId?: string;
+  /**
+   * 역할 프롬프트 전문(2026-09-12 추가, 팀원 세션). 없거나 빈 문자열이면 지금과 동일(에이전트 기본 프롬프트).
+   * Claude 는 `systemPrompt` preset + append, Codex 는 `developerInstructions` 로 넘긴다. 최초 시작과 재개 모두 넘긴다.
+   */
+  instructions?: string;
 }
 
 export interface TokenDelta { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costUsd?: number }
