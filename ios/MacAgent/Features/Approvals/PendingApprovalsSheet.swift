@@ -3,7 +3,7 @@ import SwiftUI
 /// 대기 중 승인 목록(오래된 순). 행 탭 → 상세 폼. 실수 방지를 위해 행에 빠른 허용/거절 버튼은 두지 않는다.
 struct PendingApprovalsSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let model: TimelineModel
+    let model: any ApprovalResponding
 
     private var pending: [Approval] {
         model.pendingApprovals.sorted { $0.requestedAt < $1.requestedAt }

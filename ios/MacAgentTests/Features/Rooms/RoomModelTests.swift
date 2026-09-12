@@ -154,7 +154,7 @@ final class RoomModelTests: XCTestCase {
         model.apply(try event("room.snapshot"))
 
         XCTAssertEqual(model.entries.map(\.seq), [1, 2, 3, 4])
-        XCTAssertEqual(model.pendingApprovals.map(\.approval.approvalId), [approvalId])
+        XCTAssertEqual(model.pendingRoomApprovals.map(\.approval.approvalId), [approvalId])
         XCTAssertEqual(model.memberStates, [leadId: .idle, devId: .waitingApproval])
         XCTAssertEqual(model.dispatch?.running.map(\.memberId), [devId])
         XCTAssertEqual(model.room?.id, roomId)
@@ -179,7 +179,7 @@ final class RoomModelTests: XCTestCase {
         model.apply(try event("room.message.approval"))                 // seq 4 → 중복
         model.apply(try event("room.message.agent"))                    // seq 3 → 과거
         XCTAssertEqual(model.entries.count, 4)
-        XCTAssertEqual(model.pendingApprovals.count, 1)
+        XCTAssertEqual(model.pendingRoomApprovals.count, 1)
         XCTAssertTrue(model.isReplaying, "중복·과거 이벤트는 라이브가 아니다")
         model.apply(try event("pong"))
         XCTAssertEqual(model.lastSeq, 4)
@@ -221,10 +221,10 @@ final class RoomModelTests: XCTestCase {
         let model = makeModel()
         model.apply(try event("room.snapshot"))
         model.apply(try event("room.message.changes"))                  // seq 7
-        XCTAssertEqual(model.pendingApprovals.count, 1)
+        XCTAssertEqual(model.pendingRoomApprovals.count, 1)
 
         model.apply(try event("room.message.updated", seq: 9))          // message.seq 4, resolution 채워짐
-        XCTAssertTrue(model.pendingApprovals.isEmpty)
+        XCTAssertTrue(model.pendingRoomApprovals.isEmpty)
         XCTAssertEqual(model.entries.map(\.seq), [1, 2, 3, 4, 7], "message.seq 는 원래 값이라 정렬이 유지된다")
         guard case .approval(let updated) = model.entries[3] else { return XCTFail("approval entry") }
         XCTAssertEqual(updated.approval?.resolution?.optionId, "allow_session")
@@ -333,7 +333,7 @@ final class RoomModelTests: XCTestCase {
         XCTAssertEqual(transport.connectRequests.first?.url?.query(), "since=9")
         XCTAssertEqual(transport.connectRequests.first?.url?.path(), "/api/v1/teams/\(teamId)/rooms/\(roomId)/ws")
         try await waitUntil { model.isReplaying }
-        XCTAssertEqual(model.pendingApprovals.count, 1, "스냅샷이 apply 로 흘러들어온다")
+        XCTAssertEqual(model.pendingRoomApprovals.count, 1, "스냅샷이 apply 로 흘러들어온다")
         XCTAssertEqual(model.entries.count, 7, "같은 id 는 교체된다")
         XCTAssertEqual(model.lastSeq, 9)
         XCTAssertEqual(haptics.warnings, 0)
@@ -436,12 +436,12 @@ final class RoomModelTests: XCTestCase {
         defer { model.stop() }
         model.apply(try event("room.snapshot"))
         let transport = try await openSocket(model)
-        let pending = try XCTUnwrap(model.pendingApprovals.first)
+        let pending = try XCTUnwrap(model.pendingRoomApprovals.first)
 
         await model.respond(to: pending, optionId: "deny", inputs: ["a": "b"], message: "CI에서 돌립니다")
 
         XCTAssertEqual(model.approvalSubmit, .submitting(approvalId: approvalId))
-        XCTAssertEqual(model.pendingApprovals.count, 1, "낙관적으로 pending 에서 빼지 않는다")
+        XCTAssertEqual(model.pendingRoomApprovals.count, 1, "낙관적으로 pending 에서 빼지 않는다")
         XCTAssertTrue(transport.sent.isEmpty, "승인 응답은 방 소켓으로 보내지 않는다")
         let request = try XCTUnwrap(requests.value.first)
         XCTAssertEqual(request.httpMethod, "POST")
@@ -452,7 +452,7 @@ final class RoomModelTests: XCTestCase {
         XCTAssertEqual(body["message"] as? String, "CI에서 돌립니다")
 
         transport.push(.frame(try frame("room.message.updated")))       // seq 5
-        try await waitUntil { model.pendingApprovals.isEmpty }
+        try await waitUntil { model.pendingRoomApprovals.isEmpty }
         XCTAssertEqual(model.approvalSubmit, .idle)
     }
 
@@ -461,12 +461,12 @@ final class RoomModelTests: XCTestCase {
         let model = makeModel(failureDuration: .milliseconds(30))
         model.apply(try event("room.snapshot"))
 
-        await model.respond(to: try XCTUnwrap(model.pendingApprovals.first), optionId: "allow")
+        await model.respond(to: try XCTUnwrap(model.pendingRoomApprovals.first), optionId: "allow")
 
         XCTAssertEqual(model.approvalSubmit, .failed(approvalId: approvalId, message: ErrorMessages.approvalAlreadyResolved))
-        XCTAssertEqual(model.pendingApprovals.count, 1, "문구를 보여주는 동안은 아직 pending")
+        XCTAssertEqual(model.pendingRoomApprovals.count, 1, "문구를 보여주는 동안은 아직 pending")
         try await waitUntil { model.approvalSubmit == .idle }
-        XCTAssertTrue(model.pendingApprovals.isEmpty)
+        XCTAssertTrue(model.pendingRoomApprovals.isEmpty)
         try await waitUntil { model.entries.count == 7 }
         XCTAssertTrue(requests.value.contains { $0.httpMethod == "GET" && $0.url?.path() == "/api/v1/teams/\(self.teamId)/rooms/\(self.roomId)" },
                       "방을 다시 읽어 서버 상태와 맞춘다")
@@ -479,10 +479,10 @@ final class RoomModelTests: XCTestCase {
         install([])
         let model = makeModel(failureDuration: .milliseconds(30))
         model.apply(try event("room.snapshot"))
-        await model.respond(to: try XCTUnwrap(model.pendingApprovals.first), optionId: "allow")
+        await model.respond(to: try XCTUnwrap(model.pendingRoomApprovals.first), optionId: "allow")
         XCTAssertEqual(model.approvalSubmit, .failed(approvalId: approvalId, message: ErrorMessages.approvalSendFailed))
         try await waitUntil { model.approvalSubmit == .idle }
-        XCTAssertEqual(model.pendingApprovals.count, 1, "보내지 못한 승인은 그대로 남는다")
+        XCTAssertEqual(model.pendingRoomApprovals.count, 1, "보내지 못한 승인은 그대로 남는다")
         XCTAssertEqual(requests.value.count, 1, "전송 실패는 재조회 사유가 아니다")
     }
 
@@ -490,15 +490,15 @@ final class RoomModelTests: XCTestCase {
         install([("POST", "/api/v1/sessions/\(devSessionId)/approvals/\(approvalId)", 200, Data(#"{"ok":true}"#.utf8))])
         let model = makeModel()
         model.apply(try event("room.snapshot"))
-        var stranger = try XCTUnwrap(model.pendingApprovals.first)
+        var stranger = try XCTUnwrap(model.pendingRoomApprovals.first)
         stranger.approval.approvalId = "apr_unknown"
         await model.respond(to: stranger, optionId: "allow")
         XCTAssertEqual(model.approvalSubmit, .idle)
         XCTAssertTrue(requests.value.isEmpty)
 
-        await model.respond(to: try XCTUnwrap(model.pendingApprovals.first), optionId: "allow")
+        await model.respond(to: try XCTUnwrap(model.pendingRoomApprovals.first), optionId: "allow")
         XCTAssertEqual(model.approvalSubmit, .submitting(approvalId: approvalId))
-        await model.respond(to: try XCTUnwrap(model.pendingApprovals.first), optionId: "deny")
+        await model.respond(to: try XCTUnwrap(model.pendingRoomApprovals.first), optionId: "deny")
         XCTAssertEqual(requests.value.count, 1, "전송 중에는 다시 보내지 않는다")
     }
 
@@ -599,11 +599,11 @@ final class RoomModelTests: XCTestCase {
         })
         XCTAssertEqual(haptics.warnings, 1, "첫 라이브 승인 요청")
         XCTAssertFalse(model.isReplaying)
-        XCTAssertEqual(model.pendingApprovals.map(\.approval.approvalId), [approvalId, "apr_live"], "requestedAt 오름차순")
+        XCTAssertEqual(model.pendingRoomApprovals.map(\.approval.approvalId), [approvalId, "apr_live"], "requestedAt 오름차순")
 
         model.apply(try event("room.message.updated", seq: 6))          // 이미 처리된 승인 갱신은 햅틱 없음
         XCTAssertEqual(haptics.warnings, 1)
-        XCTAssertEqual(model.pendingApprovals.map(\.approval.approvalId), ["apr_live"])
+        XCTAssertEqual(model.pendingRoomApprovals.map(\.approval.approvalId), ["apr_live"])
 
         model.apply(try event("room.snapshot"))                         // 재접속 스냅샷: 다시 재생
         XCTAssertTrue(model.isReplaying)

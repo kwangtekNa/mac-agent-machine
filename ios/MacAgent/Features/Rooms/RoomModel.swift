@@ -25,8 +25,8 @@ final class RoomModel {
     private(set) var members: [TeamMember] = []
     /// seq 오름차순, id 로 교체.
     private(set) var entries: [RoomEntry] = []
-    /// requestedAt 오름차순.
-    private(set) var pendingApprovals: [RoomApproval] = []
+    /// 방에 미러링된 대기 승인(requestedAt 오름차순). 배너·시트는 `ApprovalResponding.pendingApprovals`(`[Approval]`)로 본다.
+    private(set) var pendingRoomApprovals: [RoomApproval] = []
     /// `room.snapshot`/`room.status` 의 `members[].state`.
     private(set) var memberStates: [String: TeamMemberState] = [:]
     private(set) var dispatch: DispatchState?
@@ -213,7 +213,7 @@ final class RoomModel {
         dispatch = e.dispatch
         memberStates = Self.states(from: e.members)
         for message in e.messages.sorted(by: { $0.seq < $1.seq }) { upsert(message) }
-        pendingApprovals = e.pendingApprovals.sorted { $0.approval.requestedAt < $1.approval.requestedAt }
+        pendingRoomApprovals = e.pendingApprovals.sorted { $0.approval.requestedAt < $1.approval.requestedAt }
         lastSeq = max(lastSeq, e.room.lastSeq, e.messages.map(\.seq).max() ?? 0)
         hasOlderHistory = e.truncated
         isReplaying = true
@@ -253,13 +253,13 @@ final class RoomModel {
     }
 
     private func addPending(_ approval: RoomApproval) {
-        pendingApprovals.removeAll { $0.approval.approvalId == approval.approval.approvalId }
-        pendingApprovals.append(approval)
-        pendingApprovals.sort { $0.approval.requestedAt < $1.approval.requestedAt }
+        pendingRoomApprovals.removeAll { $0.approval.approvalId == approval.approval.approvalId }
+        pendingRoomApprovals.append(approval)
+        pendingRoomApprovals.sort { $0.approval.requestedAt < $1.approval.requestedAt }
     }
 
     private func resolvePending(approvalId: String) {
-        pendingApprovals.removeAll { $0.approval.approvalId == approvalId }
+        pendingRoomApprovals.removeAll { $0.approval.approvalId == approvalId }
         switch approvalSubmit {
         case .submitting(let id) where id == approvalId, .failed(let id, _) where id == approvalId:
             approvalFailureTask?.cancel()
@@ -282,7 +282,7 @@ final class RoomModel {
     /// 전송 중인 승인이 더는 pending 에 없으면(누가 처리했든) 전송 상태를 정리한다.
     private func reconcileSubmitState() {
         guard case .submitting(let id) = approvalSubmit else { return }
-        if !pendingApprovals.contains(where: { $0.approval.approvalId == id }) {
+        if !pendingRoomApprovals.contains(where: { $0.approval.approvalId == id }) {
             approvalSubmit = .idle
         }
     }
@@ -336,7 +336,7 @@ final class RoomModel {
     /// 확정은 서버의 `room.message.updated` 다. pending 은 낙관적으로 바꾸지 않고, 전송 중에는 다른 승인을 보내지 않는다.
     func respond(to approval: RoomApproval, optionId: String, inputs: [String: String]? = nil, message: String? = nil) async {
         let id = approval.approval.approvalId
-        guard pendingApprovals.contains(where: { $0.approval.approvalId == id }) else { return }
+        guard pendingRoomApprovals.contains(where: { $0.approval.approvalId == id }) else { return }
         if case .submitting = approvalSubmit { return }
         approvalFailureTask?.cancel()
         approvalSubmit = .submitting(approvalId: id)
@@ -365,7 +365,7 @@ final class RoomModel {
             try? await Task.sleep(for: duration)
             guard let self, !Task.isCancelled else { return }
             if alreadyResolved {
-                self.pendingApprovals.removeAll { $0.approval.approvalId == id }
+                self.pendingRoomApprovals.removeAll { $0.approval.approvalId == id }
                 await self.refreshDetail()
             }
             if case .failed(let failedId, _) = self.approvalSubmit, failedId == id {
@@ -384,7 +384,7 @@ final class RoomModel {
                 guard let approval = message.approval, approval.resolution != nil else { return nil }
                 return approval.approval.approvalId
             })
-            pendingApprovals.removeAll { resolved.contains($0.approval.approvalId) }
+            pendingRoomApprovals.removeAll { resolved.contains($0.approval.approvalId) }
             reconcileSubmitState()
         } catch {
             if Task.isCancelled { return }
@@ -447,5 +447,28 @@ final class RoomModel {
                 self.mergeSubmit = .idle
             }
         }
+    }
+}
+
+// MARK: - ApprovalResponding (배너·시트 공용 인터페이스)
+
+extension RoomModel: ApprovalResponding {
+    /// 미러링된 승인을 `Approval` 로 펼친다(requestedAt 오름차순은 `pendingRoomApprovals` 가 유지한다).
+    var pendingApprovals: [Approval] {
+        pendingRoomApprovals.map(\.approval)
+    }
+
+    /// `approvalId` 로 `RoomApproval` 을 찾아 카드의 세션 API 로 보낸다. pending 에 없으면 아무것도 하지 않는다.
+    func respond(to approval: Approval, optionId: String, inputs: [String: String]?, message: String?) async {
+        guard let roomApproval = pendingRoomApprovals.first(where: { $0.approval.approvalId == approval.approvalId }) else { return }
+        await respond(to: roomApproval, optionId: optionId, inputs: inputs, message: message)
+    }
+
+    /// 배너 제목 위 작성자 캡션: `emoji 이름 · 역할`. 승인이 pending 에 없거나 팀원을 모르면 nil.
+    func authorLabel(for approval: Approval) -> String? {
+        guard let roomApproval = pendingRoomApprovals.first(where: { $0.approval.approvalId == approval.approvalId }),
+              let member = member(id: roomApproval.memberId)
+        else { return nil }
+        return "\(member.emoji) \(member.name) · \(member.roleLabel)"
     }
 }

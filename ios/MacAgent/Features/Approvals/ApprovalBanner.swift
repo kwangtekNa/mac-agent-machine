@@ -135,8 +135,9 @@ struct ApprovalOptionButton: View {
 
 /// 컴포저 위 승인 배너(IOS.md 5.3). 대기 승인이 있을 때만 보이며 가장 오래된 1건과 "외 N건"을 그린다.
 /// 등장은 아래에서 올라오는 애니메이션 1회(모션 줄이기면 없음), 사라질 때는 즉시. 그 외 애니메이션 없음.
+/// 세션 화면과 방 화면이 같은 배너를 쓴다(`ApprovalResponding`). 방에서는 제목 위에 작성자 캡션 한 줄이 붙는다.
 struct ApprovalBanner: View {
-    let model: TimelineModel
+    let model: any ApprovalResponding
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var detailApproval: Approval?
     @State private var showsPendingList = false
@@ -170,6 +171,12 @@ struct ApprovalBanner: View {
                     .foregroundStyle(.yellow)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
+                    if let author = model.authorLabel(for: approval) {
+                        Text(author)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     Text(approval.title)
                         .font(.subheadline.weight(.bold))
                         .lineLimit(1)
@@ -240,7 +247,7 @@ struct ApprovalBanner: View {
         switch action {
         case .option(let option):
             ApprovalOptionButton(option: option, hint: ApprovalBannerState.accessibilityHint(for: option, kind: approval.kind)) {
-                Task { await model.respond(to: approval, optionId: option.id) }
+                Task { await model.respond(to: approval, optionId: option.id, inputs: nil, message: nil) }
             }
         case .more:
             Button("더 보기") { detailApproval = approval }

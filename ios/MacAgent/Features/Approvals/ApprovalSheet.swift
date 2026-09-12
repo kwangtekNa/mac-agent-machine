@@ -69,7 +69,7 @@ extension ApprovalKind {
 
 /// 승인 상세 시트. `NavigationStack` 안 `Form`. 처리되면(pending 에서 빠지면) 자동으로 닫힌다.
 struct ApprovalSheet: View {
-    let model: TimelineModel
+    let model: any ApprovalResponding
     let approvalId: String
 
     var body: some View {
@@ -82,11 +82,11 @@ struct ApprovalSheet: View {
 /// 승인 상세 폼: 헤더, 내용(detail·diff), 입력 필드, 거절 사유, 옵션 버튼. 시트와 대기 목록(push) 양쪽에서 쓴다.
 struct ApprovalDetailForm: View {
     @Environment(\.dismiss) private var dismiss
-    let model: TimelineModel
+    let model: any ApprovalResponding
     let approvalId: String
     @State private var form: ApprovalFormState
 
-    init(model: TimelineModel, approvalId: String) {
+    init(model: any ApprovalResponding, approvalId: String) {
         self.model = model
         self.approvalId = approvalId
         let approval = model.pendingApprovals.first { $0.approvalId == approvalId }
