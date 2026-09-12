@@ -1,0 +1,80 @@
+{
+  "project": "mac-agent-machine",
+  "phase": "4-teams-ios",
+  "steps": [
+    {
+      "step": 0,
+      "name": "ios-team-models-fixtures",
+      "status": "pending"
+    },
+    {
+      "step": 1,
+      "name": "event-socket-generalization",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 2,
+      "name": "room-model",
+      "status": "pending",
+      "depends_on": [
+        0,
+        1
+      ]
+    },
+    {
+      "step": 3,
+      "name": "approval-banner-generalization",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 4,
+      "name": "teams-store-and-team-ui",
+      "status": "pending",
+      "depends_on": [
+        0,
+        2,
+        3
+      ]
+    },
+    {
+      "step": 5,
+      "name": "rooms-list-and-room-screen",
+      "status": "pending",
+      "depends_on": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "step": 6,
+      "name": "work-summary-approval-merge-cards",
+      "status": "pending",
+      "depends_on": [
+        5
+      ]
+    },
+    {
+      "step": 7,
+      "name": "ios-docs-and-ui-test",
+      "status": "pending",
+      "depends_on": [
+        6
+      ]
+    },
+    {
+      "step": 8,
+      "name": "verify-and-install",
+      "status": "pending",
+      "depends_on": [
+        7
+      ]
+    }
+  ]
+}
