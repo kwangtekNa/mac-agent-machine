@@ -132,12 +132,39 @@
     {
       "step": 5,
       "name": "team-manager",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         1,
         2,
         4
-      ]
+      ],
+      "started_at": "2026-09-12T21:35:05+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "0ecf7b1d-5cd2-44e2-96cf-903e9a6b6868",
+          "cost_usd": 9.069277750000001,
+          "duration_s": 953.2,
+          "num_turns": 27,
+          "exit_code": 0,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "01666059-c1e7-4a72-9b60-ee6ab3891296",
+          "cost_usd": 5.9745827500000015,
+          "duration_s": 631.7,
+          "num_turns": 33,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 15.043861,
+      "duration_s": 1584.9,
+      "retries": 1,
+      "session_id": "01666059-c1e7-4a72-9b60-ee6ab3891296",
+      "summary": "Step 5 team-manager done. packages/server/src/teams/team-manager.ts: TeamManager.open/listTeams/getTeam/detail/createTeam/patchTeam/deleteTeam/addMember/patchMember/removeMember/resetMember/postUserMessage/stop/interrupt/subscribeRoom/roomDetail/listChanges/shutdown; queue pump → runDispatch (worktree sync + conflictNote, context from group+DM via lastSeen, turn-only session subscription, approval mirror + resolution update, reply post with work/hop/dispatchId, reply-mention chaining with maxHops system message, auto commitAll + ChangeSet ready → group room `changes` card + changes.json, previous ready → stale via room.message.updated, rate-limit pause, restart notice, states persisted in team.json). Fixes this session: (1) interrupt/stop arriving before the turn started (during worktree sync / adapter boot) was dropped → executeTurn now returns `interrupted` early when run.interrupted is set before start and re-issues manager.interrupt after startTurn; never-started turns don't advance lastSeen; (2) `closed` flag set at start of shutdown() blocks post-shutdown persist/persistChanges/emitStatus/pump (fixed team.json overwrite race in restart test). Test fixes in test/teams/team-manager.test.ts: fake reply strips `@` from echoed trigger (echoed @all/@민수 caused bounce chains), chain test uses \"call jiyeon\" so the lead runs first, outside-home assertion checks SandboxError {code:\"forbidden\",status:403}, afterEach shuts down TeamManager/SessionManager before removing tmp dirs (ENOTEMPTY race). Helper APIs added (from prior attempt, kept): SessionManager.setInstructions(id,text) + subscriberCount(id), CreateSessionExtras.effort (forwarded to StartOptions), DispatchQueue.requeue(id)/removeQueued(memberId), RoomMessageDraft.id (pre-issued msg_ id for ChangeSet.messageId), TeamStore.loadChanges/saveChanges (changes.json; remove() deletes it), worktree.ts branchExists/changedFileKinds. AC: npm ci OK, npm run typecheck OK, npm test 718 passed/4 skipped (team-manager 12/12, stable across 3 runs), file exists, bash scripts/test.sh (TS + iOS) OK. Checklist: session subscription only during turn (subscriberCount 0 asserted), no adapter start on create/add (startCalls empty asserted), paths via resolveInsideHome, git only via worktree.ts, no bodies/prompts in logs, room seq by RoomManager / session seq by SessionManager. packages/protocol and phases/ untouched. Note for step 6: syncWorktree only injects a conflictNote; merge/dismiss/stale-on-merge flows not implemented.",
+      "completed_at": "2026-09-12T22:01:30+0900"
     },
     {
       "step": 6,
