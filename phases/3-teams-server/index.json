@@ -80,10 +80,28 @@
     {
       "step": 3,
       "name": "room-store",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-12T21:11:46+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "8669fe20-4fc1-4c1d-a2d2-cbacecfe1eaa",
+          "cost_usd": 6.837663999999998,
+          "duration_s": 734.7,
+          "num_turns": 34,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 6.837664,
+      "duration_s": 734.7,
+      "retries": 0,
+      "session_id": "8669fe20-4fc1-4c1d-a2d2-cbacecfe1eaa",
+      "summary": "Step 3 room-store done: ids.ts IdPrefix += team|agt|room|msg|chg|tpl|dsp; sessions/event-log.ts → generic JsonlLog<T extends {seq}>(filePath, schema, logger) with append/flush/readSince/tail, EventLog extends JsonlLog<ServerEvent> (callers unchanged); errors.ts += RoomNotFoundError, RoomMessageNotFoundError; new src/teams/types.ts (TeamMemberRecordSchema = TeamMember + lastSeen record default {}, TeamRecordSchema, TeamRecord), src/teams/store.ts (TeamStore(dataDir, logger): teamsDir=<dataDir>/teams, templatesDir=<dataDir>/team-templates, teamDir(id), list (scan, skip corrupted w/ warn), load (undefined if missing, InternalError if corrupted), save (0700 dirs, tmp+rename), remove (team.json + rooms/ only, rmdir if empty; idempotent), listTemplates/saveTemplate/removeTemplate; toTeam() via TeamSchema.parse drops lastSeen; slug() → [a-z0-9-] or \"team\"; makeHandle() ascii/digits/hyphen lowercase, \"agent-<index>\" for Korean names, -2/-3 suffix, ≤32 chars), src/teams/roles.ts (ROLE_PRESETS developer/planner/team-lead/code-reviewer/custom with Korean labels + fixture emojis and 7-sentence English prompts — developer: implement in own worktree, read first, write/run tests, state assumptions, report files+verification; planner: requirements/AC/task breakdown, docs in repo, no code edits unless asked, list risks; team-lead: default responder, split & delegate via @name, no big implementations, track/follow up, summarize; code-reviewer: read diff, file/line + why + concrete fix, blocking vs nit, ready-to-merge verdict, no edits unless asked; custom \"\"; rolePreset(id); buildInstructions({member(+optional role), team, teammates}) = role prompt (or preset when empty and role known) + English \"## Team protocol\" block: identity/worktree/branch scope, message formats [#전체] 사용자/[DM] 사용자/[#전체] @민수(개발자)/[#전체] 시스템 + last line is the request, teammate list with (team lead) marker excluding self, answer in Korean, @mention only when action needed / no self-mention / no bouncing, no git commit/push/merge/rebase/checkout (server commits, user merges), 1–3 line summary; block always attached even for custom empty prompt), src/teams/mentions.ts (normalizeName NFC+lower+trim; parseMentions regex /@([\\p{L}\\p{N}_.\\-]+)/gu, trailing .,!?:;)]}\"' strip, name/handle match, @all → all:true + everyone minus author, excludeMemberId, dedupe, unknown tokens), src/teams/room-manager.ts (RoomManager.open({teamDir, team, ringBufferSize=500, now, logger}) mkdir rooms/ 0700, per-room JsonlLog<RoomServerEvent> at rooms/<roomId>.events.jsonl, rebuilds messagesById map + ring + lastSeq=max(team.json, log) + lastMessageAt; addRoom(room) idempotent for post-open DM rooms; post(roomId, draft) → msg_ id, RoomMessageSchema validation before seq consumption (InvalidRequestError), room.message; update() → room.message.updated with new seq, message.seq kept; status(); error(); subscribe(since) ring/file replay + buffered live queue like SessionManager; detail(limit=200) with truncated; messagesSince(seq) current state; lastSeq(); flush(); onRoomChanged callback with room copy after every emit; seq issued only in private emit() (peekSeq helper), sync fan-out, listener errors logged with room/seq only, no bodies in logs, no SessionManager import). Tests (TDD RED→GREEN): event-log.test.ts +3 generic JsonlLog cases, test/teams/store.test.ts (8), roles.test.ts (5), mentions.test.ts (9), room-manager.test.ts (11: per-room seq, fan-out, onRoomChanged, updated seq semantics, ring/file/live replay incl. default-500 rollover with 505 posts and no double delivery during file replay, re-open restores state + team.json-ahead case, detail/truncated/messagesSince immutability, listener exception w/o body leak, invalid draft no seq, addRoom), helper test/helpers/team-record.ts from fixtures/rest/team.json. AC: npm ci OK, npm run typecheck OK, npm test 654 passed/4 skipped, files exist, bash scripts/test.sh (TS + iOS) OK. packages/protocol and phases/ untouched (phases/3-teams-server/index.json modification predates session). Note: templates stored as <dataDir>/team-templates/<tplId>.json per step (ADR-017 text says single team-templates.json).",
+      "completed_at": "2026-09-12T21:24:00+0900"
     },
     {
       "step": 4,
