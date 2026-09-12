@@ -5,7 +5,25 @@
     {
       "step": 0,
       "name": "teams-protocol",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T20:40:52+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "afae73c0-f8f8-4915-aa06-39376ab8c4e4",
+          "cost_usd": 8.545260500000001,
+          "duration_s": 898.0,
+          "num_turns": 30,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 8.545261,
+      "duration_s": 898.0,
+      "retries": 0,
+      "session_id": "afae73c0-f8f8-4915-aa06-39376ab8c4e4",
+      "summary": "Step 0 teams-protocol done: PROTOCOL.md §6 (팀과 방: 6.1 모델, 6.2 REST 표·오류, 6.3 방 WS, 6.4 디스패치, 6.5 worktree·커밋·머지) + Session.team 필드 + ID 접두어; ADR-017 + 미결 사항 행. zod: common.ts에 TeamId/MemberId/RoomId/MessageId/ChangeId/TemplateId/DispatchId, session.ts에 SessionTeamRefSchema·Session.team(optional), 새 teams.ts(RoleId/RolePreset/TeamMemberState/Handle/TeamMember/TeamSettings/RoomKind/Room/Team/RoomAuthor/WorkSummary/ChangeSetStatus/ChangeSet/RoomMessageKind/RoomApproval/RoomMessage/MergeResult/RunningDispatch/QueuedDispatch/DispatchState/TeamTemplateMember/TeamTemplate, MemberInput/CreateTeam/PatchTeam/PatchMember/PostRoomMessage/CreateTeamTemplate/PatchTeamTemplate 요청, TeamRoles/Teams/TeamDetail/RoomDetail/PostRoomMessage/Changes/TeamTemplates 응답), 새 room-ws.ts(RoomServerEventSchema: room.snapshot/room.message/room.message.updated/room.status/room.error/pong, RoomClientMessageSchema: room.send/room.interrupt/ping, RoomMemberStatus), index.ts에 타입·parseRoomServerEvent/parseRoomClientMessage/safeParseRoomClientMessage. Fixture 23개: rest/{team-roles,teams,team,team-detail,room,room-message-post,changes,merge-result,team-templates,team-template}.json, room-ws/{room.snapshot,room.message.user,room.message.agent,room.message.approval,room.message.changes,room.message.system,room.message.updated,room.status,room.error,pong}.json, room-client/{room.send,room.interrupt,ping}.json (팀 team_…XT1 'backend', 팀장 민수/minsu claude + 개발자 지연/jiyeon codex, 그룹방 전체 + DM 2, 브랜치 mam/backend/<handle>, worktree ~/.mam/teams/<teamId>/worktrees/<memberId>). 테스트: fixtures.test.ts(REST 10개 추가, ROOM_WS/ROOM_CLIENT 테이블, ADDED_2026_09_12 23개, ws/·client/에 room 없음 검사, 내용 단언), schemas.test.ts 음수 케이스 8개, index.test.ts export 검사; iOS ProtocolFixturesTests.swift 23개 JSONValue 등록·count 69·ADDED_2026_09_12 집합. 규약: 방 이벤트(room.message/updated/status/error)는 방 seq 소비, snapshot·pong seq 0, room.message.updated는 새 seq + message.seq 유지. AC 전부 통과(npm ci/typecheck/test 568개, bash scripts/test.sh iOS 포함 OK). packages/server·fixtures/ws·client 미변경, Swift 파일 신규 없음.",
+      "completed_at": "2026-09-12T20:55:50+0900"
     },
     {
       "step": 1,
@@ -73,5 +91,6 @@
         7
       ]
     }
-  ]
+  ],
+  "created_at": "2026-09-12T20:40:52+0900"
 }
