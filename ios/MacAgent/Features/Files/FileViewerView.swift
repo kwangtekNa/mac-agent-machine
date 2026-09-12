@@ -1,3 +1,4 @@
+import MarkdownUI
 import SwiftUI
 import UIKit
 
@@ -23,6 +24,16 @@ enum FileViewerLogic {
             return nil
         }
         return UIImage(data: data)
+    }
+
+    /// 서버 언어 식별자가 markdown 인가(`.md`, `.markdown` → `"markdown"`).
+    static func isMarkdown(language: String) -> Bool {
+        language == "markdown"
+    }
+
+    /// Markdown 을 렌더해 보여줄지. 하이라이트와 같은 크기 상한(200 KiB)을 넘으면 원본만.
+    static func canRenderMarkdown(size: Int, language: String) -> Bool {
+        isMarkdown(language: language) && size <= highlightLimitBytes
     }
 
     /// 코드 폰트 크기: 본문 Dynamic Type 크기의 85%.
@@ -61,6 +72,8 @@ struct FileViewerView: View {
     @State private var phase: Phase = .loading
     @State private var wrapLines = false
     @State private var showsDiff = false
+    /// Markdown 파일: 기본은 렌더, 토글하면 원본.
+    @State private var showsMarkdownSource = false
 
     private var fileName: String { (path as NSString).lastPathComponent }
 
@@ -85,14 +98,25 @@ struct FileViewerView: View {
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if let file = loadedFile, !FileViewerLogic.isImage(file) {
-                        Button {
-                            wrapLines.toggle()
-                        } label: {
-                            Image(systemName: "return")
-                                .symbolVariant(wrapLines ? .fill : .none)
+                        if FileViewerLogic.canRenderMarkdown(size: file.size, language: file.language) {
+                            Button {
+                                showsMarkdownSource.toggle()
+                            } label: {
+                                Image(systemName: showsMarkdownSource ? "doc.richtext" : "doc.plaintext")
+                            }
+                            .accessibilityLabel(showsMarkdownSource ? "렌더 보기" : "원본 보기")
+                            .accessibilityIdentifier("fileViewer.markdownToggle")
                         }
-                        .tint(wrapLines ? .accentColor : .secondary)
-                        .accessibilityLabel(wrapLines ? "줄바꿈 끄기" : "줄바꿈 켜기")
+                        if showsSource(file) {
+                            Button {
+                                wrapLines.toggle()
+                            } label: {
+                                Image(systemName: "return")
+                                    .symbolVariant(wrapLines ? .fill : .none)
+                            }
+                            .tint(wrapLines ? .accentColor : .secondary)
+                            .accessibilityLabel(wrapLines ? "줄바꿈 끄기" : "줄바꿈 켜기")
+                        }
                         ShareLink(item: file.content) {
                             Image(systemName: "square.and.arrow.up")
                         }
@@ -141,6 +165,8 @@ struct FileViewerView: View {
                     } else {
                         ContentUnavailableView("이미지를 열 수 없습니다", systemImage: "photo")
                     }
+                } else if !showsSource(file) {
+                    MarkdownDocumentView(text: file.content)
                 } else {
                     HighlightedCodeView(
                         text: file.content,
@@ -154,6 +180,11 @@ struct FileViewerView: View {
         }
     }
 
+    /// 원본(코드 뷰)을 보여줄지. Markdown 은 렌더가 기본이고 토글로 원본을 본다.
+    private func showsSource(_ file: FsReadResponse) -> Bool {
+        !FileViewerLogic.canRenderMarkdown(size: file.size, language: file.language) || showsMarkdownSource
+    }
+
     private func load() async {
         phase = .loading
         do {
@@ -163,6 +194,22 @@ struct FileViewerView: View {
                 ? .unsupported
                 : .failed(ErrorMessages.fileAccessMessage(for: error))
         }
+    }
+}
+
+/// Markdown 파일 렌더(IOS.md 5절: 에이전트 메시지와 같은 MarkdownUI 테마). 상대 경로 이미지는 표시되지 않는다.
+private struct MarkdownDocumentView: View {
+    let text: String
+
+    var body: some View {
+        ScrollView {
+            Markdown(text)
+                .markdownTheme(Theme.macAgent(dimmed: false))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+        }
+        .background(Color(.systemBackground))
     }
 }
 

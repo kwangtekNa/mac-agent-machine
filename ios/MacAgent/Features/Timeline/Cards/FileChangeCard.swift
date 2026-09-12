@@ -1,13 +1,18 @@
 import SwiftUI
 
-/// 파일 변경: 파일 목록(펼침) + "변경 내용" 토글(diff, 접힘).
+/// 파일 변경: 파일 목록(펼침) + "변경 내용" 토글(diff, 접힘). diff 를 더블 탭하면 전체 화면 뷰어.
 struct FileChangeCard: View {
     let item: TimelineItem
     let payload: FileChangePayload
     @State private var showsDiff = false
+    @State private var showsFullDiff = false
+
+    private var title: String {
+        String(localized: "파일 \(payload.files.count)개 변경")
+    }
 
     var body: some View {
-        ItemCard(item: item, style: ItemStyle.style(for: item), title: String(localized: "파일 \(payload.files.count)개 변경")) {
+        ItemCard(item: item, style: ItemStyle.style(for: item), title: title) {
             ForEach(Array(payload.files.enumerated()), id: \.offset) { _, file in
                 HStack(spacing: 6) {
                     Image(systemName: Self.symbol(for: file.kind))
@@ -26,10 +31,15 @@ struct FileChangeCard: View {
             }
             if !payload.patch.isEmpty {
                 DisclosureGroup("변경 내용", isExpanded: $showsDiff) {
-                    DiffTextView(patch: payload.patch).padding(.top, 4)
+                    DiffTextView(patch: payload.patch)
+                        .padding(.top, 4)
+                        .expandable { showsFullDiff = true }
                 }
                 .font(.caption)
             }
+        }
+        .fullScreenCover(isPresented: $showsFullDiff) {
+            TextContentViewer(title: title, subtitle: String(localized: "변경 내용"), content: .diff(payload.patch), truncated: false)
         }
     }
 

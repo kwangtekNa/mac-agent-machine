@@ -2,12 +2,17 @@ import SwiftUI
 
 /// 도구 호출: 도구별 아이콘·색, 제목 monospaced 한 줄, exit 코드 캡슐, 출력(접힘)·입력 JSON 토글.
 struct ToolCallCard: View {
-    static let maxOutputHeight: CGFloat = 240
-
     let item: TimelineItem
     let payload: ToolCallPayload
     @State private var showsOutput = false
     @State private var showsInput = false
+    /// 출력·입력 상자 더블 탭 → 전체 화면 뷰어(`TextContentViewer`). 한 뷰에 fullScreenCover 는 하나만 둔다.
+    @State private var fullScreen: FullScreen?
+
+    private enum FullScreen: String, Identifiable {
+        case output, input
+        var id: String { rawValue }
+    }
 
     var body: some View {
         ItemCard(item: item, style: ItemStyle.style(for: item), title: payload.title, titleMonospaced: true, badge: badge) {
@@ -20,15 +25,7 @@ struct ToolCallCard: View {
                 }
             }
             if showsOutput, !payload.output.isEmpty {
-                ScrollView([.horizontal, .vertical], showsIndicators: true) {
-                    Text(payload.output)
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                        .padding(8)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxHeight: Self.maxOutputHeight)
-                .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+                ToolOutputBox(output: payload.output) { fullScreen = .output }
                 if payload.truncated {
                     Text("출력 일부만 표시").font(.caption2).foregroundStyle(.secondary)
                 }
@@ -41,6 +38,21 @@ struct ToolCallCard: View {
                         .padding(8)
                 }
                 .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+                .expandable { fullScreen = .input }
+            }
+        }
+        .fullScreenCover(item: $fullScreen) { which in
+            switch which {
+            case .output:
+                TextContentViewer(
+                    title: payload.title, subtitle: String(localized: "도구 출력"),
+                    content: .text(payload.output), truncated: payload.truncated
+                )
+            case .input:
+                TextContentViewer(
+                    title: payload.title, subtitle: String(localized: "도구 입력"),
+                    content: .code(inputJSON, language: "json"), truncated: false
+                )
             }
         }
     }

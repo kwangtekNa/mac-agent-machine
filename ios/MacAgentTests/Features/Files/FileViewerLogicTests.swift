@@ -56,4 +56,13 @@ final class FileViewerLogicTests: XCTestCase {
         XCTAssertEqual(ErrorMessages.fileAccessMessage(for: APIError.server(code: .internalError, message: "서버 오류", status: 500)), "서버 오류")
         XCTAssertEqual(ErrorMessages.fileAccessMessage(for: APIError.transport(URLError(.timedOut))), ErrorMessages.cannotConnect)
     }
+
+    func testMarkdownRenderingGate() {
+        XCTAssertTrue(FileViewerLogic.isMarkdown(language: "markdown"), "서버는 .md/.markdown 을 'markdown' 으로 준다")
+        XCTAssertFalse(FileViewerLogic.isMarkdown(language: "plaintext"))
+        XCTAssertFalse(FileViewerLogic.isMarkdown(language: "swift"))
+        XCTAssertTrue(FileViewerLogic.canRenderMarkdown(size: 204_800, language: "markdown"))
+        XCTAssertFalse(FileViewerLogic.canRenderMarkdown(size: 204_801, language: "markdown"), "200 KiB 초과는 원본만")
+        XCTAssertFalse(FileViewerLogic.canRenderMarkdown(size: 10, language: "swift"))
+    }
 }
