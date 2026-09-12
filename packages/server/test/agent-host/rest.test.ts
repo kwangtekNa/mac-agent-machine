@@ -27,6 +27,7 @@ beforeEach(async () => {
     home: fx.home,
     workspaceRoot: fx.workspaceRoot,
     manager: fx.manager,
+    teams: fx.teams,
     adapters: { claude: fx.adapter },
     serverVersion: "0.1.0-test",
   });

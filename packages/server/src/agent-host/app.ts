@@ -13,6 +13,10 @@ import { registerModelsRoutes } from "./routes/models.js";
 import { registerUsageRoutes } from "./routes/usage.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerSessionsRoutes } from "./routes/sessions.js";
+import { registerTeamRolesRoutes } from "./routes/team-roles.js";
+import { registerTeamTemplatesRoutes } from "./routes/team-templates.js";
+import { registerTeamsRoutes } from "./routes/teams.js";
+import { registerRoomWsRoutes } from "./ws-rooms.js";
 import { registerWsRoutes, type WsOptions } from "./ws.js";
 
 export type { AgentHostContext } from "./http.js";
@@ -82,6 +86,10 @@ export function buildApp(ctx: AgentHostContext, opts: { ws?: WsOptions } = {}): 
       registerUsageRoutes(api, host);
       registerModelsRoutes(api, host);
       registerWsRoutes(api, host, opts.ws);
+      registerTeamRolesRoutes(api, host);
+      registerTeamsRoutes(api, host);
+      registerTeamTemplatesRoutes(api, host);
+      registerRoomWsRoutes(api, host, opts.ws);
     },
     { prefix: API_PREFIX },
   );

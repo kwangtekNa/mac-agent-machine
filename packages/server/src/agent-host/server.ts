@@ -9,6 +9,7 @@ import { FakeAdapter } from "../agents/fake/index.js";
 import type { AgentAdapter } from "../agents/types.js";
 import { SERVER_VERSION } from "../index.js";
 import { SessionManager } from "../sessions/manager.js";
+import { TeamManager } from "../teams/team-manager.js";
 import { buildApp } from "./app.js";
 
 export interface StartAgentHostOptions {
@@ -27,6 +28,7 @@ export interface StartAgentHostOptions {
 export interface AgentHostHandle {
   app: FastifyInstance;
   manager: SessionManager;
+  teams: TeamManager;
   socketPath: string;
   close(): Promise<void>;
 }
@@ -63,6 +65,7 @@ export async function startAgentHost(opts: StartAgentHostOptions): Promise<Agent
   const adapters = opts.adapters ?? defaultAdapters(process.env, dataDir);
 
   const manager = await SessionManager.open({ dataDir, adapters });
+  const teams = await TeamManager.open({ dataDir, home, manager });
   const app = buildApp(
     {
       user,
@@ -70,6 +73,7 @@ export async function startAgentHost(opts: StartAgentHostOptions): Promise<Agent
       home,
       workspaceRoot,
       manager,
+      teams,
       adapters,
       serverVersion: SERVER_VERSION,
       logger: { level: opts.dev ? "info" : "warn" },
@@ -84,10 +88,13 @@ export async function startAgentHost(opts: StartAgentHostOptions): Promise<Agent
   return {
     app,
     manager,
+    teams,
     socketPath,
     close: () => {
       closing ??= (async () => {
         await app.close();
+        // teams → manager 순서: 팀이 세션 구독을 먼저 놓아야 세션이 깨끗이 닫힌다.
+        await teams.shutdown();
         await manager.shutdown();
         await unlinkIfExists(socketPath);
       })();

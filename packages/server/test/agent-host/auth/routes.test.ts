@@ -44,7 +44,7 @@ let noBin: FastifyInstance;
 
 beforeAll(async () => {
   fx = await makeFixture();
-  const base = { user: H["x-mam-user"], email: "alice@example.com", home: fx.home, workspaceRoot: fx.workspaceRoot, manager: fx.manager, adapters: { claude: fx.adapter }, serverVersion: "0.1.0-test" };
+  const base = { user: H["x-mam-user"], email: "alice@example.com", home: fx.home, workspaceRoot: fx.workspaceRoot, manager: fx.manager, teams: fx.teams, adapters: { claude: fx.adapter }, serverVersion: "0.1.0-test" };
   app = buildApp({ ...base, login: { registry: new FlowRegistry(), starters: { claude: claudeStarter, codex: codexStarter } } });
   noBin = buildApp({
     ...base,

@@ -10,6 +10,7 @@ import type {
   PatchMemberRequest,
   PatchTeamRequest,
   Room,
+  RoomApproval,
   RoomDetailResponse,
   RoomMemberStatus,
   RoomMessage,
@@ -48,6 +49,7 @@ import { buildInstructions, rolePreset } from "./roles.js";
 import { RoomManager } from "./room-manager.js";
 import { TeamStore, makeHandle, slug, toTeam } from "./store.js";
 import { extractReply, summarizeWork } from "./summary.js";
+import { DEFAULT_TEAM_SETTINGS, TeamTemplates } from "./templates.js";
 import type { TeamMemberRecord, TeamRecord } from "./types.js";
 
 /**
@@ -76,7 +78,6 @@ export interface TeamDetail {
   changes: ChangeSet[];
 }
 
-const DEFAULT_SETTINGS: TeamSettings = { maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40 };
 const CONTEXT_MAX_CHARS = 12_000;
 const GROUP_ROOM_NAME = "전체";
 const DEFAULT_MODE = "auto-edit" as const;
@@ -157,6 +158,8 @@ function withTimeout(p: Promise<unknown>, ms: number): Promise<void> {
 }
 
 export class TeamManager {
+  /** 팀 템플릿 CRUD(`/team-templates`). 검증·id 발급은 `templates.ts`. */
+  readonly templates: TeamTemplates;
   private readonly runtimes = new Map<string, TeamRuntime>();
   private readonly store: TeamStore;
   private readonly home: string;
@@ -174,7 +177,8 @@ export class TeamManager {
     this.manager = opts.manager;
     this.now = opts.now ?? (() => new Date());
     this.logger = opts.logger ?? console;
-    this.defaults = { ...DEFAULT_SETTINGS, ...opts.defaults };
+    this.defaults = { ...DEFAULT_TEAM_SETTINGS, ...opts.defaults };
+    this.templates = new TeamTemplates(this.store, { now: this.now, defaults: this.defaults });
     this.busyRetryMs = opts.busyRetryMs ?? DEFAULT_BUSY_RETRY_MS;
   }
 
@@ -236,6 +240,17 @@ export class TeamManager {
 
   async subscribeRoom(teamId: string, roomId: string, since: number, listener: (event: RoomServerEvent) => void): Promise<() => void> {
     return this.require(teamId).rooms.subscribe(roomId, since, listener);
+  }
+
+  /** 이 방에 미러링된 승인 중 아직 응답이 없는 것(`room.snapshot.pendingApprovals`). */
+  async roomPendingApprovals(teamId: string, roomId: string): Promise<RoomApproval[]> {
+    const messages = await this.require(teamId).rooms.messagesSince(roomId, 0);
+    return messages.flatMap((m) => (m.kind === "approval" && m.approval !== null && m.approval.resolution === null ? [m.approval] : []));
+  }
+
+  /** `room.snapshot`·`room.status` 의 `members[]`. */
+  memberStates(teamId: string): RoomMemberStatus[] {
+    return this.memberStatuses(this.require(teamId));
   }
 
   // ---- 팀 생명주기 -------------------------------------------------------------

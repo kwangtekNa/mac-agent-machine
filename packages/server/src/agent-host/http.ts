@@ -4,6 +4,7 @@ import type { AgentKind } from "@mam/protocol";
 import type { AgentAdapter } from "../agents/types.js";
 import { InternalError, InvalidRequestError } from "../errors.js";
 import type { SessionManager } from "../sessions/manager.js";
+import type { TeamManager } from "../teams/team-manager.js";
 import type { FlowRegistry, LoginStarter } from "./auth/flows.js";
 
 export interface AgentHostContext {
@@ -15,6 +16,8 @@ export interface AgentHostContext {
   /** 기본 `${home}/work`. 없어도 만들지 않고 응답에만 표시한다. */
   workspaceRoot: string;
   manager: SessionManager;
+  /** 팀·방(PROTOCOL 6절). 테스트는 직접 주입한다. */
+  teams: TeamManager;
   /** `GET /me` probe 용. 세션 생성은 manager 가 가진 어댑터를 쓴다. */
   adapters: Partial<Record<AgentKind, AgentAdapter>>;
   serverVersion: string;

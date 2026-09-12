@@ -3,6 +3,7 @@ import { userInfo } from "node:os";
 import { join } from "node:path";
 import { FakeAdapter, type FakeAdapterOptions } from "../../src/agents/fake/index.js";
 import { SessionManager } from "../../src/sessions/manager.js";
+import { TeamManager } from "../../src/teams/team-manager.js";
 import { git, initRepo, makeTmpHome, removeTmp } from "../helpers/tmp-home.js";
 
 export const USER = userInfo().username;
@@ -15,6 +16,7 @@ export interface Fixture {
   app: string;
   adapter: FakeAdapter;
   manager: SessionManager;
+  teams: TeamManager;
   cleanup(): Promise<void>;
 }
 
@@ -39,6 +41,7 @@ export async function makeFixture(adapterOpts: FakeAdapterOptions = {}): Promise
     adapters: { claude: adapter },
     logger: { info() {}, warn() {}, error() {} },
   });
+  const teams = await TeamManager.open({ dataDir: join(home, ".mam"), home, manager, logger: { info() {}, warn() {}, error() {} } });
   return {
     tmp,
     home,
@@ -46,7 +49,9 @@ export async function makeFixture(adapterOpts: FakeAdapterOptions = {}): Promise
     app,
     adapter,
     manager,
+    teams,
     cleanup: async () => {
+      await teams.shutdown();
       await manager.shutdown();
       await removeTmp(tmp);
     },
