@@ -54,11 +54,29 @@
     {
       "step": 2,
       "name": "room-model",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0,
         1
-      ]
+      ],
+      "started_at": "2026-09-12T23:53:01+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "57afaae0-ac12-4e6a-a665-01869504e792",
+          "cost_usd": 7.528077249999999,
+          "duration_s": 766.0,
+          "num_turns": 38,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 7.528077,
+      "duration_s": 766.0,
+      "retries": 0,
+      "session_id": "57afaae0-ac12-4e6a-a665-01869504e792",
+      "summary": "Added room state model (no views): ios/MacAgent/Features/Rooms/RoomEntry.swift (message/approval/changes/system, unknown→system), MentionParser.swift (server mentions.ts mirror: letters/digits/_.- tokens, trailing punct stripped, NFC+lowercase, @all; suggestions only for trailing @token preceded by start/whitespace; apply → \"@이름 \"), RoomModel.swift (@MainActor @Observable mirror of TimelineModel: apply() sole event path with seq guard, snapshot upsert/pending/isReplaying, room.message.updated replaces by id and clears pending + approvalSubmit/mergeSubmit, room.status → memberStates/dispatch, start() GET /teams/:id → GET /teams/:id/rooms/:roomId → socket since=lastSeq, send via room.send or REST POST (201 message upserted, lastSeq untouched), respond via client.respondApproval with 409/404 already-resolved policy + room refresh, requestMerge/dismiss REST with MergeSubmitState and server ChangeSet replacement, interrupt via room.interrupt, isGroup/dmMember/lead/leadName/workingMembers/queuedMembers), Features/Teams/MemberStatus.swift (room state > session status mapping > idle). Tests first (RED confirmed): RoomModelTests (24), MentionParserTests (13), MemberStatusTests (4). AC: xcodegen+xcodebuild test exit 0 with 0 warnings in new files, files exist, bash scripts/test.sh OK (TS 754 passed). No existing files, fixtures, docs, or phases/ changed.",
+      "completed_at": "2026-09-13T00:05:47+0900"
     },
     {
       "step": 3,
