@@ -106,10 +106,28 @@
     {
       "step": 4,
       "name": "dispatcher-core",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         3
-      ]
+      ],
+      "started_at": "2026-09-12T21:24:01+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "dfce20dd-28f0-4a9f-99ef-50fd2618eb1d",
+          "cost_usd": 5.7369535,
+          "duration_s": 665.9,
+          "num_turns": 35,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 5.736954,
+      "duration_s": 665.9,
+      "retries": 0,
+      "session_id": "dfce20dd-28f0-4a9f-99ef-50fd2618eb1d",
+      "summary": "Step 4 dispatcher-core done: new packages/server/src/teams/dispatcher.ts (route(): system author → []; DM → room member only on user messages, other mentions ignored, agent reply ends chain; group → mentioned members in order (reason \"all\" when @all), self/unknown IDs dropped, no mention → lead only for user author, no lead → []; DispatchQueue(maxConcurrent, now?, newId) with FIFO queued[] + running Map: enqueue dedupes (memberId, rootId, sourceMessageId) even against running items and coalesces into the member's single queued item (returns existing, coalesced:true), next() non-consuming (null when running ≥ maxConcurrent or member already running), markRunning (throws on unknown id / member already running) → RunningItem{sessionId, turnId:null, startedAt}, setTurn, markDone idempotent, clear() returns removed queued only, isBusy = running||queued, state() snapshot copies matching DispatchStateSchema, setMaxConcurrent; nextHop(null→0, n→n+1), hopExceeded(hop>maxHops)), format.ts (formatMessageLine: \"[#<room.name>] 사용자: …\" / \"[DM] 사용자: …\" / \"[#전체] @<name>(<roleLabel>): …\" / \"[#전체] 시스템: …\", approval → \"<member>의 승인 요청 '<title>' — 대기 중|허용됨|거절됨|중단됨|제출됨|취소됨|<label>\", changes → \"<member>의 변경 준비됨: N개 파일[ — 머지됨|충돌|무시됨|대체됨|머지 중]\", unknown member/room fall back to \"@<id>(팀원)\"/\"[#전체]\", multi-line text verbatim; buildTurnText: drops trigger duplicates and the member's own kind:text messages (own cards kept), fills newest-first with maxMessages (context only) and maxChars (context+trigger joined length, trigger always kept), \"(이전 메시지 N개 생략)\" line, conflictNote first + blank line, trigger last, blank line, footer \"Reply for room #<name>. Address teammates with @name only when they must act.\" or \"Reply in this DM.\"), summary.ts (extractReply: completed assistant_message of turn with non-blank text, last final preferred else last, verbatim, else null; summarizeWork: tool_call count any status, sorted unique file_change paths, last turn_summary durationMs/usage/costUsd (costUsd key omitted when absent), no summary → 0/{0,0}). Tests TDD RED→GREEN: test/teams/dispatcher.test.ts (28: table route cases, queue FIFO/maxConcurrent/per-member/coalesce/dedupe/clear/state schema/setMaxConcurrent/error transitions, hop bounds 6 ok 7 exceeded), format.test.ts (14: exact prefixes vs doc + fixtures, approval/changes summaries, fallbacks, 45→40 omitted 5, 15×1000 chars → 11+trigger omitted 4, huge trigger kept, trigger once, own-text skipped, conflictNote first, mixed rooms), summary.test.ts (10, session-detail.json fixture). AC: npm ci OK, npm run typecheck OK, npm test 706 passed/4 skipped, files exist, forbidden grep clean (type-only imports, no fs/process/timers/RoomManager), bash scripts/test.sh (TS + iOS) OK. packages/protocol, phases/ untouched (phases/index.json diff predates session). Notes for step 5: coalesced item keeps its original rootId/sourceMessageId/hop; hop-limit system message text (\"홉 상한(6)에 도달해 @민수 호출을 건너뛰었습니다\") is left to TeamManager; DM route drops messages when room.memberId is null/unknown.",
+      "completed_at": "2026-09-12T21:35:04+0900"
     },
     {
       "step": 5,
