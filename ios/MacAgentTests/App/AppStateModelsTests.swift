@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import MacAgent
 
-/// `AppState` 의 세션별 모델 보관(LRU 5) 과 UI 테스트용 서버 주소 override.
+/// `AppState` 의 세션별 모델 보관(LRU, `maxTimelineModels`) 과 UI 테스트용 서버 주소 override. 세션·방 혼합 축출은 `AppStateModelKeyTests`.
 @MainActor
 final class AppStateModelsTests: XCTestCase {
     private let defaults = UserDefaults(suiteName: "AppStateModelsTests")!
@@ -36,12 +36,13 @@ final class AppStateModelsTests: XCTestCase {
             _ = state.timelineModel(for: "s\(i)", client: client)
         }
         // s1 을 다시 쓰면 가장 오래된 것은 s2 가 된다.
+        let next = "s\(AppState.maxTimelineModels + 1)"
         _ = state.timelineModel(for: "s1", client: client)
-        _ = state.timelineModel(for: "s6", client: client)
+        _ = state.timelineModel(for: next, client: client)
         XCTAssertEqual(state.timelineModels.count, AppState.maxTimelineModels)
         XCTAssertNotNil(state.timelineModels["s1"])
         XCTAssertNil(state.timelineModels["s2"])
-        XCTAssertNotNil(state.timelineModels["s6"])
+        XCTAssertNotNil(state.timelineModels[next])
     }
 
     func testFileBrowserModelFollowsSessionAndCwd() {

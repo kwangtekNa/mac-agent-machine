@@ -90,7 +90,7 @@ struct NewSessionSheet: View {
         NavigationStack {
             Form {
                 agentSection
-                directorySection
+                DirectoryFormSection(form: $form, projects: store.projects) { showsPicker = true }
                 modeSection
                 Section("제목") {
                     TextField("제목 (선택)", text: $title)
@@ -160,54 +160,6 @@ struct NewSessionSheet: View {
         }
     }
 
-    /// 디렉토리(IOS.md 9.2): 선택 경로 표시 행 + 세 진입점(프로젝트 메뉴 · 찾아보기 · 직접 입력).
-    private var directorySection: some View {
-        Section("디렉토리") {
-            LabeledContent("선택한 경로") {
-                if form.selectedPath.isEmpty {
-                    Text("선택 안 됨").foregroundStyle(.secondary)
-                } else {
-                    Text(form.selectedPath)
-                        .font(.caption.monospaced())
-                        .lineLimit(2)
-                        .truncationMode(.head)
-                        .multilineTextAlignment(.trailing)
-                }
-            }
-            .accessibilityIdentifier("newSession.selectedPath")
-            Picker("프로젝트에서 선택", selection: projectSelection) {
-                Text("선택").tag(String?.none)
-                ForEach(store.projects) { project in
-                    Text(project.name).tag(String?.some(project.path))
-                }
-            }
-            .pickerStyle(.menu)
-            .disabled(store.projects.isEmpty)
-            .accessibilityIdentifier("newSession.directory")
-            Button {
-                showsPicker = true
-            } label: {
-                Label("찾아보기…", systemImage: "folder")
-            }
-            .accessibilityIdentifier("newSession.browse")
-            Button {
-                form.toggleCustomInput()
-            } label: {
-                Label(form.showsCustomInput ? "직접 입력 닫기" : "직접 입력", systemImage: "keyboard")
-            }
-            .accessibilityIdentifier("newSession.customToggle")
-            if form.showsCustomInput {
-                TextField("~/work/my-app", text: customPathBinding)
-                    .accessibilityIdentifier("newSession.customPath")
-                    .font(.body.monospaced())
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.done)
-                    .accessibilityLabel("디렉토리 경로")
-            }
-        }
-    }
-
     private var modeSection: some View {
         Section("모드") {
             Picker("모드", selection: $mode) {
@@ -228,19 +180,6 @@ struct NewSessionSheet: View {
 
     // MARK: - 상태
 
-    private var projectSelection: Binding<String?> {
-        Binding(
-            get: { form.selectedProjectPath(in: store.projects) },
-            set: { path in
-                if let path { form.chooseProject(path) }
-            }
-        )
-    }
-
-    private var customPathBinding: Binding<String> {
-        Binding(get: { form.customPath }, set: { form.setCustomPath($0) })
-    }
-
     private var me: MeResponse? {
         if case .connected(let me) = appState.connection { return me }
         return nil
@@ -248,6 +187,11 @@ struct NewSessionSheet: View {
 
     /// 쓸 수 없는 이유. nil 이면 사용 가능.
     private func availability(of kind: AgentKind) -> String? {
+        Self.availability(of: kind, me: me)
+    }
+
+    /// `/me` 의 `agents[]` 로 에이전트를 쓸 수 없는 이유를 만든다. nil 이면 사용 가능. 새 팀 시트도 같은 규칙을 쓴다.
+    static func availability(of kind: AgentKind, me: MeResponse?) -> String? {
         guard let info = me?.agents.first(where: { $0.kind == kind }), info.available else {
             return String(localized: "설치되지 않음")
         }
@@ -296,5 +240,72 @@ extension SessionMode {
         case .fullAuto: return String(localized: "확인 없이 명령을 실행하고 파일을 수정합니다")
         case .unknown: return ""
         }
+    }
+}
+
+/// 디렉토리 섹션(IOS.md 9.2): 선택 경로 표시 행 + 세 진입점(프로젝트 메뉴 · 찾아보기 · 직접 입력). 새 세션·새 팀 시트가 공유한다.
+/// 찾아보기 시트(`DirectoryPickerView`)는 부모가 띄운다(`onBrowse`). 식별자는 `<identifierPrefix>.selectedPath` 등(UI 테스트는 `newSession.*`).
+struct DirectoryFormSection: View {
+    @Binding var form: NewSessionFormState
+    let projects: [Project]
+    var identifierPrefix = "newSession"
+    let onBrowse: () -> Void
+
+    var body: some View {
+        Section("디렉토리") {
+            LabeledContent("선택한 경로") {
+                if form.selectedPath.isEmpty {
+                    Text("선택 안 됨").foregroundStyle(.secondary)
+                } else {
+                    Text(form.selectedPath)
+                        .font(.caption.monospaced())
+                        .lineLimit(2)
+                        .truncationMode(.head)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+            .accessibilityIdentifier("\(identifierPrefix).selectedPath")
+            Picker("프로젝트에서 선택", selection: projectSelection) {
+                Text("선택").tag(String?.none)
+                ForEach(projects) { project in
+                    Text(project.name).tag(String?.some(project.path))
+                }
+            }
+            .pickerStyle(.menu)
+            .disabled(projects.isEmpty)
+            .accessibilityIdentifier("\(identifierPrefix).directory")
+            Button(action: onBrowse) {
+                Label("찾아보기…", systemImage: "folder")
+            }
+            .accessibilityIdentifier("\(identifierPrefix).browse")
+            Button {
+                form.toggleCustomInput()
+            } label: {
+                Label(form.showsCustomInput ? "직접 입력 닫기" : "직접 입력", systemImage: "keyboard")
+            }
+            .accessibilityIdentifier("\(identifierPrefix).customToggle")
+            if form.showsCustomInput {
+                TextField("~/work/my-app", text: customPathBinding)
+                    .accessibilityIdentifier("\(identifierPrefix).customPath")
+                    .font(.body.monospaced())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .accessibilityLabel("디렉토리 경로")
+            }
+        }
+    }
+
+    private var projectSelection: Binding<String?> {
+        Binding(
+            get: { form.selectedProjectPath(in: projects) },
+            set: { path in
+                if let path { form.chooseProject(path) }
+            }
+        )
+    }
+
+    private var customPathBinding: Binding<String> {
+        Binding(get: { form.customPath }, set: { form.setCustomPath($0) })
     }
 }

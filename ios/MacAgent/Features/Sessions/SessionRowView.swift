@@ -8,6 +8,8 @@ struct SessionRowView: View {
     /// iPad 사이드바: 값이 있으면 push 대신 이 콜백으로 선택한다.
     var onSelect: ((Session) -> Void)? = nil
     var isSelected = false
+    /// 팀원 세션이면 `TeamsStore.badge(for:teams:)` 결과(`🧑‍💻 지연 · backend`). 경로 대신 캡션에 보인다.
+    var teamBadge: String? = nil
 
     var body: some View {
         Group {
@@ -61,7 +63,7 @@ struct SessionRowView: View {
     }
 
     private var subtitle: String {
-        "\(Formatters.abbreviatedPath(session.cwd)) · \(Formatters.relativeTime(session.updatedAt))"
+        "\(teamBadge ?? Formatters.abbreviatedPath(session.cwd)) · \(Formatters.relativeTime(session.updatedAt))"
     }
 
     private var accessibilityText: String {

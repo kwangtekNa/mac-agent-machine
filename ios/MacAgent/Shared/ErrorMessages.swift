@@ -112,3 +112,25 @@ extension ErrorMessages {
         return fileAccessMessage(for: error)
     }
 }
+
+extension ErrorMessages {
+    static let teamLeadRequired = String(localized: "팀장을 정확히 한 명 지정하세요.")
+    static let teamMemberConflict = String(localized: "같은 이름이나 핸들의 팀원이 이미 있습니다. 이름을 바꾸세요.")
+    static let teamNotGitRepo = String(localized: "git 저장소가 아닙니다. 저장소 루트 디렉토리를 고르세요.")
+    /// 삭제·제거 409: worktree 에 커밋되지 않은 변경. 뷰가 `keepWorktrees: true` 재시도를 묻는 문구.
+    static let teamDirtyWorktree = String(localized: "커밋되지 않은 변경이 남아 있습니다. worktree 를 남기고 팀만 지울까요?")
+
+    /// 팀 생성·팀원 추가·편집 오류 → 문구(PROTOCOL.md 6.2). 400 은 팀장 규칙 또는 git 저장소 아님, 409 는 이름·핸들 중복, 403 은 홈 밖.
+    static func teamMessage(for error: any Error) -> String {
+        guard case .server(let code, let serverMessage, let status) = error as? APIError else {
+            return message(for: error)
+        }
+        if status == 409 || code == .conflict { return teamMemberConflict }
+        if status == 403 { return String(localized: "접근할 수 없는 경로입니다. 홈 디렉토리 안의 경로를 입력하세요.") }
+        if status == 400 {
+            if serverMessage.contains("팀장") { return teamLeadRequired }
+            if serverMessage.contains("git") || serverMessage.contains("detached") { return teamNotGitRepo }
+        }
+        return message(for: error)
+    }
+}

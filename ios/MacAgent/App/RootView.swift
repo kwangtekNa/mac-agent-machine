@@ -22,14 +22,17 @@ struct RootView: View {
     }
 }
 
-/// 연결된 동안 살아 있는 `SessionsStore` 를 만들고 환경에 넣는다.
+/// 연결된 동안 살아 있는 `SessionsStore`·`TeamsStore`(서버별)와 `RolePresetStore`(앱 로컬)를 만들고 환경에 넣는다.
 /// 가로 크기 클래스가 regular(iPad) 면 3열 분리 뷰, 아니면 compact `NavigationStack` 흐름. 크기가 바뀌어도 store 는 유지된다.
 private struct ConnectedRootView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var store: SessionsStore
+    @State private var teams: TeamsStore
+    @State private var rolePresets = RolePresetStore()
 
     init(client: APIClient) {
         _store = State(initialValue: SessionsStore(client: client))
+        _teams = State(initialValue: TeamsStore(client: client))
     }
 
     var body: some View {
@@ -41,5 +44,7 @@ private struct ConnectedRootView: View {
             }
         }
         .environment(store)
+        .environment(teams)
+        .environment(rolePresets)
     }
 }

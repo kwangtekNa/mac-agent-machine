@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// 연결 후 첫 화면(IOS.md 4절). 진행 중 → 프로젝트 → 최근 세션 순의 `List` 와 새 세션·설정 진입.
+/// 연결 후 첫 화면(IOS.md 4절). 진행 중 → 팀 → 프로젝트 → 최근 세션 순의 `List` 와 새 세션·새 팀(`+` 메뉴)·설정 진입.
+/// 팀 행의 목적지는 step 5(방 목록) 전까지 `TeamSettingsView` 다.
 /// 화면이 보이는 동안 `refreshInterval` 마다 `refresh()` 해 승인 대기 배지를 갱신한다(`.task` 가 사라지면 취소).
 struct SessionsHomeView: View {
     static let refreshInterval: Duration = .seconds(15)
@@ -13,10 +14,13 @@ struct SessionsHomeView: View {
     }
 
     @Environment(SessionsStore.self) private var store
+    @Environment(TeamsStore.self) private var teamsStore
     @State private var path = NavigationPath()
     @State private var showsSettings = false
     @State private var showsNewSession = false
     @State private var createdSession: Session?
+    @State private var showsNewTeam = false
+    @State private var createdTeam: Team?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -32,12 +36,25 @@ struct SessionsHomeView: View {
                         .accessibilityLabel("설정 열기")
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showsNewSession = true
+                        // `+` 는 메뉴다. 메뉴 항목 "새 세션"이 기존 새 세션 진입(UI 테스트가 `home.add` → "새 세션" 순으로 누른다).
+                        Menu {
+                            Button {
+                                showsNewSession = true
+                            } label: {
+                                Label("새 세션", systemImage: "bubble.left.and.text.bubble.right")
+                            }
+                            .accessibilityIdentifier("home.newSession")
+                            Button {
+                                showsNewTeam = true
+                            } label: {
+                                Label("새 팀", systemImage: "person.3")
+                            }
+                            .accessibilityIdentifier("home.newTeam")
                         } label: {
                             Image(systemName: "plus")
                         }
-                        .accessibilityLabel("새 세션")
+                        .accessibilityLabel("추가")
+                        .accessibilityIdentifier("home.add")
                     }
                 }
                 .navigationDestination(for: Project.self) { project in
@@ -46,11 +63,17 @@ struct SessionsHomeView: View {
                 .navigationDestination(for: Session.self) { session in
                     TimelineView(sessionId: session.id)
                 }
+                .navigationDestination(for: Team.self) { team in
+                    TeamSettingsView(teamId: team.id)
+                }
                 .sheet(isPresented: $showsSettings) {
                     SettingsView()
                 }
                 .sheet(isPresented: $showsNewSession, onDismiss: openCreatedSession) {
                     NewSessionSheet(initialCwd: nil) { createdSession = $0 }
+                }
+                .sheet(isPresented: $showsNewTeam, onDismiss: openCreatedTeam) {
+                    NewTeamSheet(initialCwd: nil) { createdTeam = $0 }
                 }
                 .task { await refreshPeriodically() }
         }
@@ -58,7 +81,7 @@ struct SessionsHomeView: View {
 
     @ViewBuilder
     private var content: some View {
-        if store.projects.isEmpty, store.sessions.isEmpty {
+        if store.projects.isEmpty, store.sessions.isEmpty, teamsStore.teams.isEmpty {
             if !store.hasLoaded, store.errorMessage == nil {
                 ProgressView("세션을 불러오는 중…")
             } else if store.errorMessage != nil {
@@ -68,12 +91,12 @@ struct SessionsHomeView: View {
                         .listRowBackground(Color.clear)
                 }
                 .listStyle(.insetGrouped)
-                .refreshable { await store.refresh() }
+                .refreshable { await refreshAll() }
             } else {
                 List {}
                     .listStyle(.insetGrouped)
                     .overlay { SessionsEmptyView() }
-                    .refreshable { await store.refresh() }
+                    .refreshable { await refreshAll() }
             }
         } else {
             List {
@@ -86,6 +109,7 @@ struct SessionsHomeView: View {
                         }
                     }
                 }
+                teamsSection
                 if !store.projects.isEmpty {
                     Section("프로젝트") {
                         ForEach(store.projects) { project in
@@ -107,7 +131,25 @@ struct SessionsHomeView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .refreshable { await store.refresh() }
+            .refreshable { await refreshAll() }
+        }
+    }
+
+    /// "팀" 섹션(프로젝트 위). 팀이 없으면 행동 유도 문구(IOS.md 5.5).
+    @ViewBuilder
+    private var teamsSection: some View {
+        Section("팀") {
+            if teamsStore.teams.isEmpty {
+                Text("아직 팀이 없습니다. + 에서 새 팀을 만드세요.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(teamsStore.teams) { team in
+                    NavigationLink(value: team) {
+                        TeamRow(team: team, activity: .of(team: team, sessions: store.sessions))
+                    }
+                }
+            }
         }
     }
 
@@ -153,7 +195,8 @@ struct SessionsHomeView: View {
             session: session,
             onClose: { Task { await close(session) } },
             onSelect: selectHandler,
-            isSelected: selection?.wrappedValue == session.id
+            isSelected: selection?.wrappedValue == session.id,
+            teamBadge: TeamsStore.badge(for: session, teams: teamsStore.teams)
         )
     }
 
@@ -188,8 +231,21 @@ struct SessionsHomeView: View {
         open(session)
     }
 
-    private func refreshPeriodically() async {
+    /// 새 팀 시트가 닫힌 뒤 팀 화면으로 push 한다.
+    private func openCreatedTeam() {
+        guard let team = createdTeam else { return }
+        createdTeam = nil
+        path.append(team)
+    }
+
+    /// 세션·프로젝트와 팀을 함께 새로고침한다.
+    private func refreshAll() async {
         await store.refresh()
+        await teamsStore.refresh()
+    }
+
+    private func refreshPeriodically() async {
+        await refreshAll()
         while !Task.isCancelled {
             do {
                 try await Task.sleep(for: Self.refreshInterval)
@@ -197,7 +253,7 @@ struct SessionsHomeView: View {
                 return
             }
             guard !Task.isCancelled else { return }
-            await store.refresh()
+            await refreshAll()
         }
     }
 }

@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// 앱 전역 상태(IOS.md 6절). 서버 설정, `/me` 결과, 연결 상태, REST 클라이언트를 한곳에 둔다.
-/// iPad 3열에서 회전·멀티태스킹으로 뷰가 다시 만들어져도 세션 화면 상태가 남도록 세션별 모델도 여기서 보관한다.
+/// iPad 3열에서 회전·멀티태스킹으로 뷰가 다시 만들어져도 세션·방 화면 상태가 남도록 세션별·방별 모델도 여기서 보관한다.
 @MainActor
 @Observable
 final class AppState {
@@ -13,21 +13,30 @@ final class AppState {
         case failed(message: String)
     }
 
+    /// LRU 의 키. 세션(타임라인+파일 브라우저)과 방(`RoomModel`)이 같은 목록에서 오래된 순으로 밀려난다.
+    enum ModelKey: Hashable, Sendable {
+        case session(String)
+        case room(teamId: String, roomId: String)
+    }
+
     /// UI 테스트가 `launchEnvironment` 로 넘기는 서버 주소. 있으면 저장된 설정 대신 쓰고 저장하지 않는다.
     static let uiTestServerKey = "MAM_UI_TEST_SERVER"
-    /// 세션별 `TimelineModel` 보관 상한(LRU).
-    static let maxTimelineModels = 5
+    /// 세션·방 모델 보관 상한(LRU, 키 기준).
+    static let maxTimelineModels = 8
 
     let configStore: ServerConfigStore
     private(set) var connection: ConnectionState = .disconnected
     private(set) var client: APIClient?
     /// iPad 사이드바 선택. compact 에서는 쓰지 않는다.
     var selectedSessionId: String?
+    /// iPad 방 선택(step 5 가 쓴다). compact 에서는 쓰지 않는다.
+    var selectedRoom: (teamId: String, roomId: String)?
     /// 세션 id → 타임라인 모델. 뷰 갱신 중에도 넣고 빼므로 관찰 대상에서 제외한다.
     @ObservationIgnored private(set) var timelineModels: [String: TimelineModel] = [:]
+    @ObservationIgnored private(set) var roomModels: [ModelKey: RoomModel] = [:]
     @ObservationIgnored private var fileBrowserModels: [String: FileBrowserModel] = [:]
     /// 최근 사용 순서(뒤가 최신).
-    @ObservationIgnored private var recentSessionIds: [String] = []
+    @ObservationIgnored private var recentKeys: [ModelKey] = []
     @ObservationIgnored private let urlSession: URLSession
     @ObservationIgnored let uiTestServerURL: URL?
 
@@ -73,7 +82,7 @@ final class AppState {
         clearModels()
     }
 
-    // MARK: - 세션별 모델 (iPad 3열 상태 유지)
+    // MARK: - 세션·방별 모델 (iPad 3열 상태 유지, LRU)
 
     /// 연결된 클라이언트로 세션의 타임라인 모델을 얻는다. 연결이 없으면 nil.
     func timelineModel(for sessionId: String) -> TimelineModel? {
@@ -81,9 +90,9 @@ final class AppState {
         return timelineModel(for: sessionId, client: client)
     }
 
-    /// 같은 세션이면 같은 인스턴스. `maxTimelineModels` 를 넘으면 가장 오래 안 쓴 세션의 모델을 멈추고 버린다.
+    /// 같은 세션이면 같은 인스턴스. `maxTimelineModels` 를 넘으면 가장 오래 안 쓴 키의 모델을 멈추고 버린다.
     func timelineModel(for sessionId: String, client: APIClient) -> TimelineModel {
-        touch(sessionId)
+        touch(.session(sessionId))
         if let existing = timelineModels[sessionId] {
             return existing
         }
@@ -100,7 +109,7 @@ final class AppState {
     }
 
     func fileBrowserModel(for sessionId: String, cwd: String, client: APIClient) -> FileBrowserModel {
-        touch(sessionId)
+        touch(.session(sessionId))
         if let existing = fileBrowserModels[sessionId], existing.rootPath == cwd {
             return existing
         }
@@ -110,25 +119,52 @@ final class AppState {
         return model
     }
 
-    private func touch(_ sessionId: String) {
-        recentSessionIds.removeAll { $0 == sessionId }
-        recentSessionIds.append(sessionId)
+    /// 연결된 클라이언트로 방 모델을 얻는다. 연결이 없으면 nil.
+    func roomModel(for teamId: String, roomId: String) -> RoomModel? {
+        guard let client else { return nil }
+        return roomModel(for: teamId, roomId: roomId, client: client)
+    }
+
+    /// 같은 방이면 같은 인스턴스. 세션 모델과 같은 LRU 에서 밀려나면 `stop()` 된다.
+    func roomModel(for teamId: String, roomId: String, client: APIClient) -> RoomModel {
+        let key = ModelKey.room(teamId: teamId, roomId: roomId)
+        touch(key)
+        if let existing = roomModels[key] {
+            return existing
+        }
+        let model = RoomModel(teamId: teamId, roomId: roomId, client: client)
+        roomModels[key] = model
+        evictIfNeeded()
+        return model
+    }
+
+    private func touch(_ key: ModelKey) {
+        recentKeys.removeAll { $0 == key }
+        recentKeys.append(key)
     }
 
     private func evictIfNeeded() {
-        while recentSessionIds.count > Self.maxTimelineModels, let oldest = recentSessionIds.first {
-            recentSessionIds.removeFirst()
-            timelineModels.removeValue(forKey: oldest)?.stop()
-            fileBrowserModels.removeValue(forKey: oldest)
+        while recentKeys.count > Self.maxTimelineModels, let oldest = recentKeys.first {
+            recentKeys.removeFirst()
+            switch oldest {
+            case .session(let sessionId):
+                timelineModels.removeValue(forKey: sessionId)?.stop()
+                fileBrowserModels.removeValue(forKey: sessionId)
+            case .room:
+                roomModels.removeValue(forKey: oldest)?.stop()
+            }
         }
     }
 
     private func clearModels() {
         for model in timelineModels.values { model.stop() }
+        for model in roomModels.values { model.stop() }
         timelineModels.removeAll()
+        roomModels.removeAll()
         fileBrowserModels.removeAll()
-        recentSessionIds.removeAll()
+        recentKeys.removeAll()
         selectedSessionId = nil
+        selectedRoom = nil
     }
 
     private func open(_ url: URL, persist: Bool) async {

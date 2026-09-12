@@ -21,9 +21,12 @@ final class ApprovalFlowUITests: XCTestCase {
         }
         app.launch()
 
-        // 연결됨 → 세션 홈의 "+" (accessibilityLabel "새 세션").
+        // 연결됨 → 세션 홈의 "+" 메뉴(identifier `home.add`, label "추가") → 항목 "새 세션"(Phase 4 step 4).
+        let add = app.buttons.matching(NSPredicate(format: "identifier == 'home.add' OR label == '추가'")).firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 30), "세션 홈이 열리지 않았습니다")
+        add.tap()
         let newSession = app.buttons["새 세션"]
-        XCTAssertTrue(newSession.waitForExistence(timeout: 30), "세션 홈이 열리지 않았습니다")
+        XCTAssertTrue(newSession.waitForExistence(timeout: 10), "+ 메뉴에 새 세션 항목이 없습니다")
         newSession.tap()
 
         // 에이전트 Claude.
