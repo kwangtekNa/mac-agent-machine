@@ -132,12 +132,126 @@ struct APIClient: Sendable {
         try await get(LoginStatusResponse.self, "/auth/\(agent.rawValue)/login/\(flowId)")
     }
 
+    // MARK: - 팀·방 (PROTOCOL.md 6.2, 2026-09-12 추가)
+
+    func teamRoles() async throws -> [RolePreset] {
+        try await get(TeamRolesResponse.self, "/team-roles").roles
+    }
+
+    /// `GET /teams?cwd=`. `cwd` 생략 시 전체.
+    func teams(cwd: String? = nil) async throws -> [Team] {
+        var query: [URLQueryItem] = []
+        if let cwd { query.append(URLQueryItem(name: "cwd", value: cwd)) }
+        return try await get(TeamsResponse.self, "/teams", query: query).teams
+    }
+
+    /// `POST /teams` → 201 Team. 홈 밖 cwd 는 403, git 저장소가 아니면 400, 이름·handle 중복은 409.
+    func createTeam(_ req: CreateTeamRequest) async throws -> Team {
+        try await send(Team.self, method: "POST", path: "/teams", body: req)
+    }
+
+    func team(id: String) async throws -> TeamDetailResponse {
+        try await get(TeamDetailResponse.self, "/teams/\(id)")
+    }
+
+    func patchTeam(id: String, _ req: PatchTeamRequest) async throws -> Team {
+        try await send(Team.self, method: "PATCH", path: "/teams/\(id)", body: req)
+    }
+
+    /// `DELETE /teams/:id`. 커밋되지 않은 worktree 변경이 있으면 409. `keepWorktrees` 가 true 일 때만 `?keepWorktrees=true`.
+    func deleteTeam(id: String, keepWorktrees: Bool = false) async throws {
+        _ = try await call(
+            OkResponse.self, method: "DELETE", path: "/teams/\(id)",
+            query: keepWorktrees ? [URLQueryItem(name: "keepWorktrees", value: "true")] : []
+        )
+    }
+
+    /// `POST /teams/:id/members` → 201 Team.
+    func addMember(teamId: String, _ req: MemberInput) async throws -> Team {
+        try await send(Team.self, method: "POST", path: "/teams/\(teamId)/members", body: req)
+    }
+
+    /// `PATCH /teams/:id/members/:memberId`. nil 필드는 본문에서 생략. `prompt`·`model` 은 다음 세션부터 적용.
+    func patchMember(teamId: String, memberId: String, _ req: PatchMemberRequest) async throws -> Team {
+        try await send(Team.self, method: "PATCH", path: "/teams/\(teamId)/members/\(memberId)", body: req)
+    }
+
+    /// `DELETE /teams/:id/members/:memberId`. `keepWorktree` 가 true 일 때만 `?keepWorktree=true`.
+    func removeMember(teamId: String, memberId: String, keepWorktree: Bool = false) async throws -> Team {
+        try await call(
+            Team.self, method: "DELETE", path: "/teams/\(teamId)/members/\(memberId)",
+            query: keepWorktree ? [URLQueryItem(name: "keepWorktree", value: "true")] : []
+        )
+    }
+
+    /// 기억 초기화: 세션을 닫고 `sessionId: null`. worktree 와 브랜치는 그대로.
+    func resetMember(teamId: String, memberId: String) async throws -> Team {
+        try await call(Team.self, method: "POST", path: "/teams/\(teamId)/members/\(memberId)/reset")
+    }
+
+    /// 실행 중 턴 전부 중단, 대기열 비움. → 비워진 DispatchState.
+    func stopTeam(id: String) async throws -> DispatchState {
+        try await call(DispatchState.self, method: "POST", path: "/teams/\(id)/stop")
+    }
+
+    /// `GET /teams/:id/rooms/:roomId?limit=`. `limit` 생략 시 서버 기본(최근 200).
+    func room(teamId: String, roomId: String, limit: Int? = nil) async throws -> RoomDetailResponse {
+        var query: [URLQueryItem] = []
+        if let limit { query.append(URLQueryItem(name: "limit", value: String(limit))) }
+        return try await get(RoomDetailResponse.self, "/teams/\(teamId)/rooms/\(roomId)", query: query)
+    }
+
+    /// `POST /teams/:id/rooms/:roomId/messages` → 201. 방이 없으면 404.
+    func postRoomMessage(teamId: String, roomId: String, _ req: PostRoomMessageRequest) async throws -> PostRoomMessageResponse {
+        try await send(PostRoomMessageResponse.self, method: "POST", path: "/teams/\(teamId)/rooms/\(roomId)/messages", body: req)
+    }
+
+    func changes(teamId: String) async throws -> [ChangeSet] {
+        try await get(ChangesResponse.self, "/teams/\(teamId)/changes").changes
+    }
+
+    /// `status` 가 `ready` 가 아니면 409. 충돌은 200 과 `status: "conflict"`, `mergeCommit: null`.
+    func mergeChange(teamId: String, changeId: String) async throws -> MergeResult {
+        try await call(MergeResult.self, method: "POST", path: "/teams/\(teamId)/changes/\(changeId)/merge")
+    }
+
+    /// `ready`·`conflict` → `dismissed`. 그 외 상태면 409.
+    func dismissChange(teamId: String, changeId: String) async throws -> ChangeSet {
+        try await call(ChangeSet.self, method: "POST", path: "/teams/\(teamId)/changes/\(changeId)/dismiss")
+    }
+
+    func teamTemplates() async throws -> [TeamTemplate] {
+        try await get(TeamTemplatesResponse.self, "/team-templates").templates
+    }
+
+    /// `POST /team-templates` → 201.
+    func createTeamTemplate(_ req: CreateTeamTemplateRequest) async throws -> TeamTemplate {
+        try await send(TeamTemplate.self, method: "POST", path: "/team-templates", body: req)
+    }
+
+    func patchTeamTemplate(id: String, _ req: PatchTeamTemplateRequest) async throws -> TeamTemplate {
+        try await send(TeamTemplate.self, method: "PATCH", path: "/team-templates/\(id)", body: req)
+    }
+
+    func deleteTeamTemplate(id: String) async throws {
+        _ = try await call(OkResponse.self, method: "DELETE", path: "/team-templates/\(id)")
+    }
+
     // MARK: - 공통
 
     private func get<T: Decodable>(
         _ type: T.Type, _ path: String, query: [URLQueryItem] = [], timeout: TimeInterval = APIClient.defaultTimeout
     ) async throws -> T {
         let request = try makeRequest(method: "GET", path: path, query: query, timeout: timeout)
+        let (data, _) = try await perform(request)
+        return try decode(T.self, from: data)
+    }
+
+    /// 본문 없는 POST/DELETE. 응답만 디코드한다.
+    private func call<T: Decodable>(
+        _ type: T.Type, method: String, path: String, query: [URLQueryItem] = []
+    ) async throws -> T {
+        let request = try makeRequest(method: method, path: path, query: query)
         let (data, _) = try await perform(request)
         return try decode(T.self, from: data)
     }

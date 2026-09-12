@@ -289,4 +289,250 @@ final class APIClientTests: XCTestCase {
             XCTFail("예상 밖 오류: \(error)")
         }
     }
+
+    // MARK: - 2026-09-12 추가분 (팀·방, PROTOCOL 6.2)
+
+    private let teamId = "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1"
+    private let devId = "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+    private let roomId = "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0"
+    private let changeId = "chg_01J8ZQ4K5N7P9R3S6T8V0W2XG1"
+
+    private func bodyDictionary() throws -> NSDictionary {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(lastRequest?.httpBody)) as? NSDictionary)
+    }
+
+    private func queryItems() throws -> [URLQueryItem]? {
+        try URLComponents(url: XCTUnwrap(lastRequest?.url), resolvingAgainstBaseURL: false)?.queryItems
+    }
+
+    /// fixture 의 하위 객체(예: `changes[0]`)를 별도 본문으로 쓴다.
+    private func fixtureSubtree(_ path: String, _ extract: (Any) -> Any?) throws -> Data {
+        let root = try JSONSerialization.jsonObject(with: FixtureLoader.data(path))
+        return try JSONSerialization.data(withJSONObject: XCTUnwrap(extract(root)))
+    }
+
+    func testTeamRolesAndTeamsList() async throws {
+        try stub(status: 200, fixture: "rest/team-roles.json")
+        let roles = try await client.teamRoles()
+        XCTAssertEqual(lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/team-roles")
+        XCTAssertEqual(roles.map(\.id), [.developer, .planner, .teamLead, .codeReviewer, .custom])
+
+        try stub(status: 200, fixture: "rest/teams.json")
+        let all = try await client.teams()
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams", "cwd 생략 시 쿼리 없음")
+        XCTAssertEqual(all.map(\.id), [teamId])
+
+        let filtered = try await client.teams(cwd: "/Users/alice/work/app")
+        XCTAssertEqual(try queryItems(), [URLQueryItem(name: "cwd", value: "/Users/alice/work/app")])
+        XCTAssertEqual(filtered.count, 1)
+    }
+
+    func testCreateTeamBodyAndDecodes201() async throws {
+        try stub(status: 201, fixture: "rest/team.json")
+        let team = try await client.createTeam(CreateTeamRequest(
+            cwd: "/Users/alice/work/app", name: "backend",
+            members: [
+                MemberInput(name: "민수", role: .teamLead, agent: .claude, isLead: true),
+                MemberInput(name: "지연", role: .developer, agent: .codex),
+            ]
+        ))
+        XCTAssertEqual(team.id, teamId)
+        XCTAssertEqual(team.members.count, 2)
+        let request = try XCTUnwrap(lastRequest)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(try bodyDictionary(), [
+            "cwd": "/Users/alice/work/app", "name": "backend",
+            "members": [
+                ["name": "민수", "role": "team-lead", "agent": "claude", "isLead": true],
+                ["name": "지연", "role": "developer", "agent": "codex"],
+            ],
+        ] as NSDictionary)
+    }
+
+    func testTeamDetailPatchAndDelete() async throws {
+        try stub(status: 200, fixture: "rest/team-detail.json")
+        let detail = try await client.team(id: teamId)
+        XCTAssertEqual(lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)")
+        XCTAssertEqual(detail.dispatch.running.count, 1)
+        XCTAssertEqual(detail.changes.count, 1)
+
+        try stub(status: 200, fixture: "rest/team.json")
+        _ = try await client.patchTeam(id: teamId, PatchTeamRequest(name: "새 이름"))
+        XCTAssertEqual(lastRequest?.httpMethod, "PATCH")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)")
+        XCTAssertEqual(try bodyDictionary(), ["name": "새 이름"] as NSDictionary)
+        _ = try await client.patchTeam(id: teamId, PatchTeamRequest(settings: TeamSettings(maxHops: 3, maxConcurrent: 1, contextMaxMessages: 20)))
+        XCTAssertEqual(try bodyDictionary(), ["settings": ["maxHops": 3, "maxConcurrent": 1, "contextMaxMessages": 20]] as NSDictionary)
+
+        try stub(status: 200, body: Data(#"{"ok":true}"#.utf8))
+        try await client.deleteTeam(id: teamId)
+        XCTAssertEqual(lastRequest?.httpMethod, "DELETE")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)", "keepWorktrees 기본값이면 쿼리 없음")
+        XCTAssertNil(lastRequest?.httpBody)
+        try await client.deleteTeam(id: teamId, keepWorktrees: true)
+        XCTAssertEqual(try queryItems(), [URLQueryItem(name: "keepWorktrees", value: "true")])
+    }
+
+    func testDeleteTeam409MapsToConflict() async throws {
+        try stub(status: 409, body: Data(#"{"error":{"code":"conflict","message":"worktree has uncommitted changes"}}"#.utf8))
+        do {
+            try await client.deleteTeam(id: teamId)
+            XCTFail("throw 를 기대")
+        } catch APIError.server(let code, let message, let status) {
+            XCTAssertEqual(code, .conflict)
+            XCTAssertEqual(message, "worktree has uncommitted changes")
+            XCTAssertEqual(status, 409)
+        } catch {
+            XCTFail("예상 밖 오류: \(error)")
+        }
+    }
+
+    func testMemberEndpoints() async throws {
+        try stub(status: 201, fixture: "rest/team.json")
+        let added = try await client.addMember(teamId: teamId, MemberInput(name: "리뷰", role: .codeReviewer, agent: .claude, emoji: "🔍"))
+        XCTAssertEqual(added.id, teamId)
+        XCTAssertEqual(lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)/members")
+        XCTAssertEqual(try bodyDictionary(), ["name": "리뷰", "role": "code-reviewer", "agent": "claude", "emoji": "🔍"] as NSDictionary)
+
+        try stub(status: 200, fixture: "rest/team.json")
+        _ = try await client.patchMember(teamId: teamId, memberId: devId, PatchMemberRequest(emoji: "🦊"))
+        XCTAssertEqual(lastRequest?.httpMethod, "PATCH")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)/members/\(devId)")
+        XCTAssertEqual(try bodyDictionary(), ["emoji": "🦊"] as NSDictionary, "nil 필드는 키를 생략한다")
+        _ = try await client.patchMember(teamId: teamId, memberId: devId, PatchMemberRequest(mode: .plan, effort: "low"))
+        XCTAssertEqual(try bodyDictionary(), ["mode": "plan", "effort": "low"] as NSDictionary)
+
+        _ = try await client.removeMember(teamId: teamId, memberId: devId)
+        XCTAssertEqual(lastRequest?.httpMethod, "DELETE")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)/members/\(devId)")
+        _ = try await client.removeMember(teamId: teamId, memberId: devId, keepWorktree: true)
+        XCTAssertEqual(try queryItems(), [URLQueryItem(name: "keepWorktree", value: "true")])
+
+        let reset = try await client.resetMember(teamId: teamId, memberId: devId)
+        XCTAssertEqual(reset.id, teamId)
+        XCTAssertEqual(lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)/members/\(devId)/reset")
+        XCTAssertNil(lastRequest?.httpBody)
+
+        try stub(status: 200, body: Data(#"{"running":[],"queued":[]}"#.utf8))
+        let stopped = try await client.stopTeam(id: teamId)
+        XCTAssertEqual(lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)/stop")
+        XCTAssertTrue(stopped.running.isEmpty)
+        XCTAssertTrue(stopped.queued.isEmpty)
+    }
+
+    func testRoomEndpoints() async throws {
+        try stub(status: 200, fixture: "rest/room.json")
+        let room = try await client.room(teamId: teamId, roomId: roomId)
+        XCTAssertEqual(lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)/rooms/\(roomId)", "limit 생략 시 쿼리 없음")
+        XCTAssertEqual(room.room.id, roomId)
+        XCTAssertEqual(room.messages.count, 7)
+        _ = try await client.room(teamId: teamId, roomId: roomId, limit: 50)
+        XCTAssertEqual(try queryItems(), [URLQueryItem(name: "limit", value: "50")])
+
+        try stub(status: 201, fixture: "rest/room-message-post.json")
+        let posted = try await client.postRoomMessage(teamId: teamId, roomId: roomId, PostRoomMessageRequest(text: "@지연 README 에 변경 내용도 적어줘"))
+        XCTAssertEqual(lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)/rooms/\(roomId)/messages")
+        XCTAssertEqual(try bodyDictionary(), ["text": "@지연 README 에 변경 내용도 적어줘"] as NSDictionary, "attachments 생략")
+        XCTAssertEqual(posted.dispatches, ["dsp_01J8ZQ4K5N7P9R3S6T8V0W2XH4"])
+        XCTAssertEqual(posted.message.author, .user)
+    }
+
+    func testRoomNotFound404() async throws {
+        try stub(status: 404, body: Data(#"{"error":{"code":"not_found","message":"room not found"}}"#.utf8))
+        do {
+            _ = try await client.room(teamId: teamId, roomId: "room_nope")
+            XCTFail("throw 를 기대")
+        } catch APIError.server(let code, _, let status) {
+            XCTAssertEqual(code, .notFound)
+            XCTAssertEqual(status, 404)
+        } catch {
+            XCTFail("예상 밖 오류: \(error)")
+        }
+    }
+
+    func testChangesMergeAndDismiss() async throws {
+        try stub(status: 200, fixture: "rest/changes.json")
+        let changes = try await client.changes(teamId: teamId)
+        XCTAssertEqual(lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)/changes")
+        XCTAssertEqual(changes.map(\.id), [changeId])
+
+        try stub(status: 200, fixture: "rest/merge-result.json")
+        let merged = try await client.mergeChange(teamId: teamId, changeId: changeId)
+        XCTAssertEqual(lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)/changes/\(changeId)/merge")
+        XCTAssertNil(lastRequest?.httpBody)
+        XCTAssertEqual(merged.change.status, .merged)
+        XCTAssertNotNil(merged.mergeCommit)
+
+        var dismissedJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: fixtureSubtree("rest/changes.json") { ($0 as? [String: Any])?["changes"].flatMap { ($0 as? [Any])?.first } }) as? [String: Any]
+        )
+        dismissedJSON["status"] = "dismissed"
+        try stub(status: 200, body: JSONSerialization.data(withJSONObject: dismissedJSON))
+        let dismissed = try await client.dismissChange(teamId: teamId, changeId: changeId)
+        XCTAssertEqual(lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)/changes/\(changeId)/dismiss")
+        XCTAssertEqual(dismissed.id, changeId)
+        XCTAssertEqual(dismissed.status, .dismissed)
+
+        // 409: ready 가 아닌 ChangeSet 머지
+        try stub(status: 409, body: Data(#"{"error":{"code":"conflict","message":"change is not ready"}}"#.utf8))
+        do {
+            _ = try await client.mergeChange(teamId: teamId, changeId: changeId)
+            XCTFail("throw 를 기대")
+        } catch APIError.server(let code, let message, let status) {
+            XCTAssertEqual(code, .conflict)
+            XCTAssertEqual(message, "change is not ready")
+            XCTAssertEqual(status, 409)
+        } catch {
+            XCTFail("예상 밖 오류: \(error)")
+        }
+    }
+
+    func testTeamTemplateEndpoints() async throws {
+        try stub(status: 200, fixture: "rest/team-templates.json")
+        let templates = try await client.teamTemplates()
+        XCTAssertEqual(lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/team-templates")
+        XCTAssertEqual(templates.map(\.id), ["tpl_01J8ZQ4K5N7P9R3S6T8V0W2XP1"])
+
+        try stub(status: 201, fixture: "rest/team-template.json")
+        let member = TeamTemplateMember(
+            name: "민수", handle: "minsu", role: .teamLead, roleLabel: "팀장", emoji: "🧑‍💼", agent: .claude,
+            prompt: "p", mode: .autoEdit, model: nil, effort: nil, isLead: true
+        )
+        let created = try await client.createTeamTemplate(CreateTeamTemplateRequest(name: "백엔드 2인", members: [member]))
+        XCTAssertEqual(created.name, "백엔드 2인")
+        XCTAssertEqual(lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/team-templates")
+        XCTAssertEqual(try bodyDictionary(), [
+            "name": "백엔드 2인",
+            "members": [[
+                "name": "민수", "handle": "minsu", "role": "team-lead", "roleLabel": "팀장", "emoji": "🧑‍💼", "agent": "claude",
+                "prompt": "p", "mode": "auto-edit", "model": NSNull(), "effort": NSNull(), "isLead": true,
+            ]],
+        ] as NSDictionary, "settings 는 생략, 템플릿 멤버의 model/effort 는 null 로 보낸다")
+
+        try stub(status: 200, fixture: "rest/team-template.json")
+        _ = try await client.patchTeamTemplate(id: "tpl_1", PatchTeamTemplateRequest(name: "이름만"))
+        XCTAssertEqual(lastRequest?.httpMethod, "PATCH")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/team-templates/tpl_1")
+        XCTAssertEqual(try bodyDictionary(), ["name": "이름만"] as NSDictionary)
+
+        try stub(status: 200, body: Data(#"{"ok":true}"#.utf8))
+        try await client.deleteTeamTemplate(id: "tpl_1")
+        XCTAssertEqual(lastRequest?.httpMethod, "DELETE")
+        XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/team-templates/tpl_1")
+        XCTAssertNil(lastRequest?.httpBody)
+    }
 }

@@ -4,7 +4,7 @@ import XCTest
 
 /// 계약 테스트: `packages/protocol/fixtures/` 의 69개 JSON 을 Swift Codable 로 전수 디코딩한다.
 /// TS 쪽 `packages/protocol/test/fixtures.test.ts` 의 매핑표와 대칭이다.
-/// 팀·방(2026-09-12 추가) fixture 는 phase `4-teams-ios` 가 실제 타입을 만들기 전까지 `JSONValue` 로만 등록한다.
+/// 팀·방(2026-09-12 추가) fixture 는 `Team`/`Room`/`RoomEvent`/`RoomClientMessage` 로 디코드한다. 방 이벤트는 세션 WS 와 별도 enum 이다.
 final class ProtocolFixturesTests: XCTestCase {
     private typealias Decoder = (Data) throws -> Any
 
@@ -44,9 +44,24 @@ final class ProtocolFixturesTests: XCTestCase {
         for name in clientExpectations.keys {
             t["client/\(name).json"] = decode(ClientMessage.self)
         }
-        // 2026-09-12 추가분(팀·방) 23개: 임시로 JSONValue. 4-teams-ios 가 실제 타입으로 바꾼다.
-        for path in ADDED_2026_09_12 {
-            t[path] = decode(JSONValue.self)
+        // 2026-09-12 추가분(팀·방) rest 10개
+        t["rest/team-roles.json"] = decode(TeamRolesResponse.self)
+        t["rest/teams.json"] = decode(TeamsResponse.self)
+        t["rest/team.json"] = decode(Team.self)
+        t["rest/team-detail.json"] = decode(TeamDetailResponse.self)
+        t["rest/room.json"] = decode(RoomDetailResponse.self)
+        t["rest/room-message-post.json"] = decode(PostRoomMessageResponse.self)
+        t["rest/changes.json"] = decode(ChangesResponse.self)
+        t["rest/merge-result.json"] = decode(MergeResult.self)
+        t["rest/team-templates.json"] = decode(TeamTemplatesResponse.self)
+        t["rest/team-template.json"] = decode(TeamTemplate.self)
+        // room-ws/ 10개: 전부 RoomEvent (세션 ServerEvent 와 별도 enum)
+        for name in roomWsExpectations.keys {
+            t["room-ws/\(name).json"] = decode(RoomEvent.self)
+        }
+        // room-client/ 3개: 전부 RoomClientMessage
+        for name in roomClientExpectations.keys {
+            t["room-client/\(name).json"] = decode(RoomClientMessage.self)
         }
         return t
     }
@@ -113,6 +128,26 @@ final class ProtocolFixturesTests: XCTestCase {
         "ping": .ping,
     ]
 
+    /// `room-ws/<type>[.<variant>].json` → 기대하는 방 이벤트 type.
+    private static let roomWsExpectations: [String: RoomEvent.EventType] = [
+        "room.snapshot": .roomSnapshot,
+        "room.message.user": .roomMessage,
+        "room.message.agent": .roomMessage,
+        "room.message.approval": .roomMessage,
+        "room.message.changes": .roomMessage,
+        "room.message.system": .roomMessage,
+        "room.message.updated": .roomMessageUpdated,
+        "room.status": .roomStatus,
+        "room.error": .roomError,
+        "pong": .pong,
+    ]
+
+    private static let roomClientExpectations: [String: RoomClientMessage.MessageType] = [
+        "room.send": .send,
+        "room.interrupt": .interrupt,
+        "ping": .ping,
+    ]
+
     private func decodeFixture<T: Decodable>(_ type: T.Type, _ path: String) throws -> T {
         try JSONCoding.decoder.decode(T.self, from: FixtureLoader.data(path))
     }
@@ -146,6 +181,13 @@ final class ProtocolFixturesTests: XCTestCase {
         let itemKinds = Set(Self.wsExpectations.values.compactMap(\.itemKind))
         XCTAssertEqual(itemKinds, Set(TimelineItemKind.allCases))
         XCTAssertEqual(Set(Self.clientExpectations.values), Set(ClientMessage.MessageType.allCases))
+        XCTAssertEqual(Set(Self.roomWsExpectations.values), Set(RoomEvent.EventType.allCases))
+        XCTAssertEqual(Set(Self.roomClientExpectations.values), Set(RoomClientMessage.MessageType.allCases))
+        // 방 fixture 표는 ADDED_2026_09_12 와 정확히 같은 파일을 가리킨다
+        let roomFiles = Set(Self.roomWsExpectations.keys.map { "room-ws/\($0).json" })
+            .union(Self.roomClientExpectations.keys.map { "room-client/\($0).json" })
+        XCTAssertTrue(roomFiles.isSubset(of: Self.ADDED_2026_09_12))
+        XCTAssertEqual(roomFiles.count, 13)
     }
 
     // MARK: - 전수 디코딩
@@ -200,6 +242,43 @@ final class ProtocolFixturesTests: XCTestCase {
 
             // 디코드 → 인코드 → 디코드도 같은 값
             XCTAssertEqual(try JSONCoding.decoder.decode(ClientMessage.self, from: encoded), message, name)
+        }
+    }
+
+    // MARK: - room-ws/ 와 room-client/ (2026-09-12 추가)
+
+    func testRoomWsFixturesHaveExpectedType() throws {
+        for (name, expectedType) in Self.roomWsExpectations {
+            let event = try decodeFixture(RoomEvent.self, "room-ws/\(name).json")
+            XCTAssertEqual(event.type, expectedType, name)
+            XCTAssertEqual(event.roomId, "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0", name)
+            XCTAssertEqual(event.teamId, "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1", name)
+            if expectedType == .roomSnapshot || expectedType == .pong {
+                XCTAssertEqual(event.seq, 0, name)
+            } else {
+                XCTAssertGreaterThan(event.seq, 0, name)
+            }
+            switch event {
+            case .roomMessage(let e), .roomMessageUpdated(let e):
+                XCTAssertEqual(e.message.roomId, event.roomId, name)
+                XCTAssertGreaterThan(e.message.seq, 0, name)
+            default:
+                break
+            }
+        }
+    }
+
+    func testRoomClientFixturesRoundTrip() throws {
+        for (name, expectedType) in Self.roomClientExpectations {
+            let data = try FixtureLoader.data("room-client/\(name).json")
+            let message = try JSONCoding.decoder.decode(RoomClientMessage.self, from: data)
+            XCTAssertEqual(message.type, expectedType, name)
+
+            let encoded = try JSONCoding.encoder.encode(message)
+            let original = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? NSDictionary, name)
+            let reencoded = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? NSDictionary, name)
+            XCTAssertEqual(reencoded, original, "room-client/\(name).json 왕복 결과가 fixture 와 다르다")
+            XCTAssertEqual(try JSONCoding.decoder.decode(RoomClientMessage.self, from: encoded), message, name)
         }
     }
 

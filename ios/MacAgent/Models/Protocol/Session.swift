@@ -63,6 +63,17 @@ struct SessionUsage: Codable, Hashable, Sendable {
     }
 }
 
+/// 팀원 세션의 소속(2026-09-12 추가, PROTOCOL.md 6절). 일반 세션은 `Session.team` 키 자체를 생략한다.
+struct SessionTeamRef: Codable, Hashable, Sendable {
+    var teamId: String
+    var memberId: String
+
+    init(teamId: String, memberId: String) {
+        self.teamId = teamId
+        self.memberId = memberId
+    }
+}
+
 /// PROTOCOL.md 1절 `Session`.
 struct Session: Codable, Identifiable, Hashable, Sendable {
     var id: String
@@ -85,6 +96,8 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
     var preview: String?
     /// nullable(2026-09-10 추가). 첫 턴 전에는 `null`. 키 생략 허용 사유는 `effort` 와 같다.
     var usage: SessionUsage?
+    /// optional(2026-09-12 추가). 팀원 세션이면 소속 팀과 팀원. 일반 세션은 키 자체가 없다(nil 이면 인코딩도 생략).
+    var team: SessionTeamRef?
 
     init(
         id: String,
@@ -101,7 +114,8 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
         pendingApprovals: Int,
         preview: String?,
         effort: String? = nil,
-        usage: SessionUsage? = nil
+        usage: SessionUsage? = nil,
+        team: SessionTeamRef? = nil
     ) {
         self.id = id
         self.agent = agent
@@ -118,6 +132,7 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
         self.pendingApprovals = pendingApprovals
         self.preview = preview
         self.usage = usage
+        self.team = team
     }
 
     init(from decoder: Decoder) throws {
@@ -137,6 +152,7 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
         pendingApprovals = try c.decode(Int.self, forKey: .pendingApprovals)
         preview = try c.decodeIfPresent(String.self, forKey: .preview)
         usage = try c.decodeIfPresent(SessionUsage.self, forKey: .usage)
+        team = try c.decodeIfPresent(SessionTeamRef.self, forKey: .team)
     }
 }
 
