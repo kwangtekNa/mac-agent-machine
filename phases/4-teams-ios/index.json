@@ -28,10 +28,28 @@
     {
       "step": 1,
       "name": "event-socket-generalization",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-12T23:44:48+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "d92783a3-3095-4547-993f-bc76a1664081",
+          "cost_usd": 4.8721429999999994,
+          "duration_s": 493.1,
+          "num_turns": 31,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 4.872143,
+      "duration_s": 493.1,
+      "retries": 0,
+      "session_id": "d92783a3-3095-4547-993f-bc76a1664081",
+      "summary": "Chose GENERALIZATION (no duplication fallback needed: `@MainActor @Observable final class EventSocket<Event: SocketEvent, Message: SocketMessage>` compiles clean under Swift 6.2 strict concurrency). New `ios/MacAgent/Networking/EventSocket.swift`: `SocketEvent`/`SocketMessage` protocols, `SocketEndpoint` (`.session(id:)`, `.room(teamId:roomId:)`, notFoundCloseCode 4004 + reason), `SocketPolicy` (pingInterval 20s, maxBackoff 30, jitter 300, `backoffDelay`), generic `EventSocket` (state machine, since=lastSeq reconnect, lastSeq only for seq>0, pong consumed, ping loop, 4004 → closed(reason) no reconnect; `disconnect()` now also finishes the events stream per spec), `typealias SessionSocket`/`RoomSocket` with convenience inits in constrained extensions, legacy statics (`pingInterval`, `pingText`, `backoffDelay`, `closeCodeSessionNotFound`, `sessionNotFoundReason`) kept as computed members, plus `ServerEvent`/`RoomEvent: SocketEvent` and `ClientMessage`/`RoomClientMessage: SocketMessage` extensions. `SessionSocket.swift` trimmed to transport layer only (`WebSocketTransport`, `SocketError`, `URLSessionWebSocketTransport`). New `ios/MacAgentTests/Networking/RoomSocketTests.swift` (10 tests: room URL `/api/v1/teams/<t>/rooms/<r>/ws?since=<n>`, snapshot(0)+message(3) → lastSeq 3, session frames ignored, reconnect since=3 with 1/2/4s backoff, policy equal to SessionSocket, 4004 → closed(\"방이 없습니다\"), other codes reconnect, room.send/room.interrupt/ping match fixtures, disconnect finishes stream). `SessionSocketTests.swift`, `TimelineModel.swift`, `FakeWebSocketTransport.swift` untouched. AC: xcodegen generate + xcodebuild test green (iOS 274 tests, 0 failures, no warnings in touched files), git diff on SessionSocketTests clean, RoomSocket grep OK, `bash scripts/test.sh` OK (TS 754 passed). No fixtures/docs/phases files changed.",
+      "completed_at": "2026-09-12T23:53:01+0900"
     },
     {
       "step": 2,
