@@ -97,6 +97,20 @@
 - 결정: (1) 세션 누적 사용량은 SessionManager가 어댑터의 `usage` 이벤트(턴별 델타 + 컨텍스트 스냅샷)를 더해 `Session.usage`로 영속화하고 `session.usage` 이벤트로 내보낸다. (2) 구독 한도는 `GET /usage`로 통일하되 Claude는 마지막 관측값(`~/.mam/usage/claude.json`, `live: false`), Codex는 즉시 조회(`live: true`)다. (3) 모델 목록은 `GET /models`로 통일하고 Claude는 라이브 세션에서 `supportedModels()`를 캐시, 없으면 정적 기본 목록. (4) 모델·effort 변경은 `PATCH /sessions/:id`이며 적용 시점은 어댑터가 정한다.
 - 결과: 프로토콜은 추가만 있고 기존 클라이언트는 깨지지 않는다. Claude 한도는 턴을 한 번 돌려야 갱신되며 앱은 관측 시각을 표시한다. 비용은 추정치이며 Codex 구독 계정은 `null`.
 
+## ADR-017 에이전트 팀: 팀원은 세션, 방은 별도 스트림, worktree 격리, 서버 커밋, 멘션 라우팅
+
+- 배경: 사용자가 한 프로젝트에 역할(팀장·개발자·기획자·코드 리뷰어)을 나눈 에이전트 여러 명을 꾸리고 채팅방처럼 지시하고 싶어 한다. 에이전트마다 Claude 또는 Codex 를 고를 수 있어야 하고, 여러 에이전트가 같은 저장소를 동시에 고치면 서로의 변경을 덮어쓴다. Codex 의 `workspace-write` 샌드박스는 `.git` 쓰기를 막아 에이전트가 스스로 커밋할 수 없다. Claude Agent SDK 는 system prompt 를 세션 시작 시 한 번 고정한다.
+- 결정(2026-09-12 인터뷰로 확정):
+  - **팀원은 기존 `Session` 하나다.** 새 실행 모델을 만들지 않고 `Session.team = { teamId, memberId }` 만 덧붙인다. 승인도 기존 `POST /sessions/:id/approvals/:approvalId` 로 응답하고 방에는 카드를 미러링만 한다. 에이전트당 세션 하나를 그룹방·DM 이 공유하며, 답변은 턴이 끝난 뒤 한 번에 게시한다(스트리밍 없음).
+  - **방은 세션 WS 와 별도 스트림**(`room.*` 이벤트, `room-ws/`·`room-client/` fixture)이고 **방 seq 는 세션 seq 와 분리**한다. 한 방에 여러 세션의 결과가 섞이므로 세션 seq 로는 순서를 만들 수 없고, iOS 가 `fixtures/ws/` 전체를 엄격한 `ServerEvent` enum 으로 디코드하므로 세션 union 에 방 이벤트를 넣으면 구 클라이언트가 깨진다. 방 이벤트 로그는 `~/.mam/teams/<teamId>/rooms/<roomId>.jsonl` 에 SessionManager 와 같은 방식(링버퍼 + JSONL + `since` 재생)으로 둔다.
+  - **라우팅은 멘션 기반.** 그룹방은 `@이름`/`@handle` 로 지정된 팀원에게, 멘션이 없으면 팀장(`isLead`, 정확히 1명)에게 보낸다. DM 방은 그 팀원만 응답하고 다른 멘션은 무시한다. `@all` 은 작성자 제외 전원. 에이전트끼리 `@이름` 으로 부를 수 있으되 사용자 메시지 1건당 연쇄 상한 `maxHops`(기본 6), 동시 실행 상한 `maxConcurrent`(기본 2), 맥락 상한 `contextMaxMessages`(기본 40, 12,000자). 맥락은 `[#전체] @민수(개발자): …` 같은 접두어로 넣는다.
+  - **worktree 격리.** 팀원마다 `git worktree` 를 `~/.mam/teams/<teamId>/worktrees/<memberId>` 에 만들고 브랜치는 `mam/<team-slug>/<handle>`. 저장소 **밖**에 두는 이유: 저장소 안(`.worktrees/` 등)에 두면 `git status`·glob·grep 과 Codex `writableRoots` 가 이웃 worktree 를 함께 보고 에이전트가 남의 파일을 고친다. 홈 **안**에 두는 이유: `resolveInsideHome()` 샌드박스와 파일 API 규칙(CRITICAL 3)을 그대로 지킨다.
+  - **커밋은 서버가 한다.** 턴 종료 시 worktree 변경을 작성자 `<이름> (mam-team) <handle@mam.local>` 로 커밋하고 ChangeSet("변경 준비됨" 카드)을 올린다. 이유: Codex 샌드박스가 `.git` 쓰기를 막아 에이전트에게 커밋을 맡길 수 없고, 어느 에이전트든 같은 형식의 커밋을 남기게 하려면 서버가 한 곳에서 하는 것이 단순하다. 에이전트 지시문에는 "커밋하지 마라" 를 넣는다.
+  - **머지는 사용자가 방에서 승인**한다. 서버가 원본 저장소에서 `git merge --no-ff <branch>` 를 실행하고 브랜치는 유지한다(이력에 팀원 브랜치가 남고, 팀원은 같은 브랜치에서 계속 일한다). 충돌은 abort 후 `conflict` 로 보고한다.
+  - 팀은 프로젝트(`cwd`)에 속하고, 팀 템플릿(`TeamTemplate`)은 사용자별 `~/.mam/team-templates.json` 에 저장한다.
+- 대안: (a) Claude Agent SDK 의 서브에이전트/`Task` 로 팀을 구성 — Codex 를 섞을 수 없고 승인·타임라인이 하나의 세션에 뭉쳐 폰에서 읽기 어렵다. (b) 같은 저장소에서 여러 세션을 그냥 돌리기 — 변경이 겹치고 누가 무엇을 바꿨는지 추적할 수 없다. (c) 에이전트가 직접 커밋 — Codex 샌드박스가 막고, Claude 만 되는 비대칭이 생긴다.
+- 결과: 프로토콜은 추가만 있고 기존 클라이언트는 깨지지 않는다(`Session.team` 은 키 생략). 서버는 `TeamManager`·`Dispatcher`·`RoomStore`·`Worktrees` 모듈이 늘고 root 코드는 변하지 않는다. 프롬프트·모델 변경은 다음 세션부터 적용된다(미결 사항 참고). 사용자 홈에 저장소 크기만큼 worktree 가 늘어난다.
+
 ## 미결 사항
 
 | 항목 | 결정 시점 |
@@ -104,3 +118,4 @@
 | `claude setup-token`을 PTY에서 구동해 URL 출력·코드 입력을 받을 수 있는지 | Phase 0 `auth-login-flow` step |
 | Agent SDK `interrupt()`의 실제 중단 동작 | Phase 0 `claude-adapter` step 통합 테스트 |
 | 유휴 종료 시간 기본값(현재 30분) | 운영 후 조정 |
+| Claude `systemPrompt` 가 세션 시작 시 고정(snapshot)되어 팀원 프롬프트 수정은 다음 세션부터 적용된다. 즉시 반영이 필요하면 `PATCH` 시 자동 `reset` 을 할지 | Phase 3 `team-manager` step 또는 운영 후 |

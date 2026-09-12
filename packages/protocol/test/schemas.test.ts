@@ -15,10 +15,20 @@ import {
   TimelineItemSchema,
   UsageLimitSchema,
   UsageSchema,
+  RoomAuthorSchema,
+  RoomClientMessageSchema,
+  RoomMessageSchema,
+  RoomServerEventSchema,
+  TeamMemberSchema,
+  TeamSchema,
+  TeamSettingsSchema,
   idSchema,
   parseClientMessage,
+  parseRoomClientMessage,
+  parseRoomServerEvent,
   parseServerEvent,
   safeParseClientMessage,
+  safeParseRoomClientMessage,
 } from "../src/index.js";
 
 const SES = "ses_01J8ZQ4K5N7P9R3S6T8V0W2XAB";
@@ -271,5 +281,142 @@ describe("2026-09-10 추가분 (usage / models / mkdir)", () => {
     expect(FsMkdirRequestSchema.safeParse({ path: "~/work/new-app" }).success).toBe(true);
     expect(FsMkdirRequestSchema.safeParse({ path: "" }).success).toBe(false);
     expect(FsMkdirRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("2026-09-12 추가분 (팀·방)", () => {
+  const TEAM = "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1";
+  const AGT = "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1";
+  const ROOM = "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0";
+  const MSG = "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM2";
+  const member = {
+    id: AGT,
+    name: "민수",
+    handle: "minsu",
+    role: "team-lead",
+    roleLabel: "팀장",
+    emoji: "🧑‍💼",
+    agent: "claude",
+    prompt: "You are the team lead.",
+    mode: "auto-edit",
+    model: null,
+    effort: null,
+    sessionId: null,
+    branch: "mam/backend/minsu",
+    worktreePath: "/Users/alice/.mam/teams/" + TEAM + "/worktrees/" + AGT,
+    isLead: true,
+    state: "idle",
+    createdAt: TS,
+    updatedAt: TS,
+  };
+  const message = {
+    id: MSG,
+    roomId: ROOM,
+    seq: 2,
+    author: { kind: "user" },
+    kind: "text",
+    text: "@민수 안녕",
+    mentions: [AGT],
+    hop: 0,
+    dispatchId: null,
+    createdAt: TS,
+    work: null,
+    approval: null,
+    changes: null,
+  };
+  const team = {
+    id: TEAM,
+    name: "backend",
+    cwd: "/Users/alice/work/app",
+    baseBranch: "main",
+    settings: { maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40 },
+    members: [member],
+    rooms: [{ id: ROOM, teamId: TEAM, kind: "group", memberId: null, name: "전체", lastSeq: 0, lastMessageAt: null }],
+    createdAt: TS,
+    updatedAt: TS,
+  };
+  const pong = { type: "pong", seq: 0, roomId: ROOM, teamId: TEAM, ts: TS };
+
+  it("RoomMessage.hop 은 음수를 거부한다", () => {
+    expect(RoomMessageSchema.safeParse(message).success).toBe(true);
+    expect(RoomMessageSchema.safeParse({ ...message, hop: -1 }).success).toBe(false);
+    expect(RoomMessageSchema.safeParse({ ...message, hop: 1.5 }).success).toBe(false);
+  });
+
+  it("TeamMember.handle 은 소문자 영숫자·하이픈만 허용한다 (한글 거부)", () => {
+    expect(TeamMemberSchema.safeParse(member).success).toBe(true);
+    expect(TeamMemberSchema.safeParse({ ...member, handle: "민수" }).success).toBe(false);
+    expect(TeamMemberSchema.safeParse({ ...member, handle: "Minsu" }).success).toBe(false);
+    expect(TeamMemberSchema.safeParse({ ...member, handle: "-minsu" }).success).toBe(false);
+    expect(TeamMemberSchema.safeParse({ ...member, handle: "" }).success).toBe(false);
+    expect(TeamMemberSchema.safeParse({ ...member, handle: "min-su2" }).success).toBe(true);
+  });
+
+  it("team_ 자리에 ses_ 접두어 ID 가 오면 실패한다", () => {
+    expect(TeamSchema.safeParse(team).success).toBe(true);
+    expect(TeamSchema.safeParse({ ...team, id: SES }).success).toBe(false);
+    expect(RoomServerEventSchema.safeParse({ ...pong, teamId: SES }).success).toBe(false);
+    expect(RoomMessageSchema.safeParse({ ...message, mentions: [SES] }).success).toBe(false);
+  });
+
+  it("room.send 의 빈 text 를 거부한다 (최소 1자)", () => {
+    expect(() => parseRoomClientMessage({ type: "room.send", text: "" })).toThrow();
+    expect(safeParseRoomClientMessage({ type: "room.send", text: "" }).success).toBe(false);
+    expect(parseRoomClientMessage({ type: "room.send", text: "a" })).toEqual({ type: "room.send", text: "a" });
+    expect(RoomClientMessageSchema.safeParse({ type: "room.interrupt" }).success).toBe(true);
+    expect(RoomClientMessageSchema.safeParse({ type: "room.interrupt", memberId: "minsu" }).success).toBe(false);
+  });
+
+  it("TeamSettings.maxConcurrent 는 1 이상이다 (0 거부)", () => {
+    const settings = { maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40 };
+    expect(TeamSettingsSchema.safeParse(settings).success).toBe(true);
+    expect(TeamSettingsSchema.safeParse({ ...settings, maxConcurrent: 0 }).success).toBe(false);
+    expect(TeamSettingsSchema.safeParse({ ...settings, maxConcurrent: 9 }).success).toBe(false);
+    expect(TeamSettingsSchema.safeParse({ ...settings, maxHops: -1 }).success).toBe(false);
+    expect(TeamSettingsSchema.safeParse({ ...settings, maxHops: 0 }).success).toBe(true);
+    expect(TeamSettingsSchema.safeParse({ ...settings, contextMaxMessages: 0 }).success).toBe(false);
+  });
+
+  it("RoomAuthor 의 모르는 kind 는 실패하고, agent 는 memberId 가 필요하다", () => {
+    expect(RoomAuthorSchema.safeParse({ kind: "user" }).success).toBe(true);
+    expect(RoomAuthorSchema.safeParse({ kind: "system" }).success).toBe(true);
+    expect(RoomAuthorSchema.safeParse({ kind: "agent", memberId: AGT }).success).toBe(true);
+    expect(RoomAuthorSchema.safeParse({ kind: "agent" }).success).toBe(false);
+    expect(RoomAuthorSchema.safeParse({ kind: "bot", memberId: AGT }).success).toBe(false);
+    expect(RoomMessageSchema.safeParse({ ...message, author: { kind: "bot" } }).success).toBe(false);
+  });
+
+  it("RoomServerEvent 의 모르는 type 은 실패하고, 세션 이벤트도 방 이벤트로 받지 않는다", () => {
+    expect(RoomServerEventSchema.safeParse(pong).success).toBe(true);
+    expect(RoomServerEventSchema.safeParse({ ...pong, type: "room.exploded" }).success).toBe(false);
+    expect(() => parseRoomServerEvent({ ...pong, type: "room.exploded" })).toThrow();
+    expect(RoomServerEventSchema.safeParse({ type: "pong", seq: 0, sessionId: SES, ts: TS }).success).toBe(false);
+    expect(ServerEventSchema.safeParse(pong).success).toBe(false);
+  });
+
+  it("room.snapshot 과 pong 은 seq 0 만 허용한다", () => {
+    expect(RoomServerEventSchema.safeParse({ ...pong, seq: 1 }).success).toBe(false);
+  });
+
+  it("Session.team 은 생략할 수 있고, 있으면 teamId·memberId 접두어를 검증한다", () => {
+    const session = {
+      id: SES,
+      agent: "claude",
+      cwd: "/Users/alice/work/app",
+      title: "t",
+      mode: "auto-edit",
+      model: null,
+      status: "idle",
+      nativeId: null,
+      createdAt: TS,
+      updatedAt: TS,
+      lastSeq: 0,
+      pendingApprovals: 0,
+      preview: null,
+    };
+    expect(SessionSchema.safeParse(session).success).toBe(true);
+    expect(SessionSchema.safeParse({ ...session, team: { teamId: TEAM, memberId: AGT } }).success).toBe(true);
+    expect(SessionSchema.safeParse({ ...session, team: { teamId: SES, memberId: AGT } }).success).toBe(false);
+    expect(SessionSchema.safeParse({ ...session, team: null }).success).toBe(false);
   });
 });

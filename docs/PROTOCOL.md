@@ -8,7 +8,7 @@
 - 인증: 클라이언트는 아무것도 보내지 않는다. gateway가 신원을 확정해 `X-MAM-User`를 붙인다. 개발 모드에서는 `MAM_DEV_USER`가 신원이다.
 - 헤더: 클라이언트는 `X-MAM-Protocol: 1`을 보낸다. 서버는 지원하지 않는 버전이면 426.
 - 오류: `{ "error": { "code": "not_found" | "forbidden" | "invalid_request" | "conflict" | "agent_unavailable" | "internal", "message": "..." } }`와 대응 HTTP 상태.
-- ID: `ses_<ulid>`, `itm_<ulid>`, `apr_<ulid>`, `trn_<ulid>`, `flw_<ulid>`.
+- ID: `ses_<ulid>`, `itm_<ulid>`, `apr_<ulid>`, `trn_<ulid>`, `flw_<ulid>`. 팀·방(2026-09-12 추가): `team_`, `agt_`(팀원), `room_`, `msg_`, `chg_`(ChangeSet), `tpl_`(템플릿), `dsp_`(디스패치).
 - 시각: ISO-8601 UTC 문자열. 경로: 절대 경로. 클라이언트가 `~/`로 시작하는 경로를 보내면 서버가 홈으로 치환한다.
 - 알 수 없는 키: 클라이언트는 모르는 키를 거부하지 않고 무시한다(서버가 필드를 추가해도 구 클라이언트가 깨지지 않는다). 단 판별자(`kind`, `type`)가 모르는 값이면 실패한다.
 - `null`: 값이 없을 수 있는 필드는 키를 생략하지 않고 `null`을 보낸다. 해당 필드: `Session.model|nativeId|preview`, `agents[].version|account`, `projects[].lastSessionAt`, `fs/list.parent`(홈 루트), `entries[].size|gitStatus`, `git/status.branch`, `TimelineItem.turnId`(턴 밖 아이템, 예: `system`)`|completedAt`, `tool_call.exitCode`, `Approval.detail|diff`. `?`가 붙은 필드는 키 자체가 생략될 수 있다.
@@ -80,6 +80,7 @@ Session:
 - `mode`: `ask | auto-edit | full-auto | plan` (매핑은 4절)
 - `model`, `effort`: 어댑터가 보고한 현재 값. 모르면 `null`. `effort`는 `low | medium | high | xhigh | max`(Claude) 또는 Codex의 reasoning effort 문자열.
 - `usage`(2026-09-10 추가): 이 세션의 **누적** 토큰과 비용, 현재 컨텍스트 사용량. 첫 턴 전에는 `null`. `costUsd`는 어댑터가 추정값을 주지 않으면 `null`(Codex 구독 계정). `context`는 마지막 턴 기준 컨텍스트 크기(`tokens`)와 모델 컨텍스트 창(`window`), 백분율(`percent`, 정수 0~100). 모르면 `null`. 어댑터별 산출식은 5절.
+- `team`(2026-09-12 추가): 팀원 세션이면 `{ "teamId": "team_…", "memberId": "agt_…" }`. 일반 세션은 **키 자체를 생략**한다(`null`을 보내지 않는다). 팀원 세션도 `GET /sessions/:id`, WS, 승인 응답은 일반 세션과 똑같이 쓴다. 6절.
 
 ### `POST /sessions`
 
@@ -299,3 +300,211 @@ Codex app-server → TimelineItem:
 - `turn/started` → `session.status(running)`, `error` 알림 → `error`
 - 사용량(2026-09-10 추가): `thread/tokenUsage/updated { tokenUsage: { total, last, modelContextWindow } }`. 토큰 델타는 `total`의 이전 관측치 대비 증가분(`inputTokens`, `outputTokens`, `cachedInputTokens`, `cacheWriteInputTokens`), 컨텍스트 `tokens` = `last.totalTokens`, `window` = `modelContextWindow`. 비용은 `null`(구독). 구독 한도는 `account/rateLimits/read` → `rateLimits.primary/secondary { usedPercent, windowDurationMins, resetsAt(epoch 초) }`와 `account/rateLimits/updated` 알림. `plan`은 `account/read`의 `account.planType`. 모델 목록은 `model/list`(`hidden` 제외; `id`, `displayName`, `description`, `isDefault`, `supportedReasoningEfforts[].reasoningEffort`, `defaultReasoningEffort`). 모델·effort 변경은 다음 `turn/start`의 `model`, `effort`
 - `thread/start` 응답의 모델 → `Session.model`
+
+## 6. 팀과 방 (2026-09-12 추가)
+
+사용자는 한 프로젝트(git 저장소 `cwd`)에 **에이전트 팀**을 꾸린다. 팀원은 이름·이모지·역할·에이전트 종류·모드를 가진 **기존 `Session` 하나**이며 자기 git worktree 에서 일한다. 대화는 **방**에서 한다: 그룹방 하나(`#전체`)와 팀원별 DM 방. 사용자가 방에 글을 쓰면 서버가 `@멘션`으로 팀원을 골라 그 세션에 턴을 보내고, 턴이 끝나면 답변을 방에 게시한다(스트리밍 없음). 턴 종료 시 서버가 worktree 변경을 커밋하고 "변경 준비됨" 카드를 올리며, 사용자가 방에서 머지를 승인한다. 팀은 프로젝트(`cwd`)에 속하고 템플릿은 사용자별로 저장된다. 근거는 ADR-017.
+
+방 이벤트는 세션 WS 와 **별도 스트림**이다(`room-ws/`·`room-client/` fixture). 세션 `ServerEvent`/`ClientMessage` 에 방 이벤트를 넣지 않는다.
+
+### 6.1 모델
+
+TS 는 `packages/protocol/src/teams.ts`, `room-ws.ts`. 예시는 `fixtures/rest/team*.json`, `room*.json`, `changes.json`, `merge-result.json`.
+
+**RolePreset** (`GET /team-roles`)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | `developer \| planner \| team-lead \| code-reviewer \| custom` | RoleId |
+| `label` | string | 한국어 표시명(`개발자`, `기획자`, `팀장`, `코드 리뷰어`, `커스텀`) |
+| `emoji` | string | 기본 이모지 |
+| `prompt` | string | 기본 역할 지시문. `MemberInput.prompt` 를 생략하면 복사된다. `custom` 은 `""` |
+
+**TeamMember**
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | `agt_<ulid>` | |
+| `name` | string 1~40 | 표시 이름. 정규화(공백 제거·소문자·NFKC)한 값이 팀 안에서 유일해야 한다 |
+| `handle` | `^[a-z0-9][a-z0-9-]{0,31}$` | `@멘션`·브랜치·커밋 작성자에 쓰는 ASCII 핸들. 팀 안에서 유일 |
+| `role` | RoleId | |
+| `roleLabel` | string | 표시용 역할명. 프리셋 label 또는 `custom` 의 사용자 입력 |
+| `emoji` | string | |
+| `agent` | `claude \| codex` | |
+| `prompt` | string | 역할 지시문(프리셋 또는 사용자 입력). 서버가 팀 컨텍스트 지시를 덧붙여 세션 system prompt 로 쓴다 |
+| `mode` | SessionMode | 기본 `auto-edit` |
+| `model`, `effort` | string \| null | `PATCH /sessions/:id` 와 같은 의미. 모르면 `null` |
+| `sessionId` | `ses_<ulid>` \| null | 팀원의 세션. 첫 디스패치 전·`reset` 직후는 `null` |
+| `branch` | string | `mam/<team-slug>/<handle>` (6.5) |
+| `worktreePath` | string | `~/.mam/teams/<teamId>/worktrees/<memberId>` 의 절대 경로 |
+| `isLead` | boolean | 팀장. 팀에 정확히 1명 |
+| `state` | `idle \| queued \| running \| waiting_approval \| error` | 디스패처가 관리하는 상태 |
+| `createdAt`, `updatedAt` | ISO-8601 | |
+
+**TeamSettings**: `{ "maxHops": 6, "maxConcurrent": 2, "contextMaxMessages": 40 }`. `maxHops` 정수 0~50(기본 6), `maxConcurrent` 1~8(기본 2), `contextMaxMessages` 1~500(기본 40, 12,000자 상한과 함께 적용. 6.4).
+
+**Team**
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | `team_<ulid>` | |
+| `name` | string 1~60 | |
+| `cwd` | string | 프로젝트 저장소 루트(절대 경로, 홈 안) |
+| `baseBranch` | string | 팀 생성 시점 `cwd` 의 현재 브랜치. 머지 대상 |
+| `settings` | TeamSettings | |
+| `members` | TeamMember[] | |
+| `rooms` | Room[] | 그룹방 1 + 팀원별 DM 방 |
+| `createdAt`, `updatedAt` | ISO-8601 | |
+
+**Room**
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | `room_<ulid>` | |
+| `teamId` | `team_<ulid>` | |
+| `kind` | `group \| dm` | |
+| `memberId` | `agt_<ulid>` \| null | DM 상대. 그룹방은 `null` |
+| `name` | string | 그룹방 `전체`, DM 은 팀원 이름 |
+| `lastSeq` | int ≥ 0 | 방 이벤트 로그의 마지막 seq(6.3) |
+| `lastMessageAt` | ISO-8601 \| null | 메시지가 없으면 `null` |
+
+**RoomAuthor**: `{ "kind": "user" }` \| `{ "kind": "agent", "memberId": "agt_…" }` \| `{ "kind": "system" }`. 모르는 `kind` 는 실패(0절).
+
+**WorkSummary** (에이전트 답변에 붙는 턴 요약)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `sessionId`, `turnId` | `ses_`, `trn_` | 답변을 만든 턴 |
+| `toolCalls` | int ≥ 0 | 턴 안의 `tool_call` 아이템 수 |
+| `filesChanged` | string[] | worktree 기준 상대 경로 |
+| `durationMs` | int ≥ 0 | |
+| `usage` | Usage | `turn.completed` 와 같은 객체 |
+| `costUsd`? | number | 어댑터가 주지 않으면 키 생략(Codex) |
+
+**RoomMessage**
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | `msg_<ulid>` | |
+| `roomId` | `room_<ulid>` | |
+| `seq` | int ≥ 1 | 이 메시지를 게시한 `room.message` 이벤트의 seq. 갱신돼도 바뀌지 않는다 |
+| `author` | RoomAuthor | |
+| `kind` | `text \| approval \| changes \| system` | |
+| `text` | string | `text` 는 본문(마크다운). `approval` 은 승인 제목, `changes` 는 한 줄 요약, `system` 은 안내문 |
+| `mentions` | `agt_<ulid>[]` | 본문에서 해석된 멘션(6.4). `@all` 은 펼쳐서 넣는다 |
+| `hop` | int ≥ 0 | 연쇄 깊이. 사용자 0, 그 멘션으로 실행된 턴의 결과 1, 그 결과의 멘션으로 실행된 턴 2 … |
+| `dispatchId` | `dsp_<ulid>` \| null | 이 메시지를 만든 디스패치. 사용자·시스템 메시지는 `null` |
+| `createdAt` | ISO-8601 | |
+| `work` | WorkSummary \| null | `kind: "text"` 이고 작성자가 에이전트일 때만 값. 그 외 `null` |
+| `approval` | `{ memberId, sessionId, approval: Approval, resolution: ApprovalResolution \| null }` \| null | `kind: "approval"` 일 때만 값. 3절 `Approval` 을 그대로 미러링. 응답 전 `resolution: null` |
+| `changes` | ChangeSet \| null | `kind: "changes"` 일 때만 값 |
+
+**ChangeSet**
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | `chg_<ulid>` | |
+| `teamId`, `memberId`, `sessionId`, `turnId` | | 변경을 만든 팀원과 턴 |
+| `branch`, `baseBranch` | string | 팀원 브랜치와 머지 대상 |
+| `commit` | string | 팀원 브랜치 HEAD(40자 hex) |
+| `files` | FileChangeEntry[] | 3절 `file_change.files[]` 와 같은 모양(`path`, `kind`, `additions`, `deletions`) |
+| `commits` | int ≥ 1 | `baseBranch` 대비 앞선 커밋 수 |
+| `status` | `ready \| merging \| merged \| conflict \| dismissed \| stale` | `stale` 은 같은 팀원의 더 새로운 ChangeSet 이 생겨 대체된 것 |
+| `conflictFiles` | string[] | `conflict` 일 때 충돌 파일. 그 외 `[]` |
+| `messageId` | `msg_<ulid>` | 이 ChangeSet 을 담은 방 메시지(그룹방, `kind: "changes"`) |
+| `createdAt`, `updatedAt` | ISO-8601 | |
+
+**MergeResult**: `{ "change": ChangeSet, "mergeCommit": string | null }`. `merged` 면 `--no-ff` 머지 커밋, `conflict` 면 `null`.
+
+**DispatchState** (팀 전체)
+
+```json
+{
+  "running": [ { "dispatchId": "dsp_…", "memberId": "agt_…", "roomId": "room_…", "sessionId": "ses_…", "turnId": "trn_…", "hop": 1 } ],
+  "queued":  [ { "dispatchId": "dsp_…", "memberId": "agt_…", "roomId": "room_…", "hop": 1, "enqueuedAt": "…" } ]
+}
+```
+
+`running[].turnId` 는 어댑터가 턴 ID 를 보고하기 전 `null`.
+
+**TeamTemplate**: `{ "id": "tpl_<ulid>", "name": string 1~60, "settings": TeamSettings, "members": TeamTemplateMember[], "createdAt", "updatedAt" }`. `TeamTemplateMember` 는 `TeamMember` 에서 런타임 필드를 뺀 `{ name, handle, role, roleLabel, emoji, agent, prompt, mode, model, effort, isLead }`.
+
+### 6.2 REST
+
+`MemberInput`: `{ "name", "role", "roleLabel"?, "agent", "emoji"?, "prompt"?, "mode"? (기본 auto-edit), "model"?, "effort"?, "handle"?, "isLead"? }`. `roleLabel`·`emoji`·`prompt` 를 생략하면 프리셋 값을 복사한다(`custom` 은 `roleLabel` 필수 → 400). `handle` 을 생략하면 이름에서 만든다(로마자·숫자만 남기고, 없으면 `agent-<n>`). 정규화한 이름 또는 handle 이 팀 안에서 겹치면 409 `conflict`.
+
+| 메서드/경로 | 요청 → 응답 |
+|---|---|
+| `GET /team-roles` | → `{ roles: RolePreset[] }` |
+| `GET /teams?cwd=` | → `{ teams: Team[] }` (cwd 생략 시 전체) |
+| `POST /teams` | `{ cwd, name, members: MemberInput[], settings?, templateId? }` → 201 `Team` |
+| `GET /teams/:id` | → `{ team, dispatch: DispatchState, changes: ChangeSet[] }` |
+| `PATCH /teams/:id` | `{ name?, settings? }` → `Team` |
+| `DELETE /teams/:id?keepWorktrees=true` | → `{ ok: true }` |
+| `POST /teams/:id/members` | `MemberInput` → 201 `Team` |
+| `PATCH /teams/:id/members/:memberId` | `{ name?, emoji?, prompt?, mode?, model?, effort? }` → `Team` |
+| `DELETE /teams/:id/members/:memberId?keepWorktree=true` | → `Team` |
+| `POST /teams/:id/members/:memberId/reset` | → `Team` (기억 초기화: 새 세션, 같은 worktree) |
+| `POST /teams/:id/stop` | → `DispatchState` |
+| `GET /teams/:id/rooms/:roomId?limit=` | → `{ room, messages: RoomMessage[], truncated }` (기본 최근 200) |
+| `POST /teams/:id/rooms/:roomId/messages` | `{ text, attachments? }` → 201 `{ message: RoomMessage, dispatches: string[] }` |
+| `GET /teams/:id/changes` | → `{ changes: ChangeSet[] }` |
+| `POST /teams/:id/changes/:changeId/merge` | → `MergeResult` |
+| `POST /teams/:id/changes/:changeId/dismiss` | → `ChangeSet` |
+| `GET /team-templates` · `POST /team-templates` · `PATCH /team-templates/:id` · `DELETE /team-templates/:id` | `{ templates: TeamTemplate[] }` / `TeamTemplate` / `TeamTemplate` / `{ ok: true }` |
+
+- `POST /teams`: `cwd` 가 홈 밖이면 403, git 저장소가 아니거나 detached HEAD 면 400 `invalid_request`. `isLead` 가 0명 또는 2명 이상이면 400 `invalid_request`(1명이면 그대로, `members` 가 1명이고 `isLead` 생략이면 그 사람이 팀장). `settings` 는 부분 지정 가능하며 빠진 값은 기본값. `templateId` 를 주면 템플릿의 `settings`·`members` 를 기본으로 깔고 본문이 덮어쓴다. 생성 시 팀원마다 브랜치·worktree 를 만들고(6.5) 그룹방과 DM 방을 만든다. 세션은 첫 디스패치 때 만든다(`sessionId: null`).
+- `PATCH /teams/:id/members/:memberId`: `name`·`emoji`·`mode`·`effort` 는 즉시 적용(`mode`·`effort` 는 세션 `PATCH` 와 같은 규칙). **`prompt`·`model` 은 `appliesAt: "next_session"`** — Claude Agent SDK 가 system prompt 를 세션 시작 시 고정하므로 `reset` 하거나 세션이 다시 열릴 때부터 적용된다. 응답 `Team` 에는 새 값이 바로 보인다. 이름을 바꿔도 `handle`·브랜치는 바뀌지 않는다. 이름이 겹치면 409.
+- `DELETE /teams/:id`, `DELETE /teams/:id/members/:memberId`: 실행 중 턴을 중단하고 세션을 닫는다. worktree 에 커밋되지 않은 변경이 있으면 409 `conflict`(`keepWorktrees=true`/`keepWorktree=true` 면 worktree 와 브랜치를 남기고 등록만 해제). 방 로그는 팀 삭제 시 함께 지운다.
+- `POST /teams/:id/members/:memberId/reset`: 세션을 닫고 `sessionId: null`, `state: idle`. 다음 디스패치가 새 세션을 만든다. worktree 와 브랜치는 그대로.
+- `POST /teams/:id/stop`: 실행 중 턴 전부 `interrupt`, 대기열 비움. → 비워진 `DispatchState`.
+- `POST /teams/:id/rooms/:roomId/messages`: 6.4 규칙으로 디스패치를 만든다. `dispatches` 는 만들어진 디스패치 ID(실행·대기 포함). `attachments` 는 디스패치되는 턴에만 전달되고 RoomMessage 에는 남지 않는다. 방이 없으면 404.
+- `POST /teams/:id/changes/:changeId/merge`: `status` 가 `ready` 가 아니면 409 `conflict`. 성공 시 `merged` + `mergeCommit`, 충돌 시 200 과 `status: "conflict"`, `conflictFiles`, `mergeCommit: null`(머지는 되돌린다). 6.5.
+- `POST /teams/:id/changes/:changeId/dismiss`: `ready`·`conflict` → `dismissed`. 브랜치는 남는다. 그 외 상태면 409.
+- 템플릿: `POST /team-templates` 본문 `{ name, settings?, members: TeamTemplateMember[] }`, `PATCH` 는 같은 필드 전부 선택. 팀장 규칙(정확히 1명)은 템플릿에도 적용(400).
+
+### 6.3 방 WebSocket
+
+`GET /api/v1/teams/:teamId/rooms/:roomId/ws?since=<seq>` → 101. 방이 없으면 close code **4004**. 세션 WS 와 같은 규칙: 접속 직후 `room.snapshot`(seq 0) → `since` 이후 이벤트 재생 → 라이브. `ping`/`pong`.
+
+모든 서버 이벤트의 공통 필드: `{ "type": "...", "seq": 7, "roomId": "room_…", "teamId": "team_…", "ts": "..." }`. `seq` 는 **방 내** 단조 증가(세션 seq 와 별개, ADR-017). `room.message`, `room.message.updated`, `room.status`, `room.error` 가 seq 를 소비한다. `room.snapshot` 과 `pong` 은 `seq: 0`.
+
+서버 → 클라이언트:
+
+| type | 추가 필드 | 설명 |
+|---|---|---|
+| `room.snapshot` | `room`, `messages[]`, `pendingApprovals[]`, `dispatch`, `members[]`, `replayFrom`, `truncated` | 접속 직후 1회. `messages` 는 `since` 뒤의 메시지(갱신 반영된 현재 상태). `pendingApprovals` 는 이 방에 미러링된 승인 중 `resolution: null` 인 것(`RoomMessage.approval` 과 같은 객체). `members[]` 는 `{ memberId, state, sessionId }`. 버퍼를 넘었으면 `truncated: true` 와 최근 200개 |
+| `room.message` | `message` | 새 RoomMessage(사용자·에이전트·시스템·승인 카드·변경 카드) |
+| `room.message.updated` | `message` | 기존 메시지 갱신(승인 `resolution`, ChangeSet `status`). 이벤트는 새 seq, `message.seq` 는 원래 값. 클라이언트는 `message.id` 로 교체 |
+| `room.status` | `dispatch`, `members[]` | 디스패치·팀원 상태 변화(턴 시작/종료, 대기열 변화, 승인 대기) |
+| `room.error` | `message`, `recoverable` | 방 수준 오류(멘션 대상 없음, 세션 시작 실패, 홉 상한 등) |
+| `pong` | | ping 응답 |
+
+클라이언트 → 서버:
+
+| type | 필드 | 설명 |
+|---|---|---|
+| `room.send` | `text`, `attachments`? | `POST .../messages` 와 같은 본문·규칙. 결과는 `room.message` 로 온다 |
+| `room.interrupt` | `memberId`? | 그 팀원의 실행 중 턴 중단. 생략하면 팀 전체(`POST /teams/:id/stop`) |
+| `ping` | | |
+
+승인 응답은 방 WS 로 보내지 않는다. 카드의 `approval.sessionId`·`approval.approvalId` 로 **기존** `POST /sessions/:id/approvals/:approvalId` 를 호출한다(세션 WS `approval.respond` 도 가능). 처리되면 `room.message.updated` 로 `resolution` 이 채워진다.
+
+### 6.4 디스패치 규칙
+
+- **멘션 문법**: 본문의 `@<handle>` 또는 `@<이름>`(정규화 비교, 뒤에 공백·문장부호·끝). `@all` 은 작성자를 제외한 전원. 모르는 대상은 무시하고 `room.error`(recoverable) 로 알린다. 해석 결과가 `mentions` 다.
+- **그룹방 라우팅**: 멘션된 팀원 각각에게 디스패치 1건. 멘션이 없으면 팀장(`isLead`) 1건. 에이전트 답변의 멘션도 같은 규칙으로 디스패치한다(에이전트 간 호출). 자기 자신 멘션은 무시.
+- **DM 방**: 그 팀원에게만 디스패치하고, 본문의 다른 멘션은 **무시**한다(`mentions` 에도 넣지 않는다). DM 에서 에이전트 답변의 멘션도 디스패치하지 않는다.
+- **홉**: 사용자 메시지 `hop: 0`. 디스패치의 hop = 원인 메시지의 hop + 1 이고 답변 메시지가 그 hop 을 갖는다. `hop > settings.maxHops` 가 되는 멘션은 디스패치하지 않고 시스템 메시지(`"홉 상한(6)에 도달해 @민수 호출을 건너뛰었습니다"`)를 올린다. 새 사용자 메시지는 연쇄를 0 부터 다시 시작한다.
+- **동시 실행**: 팀 전체 `running` 은 `settings.maxConcurrent` 이하. 넘치면 `queued`(FIFO). 팀원은 세션이 하나라 **같은 팀원에게 온 디스패치는 그 팀원의 턴이 끝날 때까지 대기**한다(상한과 무관). 팀원 `state` 는 `idle → queued → running → (waiting_approval ⇄ running) → idle`, 실패 시 `error`.
+- **턴 입력**: 팀원 세션에 보내는 턴 텍스트는 (1) 방 맥락, (2) 이번 메시지 순이다. 맥락은 그 방의 최근 메시지를 `contextMaxMessages`(기본 40)개, 합쳐서 12,000자 이내로 잘라(오래된 것부터 버림) 한 줄씩 접두어를 붙인다: 사용자 `[#전체] 사용자: …` / `[DM] 사용자: …`, 에이전트 `[#전체] @민수(개발자): …`(`@handle(roleLabel)`), 시스템 `[#전체] 시스템: …`. 승인·변경 카드는 `text` 한 줄로 넣는다. 팀원이 이미 본 메시지(자기 세션에 전달된 것)는 다시 넣지 않는다.
+- **답변 게시**: 턴이 끝나면 그 턴의 마지막 `assistant_message`(`phase: final`, 없으면 마지막 `assistant_message`)의 텍스트를 `kind: "text"` 메시지로 디스패치가 시작된 방에 게시하고 `work` 를 채운다. 스트리밍은 없다. 턴이 `error` 로 끝나면 시스템 메시지로 알리고 팀원 `state: error`.
+- **승인 미러링**: 팀원 세션의 `approval.requested` 는 디스패치가 시작된 방에 `kind: "approval"` 메시지로 미러링하고 `approval.resolved` 때 `room.message.updated`. 응답은 6.3 대로 기존 세션 API.
+
+### 6.5 worktree·커밋·머지
+
+- 팀 생성·팀원 추가 시 `git worktree add -b mam/<team-slug>/<handle> ~/.mam/teams/<teamId>/worktrees/<memberId> <baseBranch>`. `<team-slug>` 는 팀 이름을 `[a-z0-9-]` 로 정규화한 값(영숫자가 없으면 `team-<id 끝 8자>`). 브랜치가 이미 있으면 재사용한다. worktree 는 저장소 밖·홈 안에 둔다(ADR-017).
+- 팀원 세션의 `cwd` 는 그 worktree 다. 세션의 `git/status`·`fs` API 도 worktree 경로로 쓴다.
+- **턴 종료 시 서버가 커밋**한다: worktree 에 변경(추적·비추적 포함, `.gitignore` 준수)이 있으면 `git add -A && git commit` 을 작성자 `<이름> (mam-team) <handle@mam.local>`, 메시지 첫 줄 `<이름>: <원인 메시지 앞 72자>` 로 만든다. 그 다음 `ChangeSet`(`status: ready`) 을 만들고 그룹방에 `kind: "changes"` 카드를 올린다. 같은 팀원의 이전 `ready` ChangeSet 은 `stale` 로 바꾸고 `room.message.updated`. 변경이 없으면 카드를 올리지 않는다.
+- **머지**는 `POST /teams/:id/changes/:changeId/merge`. 서버가 `cwd`(원본 저장소)에서 `git merge --no-ff <branch>` 를 실행한다. `cwd` 의 현재 브랜치가 `baseBranch` 가 아니거나 작업 트리가 더러우면 409. 충돌이면 `git merge --abort` 후 `status: conflict`, `conflictFiles`. 성공하면 `merged`, `mergeCommit`. **브랜치는 유지**하고 팀원은 같은 브랜치에서 계속 일한다(다음 턴 전에 서버가 `baseBranch` 를 팀원 브랜치에 머지해 최신화한다. 충돌 시 시스템 메시지로 알리고 사용자가 정리한다).
+- 팀·팀원 삭제 시 `git worktree remove` 와 브랜치 삭제. `keepWorktree(s)=true` 면 둘 다 남긴다. 커밋되지 않은 변경이 있으면 409.

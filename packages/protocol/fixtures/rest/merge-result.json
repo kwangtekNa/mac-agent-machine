@@ -1,0 +1,33 @@
+{
+  "change": {
+    "id": "chg_01J8ZQ4K5N7P9R3S6T8V0W2XG1",
+    "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+    "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+    "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS2",
+    "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC3",
+    "branch": "mam/backend/jiyeon",
+    "baseBranch": "main",
+    "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "files": [
+      {
+        "path": "src/login.ts",
+        "kind": "modify",
+        "additions": 3,
+        "deletions": 1
+      },
+      {
+        "path": "src/login.test.ts",
+        "kind": "modify",
+        "additions": 12,
+        "deletions": 0
+      }
+    ],
+    "commits": 1,
+    "status": "merged",
+    "conflictFiles": [],
+    "messageId": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM6",
+    "createdAt": "2026-09-12T09:10:45Z",
+    "updatedAt": "2026-09-12T09:35:00Z"
+  },
+  "mergeCommit": "0123456789abcdef0123456789abcdef01234567"
+}

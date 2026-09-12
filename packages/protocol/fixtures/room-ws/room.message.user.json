@@ -1,0 +1,26 @@
+{
+  "type": "room.message",
+  "seq": 2,
+  "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+  "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+  "ts": "2026-09-12T09:10:00Z",
+  "message": {
+    "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM2",
+    "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+    "seq": 2,
+    "author": {
+      "kind": "user"
+    },
+    "kind": "text",
+    "text": "@민수 로그인 버그를 고치고 테스트를 돌려줘",
+    "mentions": [
+      "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1"
+    ],
+    "hop": 0,
+    "dispatchId": null,
+    "createdAt": "2026-09-12T09:10:00Z",
+    "work": null,
+    "approval": null,
+    "changes": null
+  }
+}

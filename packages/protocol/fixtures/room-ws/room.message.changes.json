@@ -1,0 +1,54 @@
+{
+  "type": "room.message",
+  "seq": 7,
+  "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+  "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+  "ts": "2026-09-12T09:10:45Z",
+  "message": {
+    "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM6",
+    "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+    "seq": 7,
+    "author": {
+      "kind": "agent",
+      "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+    },
+    "kind": "changes",
+    "text": "변경 준비됨 · 파일 2개 · 커밋 1개",
+    "mentions": [],
+    "hop": 2,
+    "dispatchId": "dsp_01J8ZQ4K5N7P9R3S6T8V0W2XH2",
+    "createdAt": "2026-09-12T09:10:45Z",
+    "work": null,
+    "approval": null,
+    "changes": {
+      "id": "chg_01J8ZQ4K5N7P9R3S6T8V0W2XG1",
+      "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+      "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+      "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS2",
+      "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC3",
+      "branch": "mam/backend/jiyeon",
+      "baseBranch": "main",
+      "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "files": [
+        {
+          "path": "src/login.ts",
+          "kind": "modify",
+          "additions": 3,
+          "deletions": 1
+        },
+        {
+          "path": "src/login.test.ts",
+          "kind": "modify",
+          "additions": 12,
+          "deletions": 0
+        }
+      ],
+      "commits": 1,
+      "status": "ready",
+      "conflictFiles": [],
+      "messageId": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM6",
+      "createdAt": "2026-09-12T09:10:45Z",
+      "updatedAt": "2026-09-12T09:10:45Z"
+    }
+  }
+}

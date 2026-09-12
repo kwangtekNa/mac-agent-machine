@@ -36,6 +36,15 @@ export const ApprovalIdSchema = idSchema("apr_");
 export const TurnIdSchema = idSchema("trn_");
 export const FlowIdSchema = idSchema("flw_");
 
+// 팀·방(2026-09-12 추가). `session.ts` 가 `Session.team` 에 쓰므로 순환 import 를 피해 여기 둔다.
+export const TeamIdSchema = idSchema("team_");
+export const MemberIdSchema = idSchema("agt_");
+export const RoomIdSchema = idSchema("room_");
+export const MessageIdSchema = idSchema("msg_");
+export const ChangeIdSchema = idSchema("chg_");
+export const TemplateIdSchema = idSchema("tpl_");
+export const DispatchIdSchema = idSchema("dsp_");
+
 /** 세션 내 단조 증가 이벤트 번호. 0 이상의 정수. */
 export const SeqSchema = z.int().min(0);
 

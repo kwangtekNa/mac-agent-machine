@@ -1,0 +1,9 @@
+{
+  "type": "room.error",
+  "seq": 10,
+  "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+  "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+  "ts": "2026-09-12T09:32:00Z",
+  "message": "멘션한 팀원을 찾을 수 없습니다: @철수",
+  "recoverable": true
+}

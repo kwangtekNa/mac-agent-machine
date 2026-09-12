@@ -1,0 +1,24 @@
+{
+  "message": {
+    "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM7",
+    "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+    "seq": 8,
+    "author": {
+      "kind": "user"
+    },
+    "kind": "text",
+    "text": "@지연 README 에 변경 내용도 적어줘",
+    "mentions": [
+      "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+    ],
+    "hop": 0,
+    "dispatchId": null,
+    "createdAt": "2026-09-12T09:31:30Z",
+    "work": null,
+    "approval": null,
+    "changes": null
+  },
+  "dispatches": [
+    "dsp_01J8ZQ4K5N7P9R3S6T8V0W2XH4"
+  ]
+}

@@ -2,10 +2,12 @@ import { z } from "zod";
 import {
   AgentKindSchema,
   IsoDateSchema,
+  MemberIdSchema,
   SeqSchema,
   SessionIdSchema,
   SessionModeSchema,
   SessionStatusSchema,
+  TeamIdSchema,
 } from "./common.js";
 
 /** 턴별 토큰 사용량(`turn.completed`, `turn_summary`). 캐시 필드는 키를 생략할 수 있다. */
@@ -49,6 +51,12 @@ export const TurnInputSchema = z.object({
   attachments: z.array(AttachmentSchema).optional(),
 });
 
+/** 팀원 세션의 소속(2026-09-12 추가). `PROTOCOL.md` 6절. */
+export const SessionTeamRefSchema = z.object({
+  teamId: TeamIdSchema,
+  memberId: MemberIdSchema,
+});
+
 export const SessionSchema = z.object({
   id: SessionIdSchema,
   agent: AgentKindSchema,
@@ -70,6 +78,8 @@ export const SessionSchema = z.object({
   preview: z.string().nullable(),
   /** 누적 사용량(2026-09-10 추가). 첫 턴 전에는 `null`. 키 생략 허용 사유는 `effort` 와 같다. */
   usage: SessionUsageSchema.nullable().optional(),
+  /** 팀원 세션이면 소속 팀과 팀원(2026-09-12 추가). 일반 세션은 키 자체를 생략한다. */
+  team: SessionTeamRefSchema.optional(),
 });
 
 export const CreateSessionRequestSchema = z.object({

@@ -69,9 +69,71 @@ const SCHEMA_EXPORTS = [
   "ServerEventSchema",
   "ClientMessageSchema",
   "SessionUsageEventSchema",
+  // teams (2026-09-12 추가)
+  "TeamIdSchema",
+  "MemberIdSchema",
+  "RoomIdSchema",
+  "MessageIdSchema",
+  "ChangeIdSchema",
+  "TemplateIdSchema",
+  "DispatchIdSchema",
+  "SessionTeamRefSchema",
+  "RoleIdSchema",
+  "RolePresetSchema",
+  "TeamMemberStateSchema",
+  "TeamMemberSchema",
+  "TeamSettingsSchema",
+  "RoomKindSchema",
+  "RoomSchema",
+  "TeamSchema",
+  "RoomAuthorSchema",
+  "WorkSummarySchema",
+  "ChangeSetStatusSchema",
+  "ChangeSetSchema",
+  "RoomMessageKindSchema",
+  "RoomApprovalSchema",
+  "RoomMessageSchema",
+  "MergeResultSchema",
+  "DispatchStateSchema",
+  "TeamTemplateMemberSchema",
+  "TeamTemplateSchema",
+  "MemberInputSchema",
+  "CreateTeamRequestSchema",
+  "PatchTeamRequestSchema",
+  "PatchMemberRequestSchema",
+  "PostRoomMessageRequestSchema",
+  "CreateTeamTemplateRequestSchema",
+  "PatchTeamTemplateRequestSchema",
+  "TeamRolesResponseSchema",
+  "TeamsResponseSchema",
+  "TeamDetailResponseSchema",
+  "RoomDetailResponseSchema",
+  "PostRoomMessageResponseSchema",
+  "ChangesResponseSchema",
+  "TeamTemplatesResponseSchema",
+  // room ws
+  "RoomServerEventSchema",
+  "RoomClientMessageSchema",
+  "RoomSnapshotEventSchema",
+  "RoomMessageEventSchema",
+  "RoomMessageUpdatedEventSchema",
+  "RoomStatusEventSchema",
+  "RoomErrorEventSchema",
+  "RoomPongEventSchema",
+  "RoomSendMessageSchema",
+  "RoomInterruptMessageSchema",
+  "RoomPingMessageSchema",
 ] as const;
 
-const FUNCTION_EXPORTS = ["idSchema", "parseServerEvent", "parseClientMessage", "safeParseClientMessage"] as const;
+const FUNCTION_EXPORTS = [
+  "idSchema",
+  "parseServerEvent",
+  "parseClientMessage",
+  "safeParseClientMessage",
+  "parseRoomServerEvent",
+  "parseRoomClientMessage",
+  "safeParseRoomClientMessage",
+] as const;
 
 describe("index exports", () => {
   it("PROTOCOL_VERSION 은 1 이다", () => {
@@ -100,5 +162,22 @@ describe("index exports", () => {
     expect(pong.type).toBe("pong");
     const safe = protocol.safeParseClientMessage({ type: "nope" });
     expect(safe.success).toBe(false);
+  });
+
+  it("방 parse 헬퍼는 세션 파서와 분리돼 있다 (2026-09-12 추가)", () => {
+    const base = {
+      seq: 0,
+      roomId: "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+      teamId: "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+      ts: "2026-09-12T09:00:00Z",
+    };
+    const pong = protocol.parseRoomServerEvent({ type: "pong", ...base });
+    expect(pong.type).toBe("pong");
+    expect(() => protocol.parseServerEvent({ type: "pong", ...base })).toThrow();
+    expect(() => protocol.parseRoomServerEvent({ type: "room.message", ...base, seq: 1 })).toThrow();
+    const ping = protocol.parseRoomClientMessage({ type: "ping" });
+    expect(ping.type).toBe("ping");
+    expect(protocol.safeParseRoomClientMessage({ type: "turn.start", text: "x" }).success).toBe(false);
+    expect(protocol.safeParseClientMessage({ type: "room.send", text: "x" }).success).toBe(false);
   });
 });

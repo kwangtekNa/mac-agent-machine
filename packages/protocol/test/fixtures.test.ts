@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ZodType } from "zod";
 import {
+  ChangesResponseSchema,
   ClientMessageSchema,
   ErrorResponseSchema,
   FsListResponseSchema,
@@ -14,12 +15,23 @@ import {
   LoginStartResponseSchema,
   LoginStatusResponseSchema,
   MeResponseSchema,
+  MergeResultSchema,
   ModelsResponseSchema,
+  PostRoomMessageResponseSchema,
   ProjectsResponseSchema,
+  RoomClientMessageSchema,
+  RoomDetailResponseSchema,
+  RoomServerEventSchema,
   ServerEventSchema,
   SessionDetailResponseSchema,
   SessionSchema,
   SessionsResponseSchema,
+  TeamDetailResponseSchema,
+  TeamRolesResponseSchema,
+  TeamSchema,
+  TeamTemplateSchema,
+  TeamTemplatesResponseSchema,
+  TeamsResponseSchema,
   UsageResponseSchema,
 } from "../src/index.js";
 
@@ -45,6 +57,17 @@ const REST: Record<string, ZodType> = {
   "usage-empty": UsageResponseSchema,
   "models-claude": ModelsResponseSchema,
   "models-codex": ModelsResponseSchema,
+  // 2026-09-12 추가분(팀·방)
+  "team-roles": TeamRolesResponseSchema,
+  teams: TeamsResponseSchema,
+  team: TeamSchema,
+  "team-detail": TeamDetailResponseSchema,
+  room: RoomDetailResponseSchema,
+  "room-message-post": PostRoomMessageResponseSchema,
+  changes: ChangesResponseSchema,
+  "merge-result": MergeResultSchema,
+  "team-templates": TeamTemplatesResponseSchema,
+  "team-template": TeamTemplateSchema,
 };
 
 /** `ws/<type>[.<variant>].json` → 기대하는 `type` 과 (있으면) 아이템 kind / 승인 kind. */
@@ -83,6 +106,54 @@ const CLIENT: Record<string, { type: string }> = {
   ping: { type: "ping" },
 };
 
+/** `room-ws/<type>[.<variant>].json` → 기대하는 `type` 과 (있으면) 메시지 kind / 작성자 kind. */
+const ROOM_WS: Record<string, { type: string; messageKind?: string; authorKind?: string }> = {
+  "room.snapshot": { type: "room.snapshot" },
+  "room.message.user": { type: "room.message", messageKind: "text", authorKind: "user" },
+  "room.message.agent": { type: "room.message", messageKind: "text", authorKind: "agent" },
+  "room.message.approval": { type: "room.message", messageKind: "approval", authorKind: "agent" },
+  "room.message.changes": { type: "room.message", messageKind: "changes", authorKind: "agent" },
+  "room.message.system": { type: "room.message", messageKind: "system", authorKind: "system" },
+  "room.message.updated": { type: "room.message.updated", messageKind: "approval" },
+  "room.status": { type: "room.status" },
+  "room.error": { type: "room.error" },
+  pong: { type: "pong" },
+};
+
+/** `room-client/<type>.json` → 기대하는 `type`. */
+const ROOM_CLIENT: Record<string, { type: string }> = {
+  "room.send": { type: "room.send" },
+  "room.interrupt": { type: "room.interrupt" },
+  ping: { type: "ping" },
+};
+
+/** 2026-09-12 추가분(팀·방) 23개. iOS `ProtocolFixturesTests.ADDED_2026_09_12` 와 같은 집합. */
+const ADDED_2026_09_12 = [
+  "rest/team-roles",
+  "rest/teams",
+  "rest/team",
+  "rest/team-detail",
+  "rest/room",
+  "rest/room-message-post",
+  "rest/changes",
+  "rest/merge-result",
+  "rest/team-templates",
+  "rest/team-template",
+  "room-ws/room.snapshot",
+  "room-ws/room.message.user",
+  "room-ws/room.message.agent",
+  "room-ws/room.message.approval",
+  "room-ws/room.message.changes",
+  "room-ws/room.message.system",
+  "room-ws/room.message.updated",
+  "room-ws/room.status",
+  "room-ws/room.error",
+  "room-ws/pong",
+  "room-client/room.send",
+  "room-client/room.interrupt",
+  "room-client/ping",
+];
+
 /** 2026-09-10 추가분(사용량·모델·mkdir). 라운드트립 테스트가 최소한 이 파일들을 반드시 포함해야 한다. */
 const ADDED_2026_09_10 = [
   "rest/usage",
@@ -117,6 +188,8 @@ function allFixtures(): Array<{ dir: string; name: string; schema: ZodType }> {
     ...Object.entries(REST).map(([name, schema]) => ({ dir: "rest", name, schema })),
     ...Object.keys(WS).map((name) => ({ dir: "ws", name, schema: ServerEventSchema as ZodType })),
     ...Object.keys(CLIENT).map((name) => ({ dir: "client", name, schema: ClientMessageSchema as ZodType })),
+    ...Object.keys(ROOM_WS).map((name) => ({ dir: "room-ws", name, schema: RoomServerEventSchema as ZodType })),
+    ...Object.keys(ROOM_CLIENT).map((name) => ({ dir: "room-client", name, schema: RoomClientMessageSchema as ZodType })),
   ];
 }
 
@@ -158,6 +231,35 @@ describe("fixtures ↔ 매핑 테이블 (누락 방지)", () => {
   it("2026-09-10 추가분이 전부 매핑표에 있다", () => {
     const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
     for (const added of ADDED_2026_09_10) expect(keys.has(added), added).toBe(true);
+  });
+  it("room-ws/ 의 모든 파일이 테이블에 있고, 테이블의 모든 항목이 파일로 있다", () => {
+    expect(listFixtures("room-ws")).toEqual(Object.keys(ROOM_WS).sort());
+  });
+  it("room-client/ 의 모든 파일이 테이블에 있고, 테이블의 모든 항목이 파일로 있다", () => {
+    expect(listFixtures("room-client")).toEqual(Object.keys(ROOM_CLIENT).sort());
+  });
+  it("모든 방 서버 이벤트 타입, 메시지 kind, 작성자 kind, 방 클라이언트 타입에 fixture 가 있다", () => {
+    const eventTypes = new Set(Object.values(ROOM_WS).map((w) => w.type));
+    expect([...eventTypes].sort()).toEqual(
+      RoomServerEventSchema.options.map((o) => o.shape.type.value).sort(),
+    );
+    const messageKinds = new Set(Object.values(ROOM_WS).flatMap((w) => (w.messageKind ? [w.messageKind] : [])));
+    expect([...messageKinds].sort()).toEqual(["approval", "changes", "system", "text"]);
+    const authorKinds = new Set(Object.values(ROOM_WS).flatMap((w) => (w.authorKind ? [w.authorKind] : [])));
+    expect([...authorKinds].sort()).toEqual(["agent", "system", "user"]);
+    const clientTypes = new Set(Object.values(ROOM_CLIENT).map((c) => c.type));
+    expect([...clientTypes].sort()).toEqual(
+      RoomClientMessageSchema.options.map((o) => o.shape.type.value).sort(),
+    );
+  });
+  it("2026-09-12 추가분 23개가 전부 매핑표에 있다", () => {
+    expect(ADDED_2026_09_12).toHaveLength(23);
+    const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
+    for (const added of ADDED_2026_09_12) expect(keys.has(added), added).toBe(true);
+  });
+  it("ws/ 와 client/ 에는 방 이벤트가 없다 (iOS 가 엄격한 enum 으로 디코드한다)", () => {
+    for (const name of listFixtures("ws")) expect(name.startsWith("room."), name).toBe(false);
+    for (const name of listFixtures("client")) expect(name.startsWith("room."), name).toBe(false);
   });
 });
 
@@ -300,6 +402,168 @@ describe("ws fixtures", () => {
     expect(event.session.effort).toEqual(expect.any(String));
     expect(event.session.usage?.context?.window).toBeGreaterThan(0);
   });
+});
+
+describe("team fixtures (2026-09-12 추가)", () => {
+  const TEAM_ID = "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1";
+
+  it("team-roles 는 프리셋 5종을 RoleId 순서대로 담는다", () => {
+    const { roles } = TeamRolesResponseSchema.parse(loadFixture("rest", "team-roles"));
+    expect(roles.map((r) => r.id)).toEqual(["developer", "planner", "team-lead", "code-reviewer", "custom"]);
+    expect(roles.find((r) => r.id === "custom")?.prompt).toBe("");
+  });
+
+  it("team 은 팀장 1명과 그룹방 1개, 팀원별 DM 방을 담고 브랜치·worktree 규칙을 따른다", () => {
+    const team = TeamSchema.parse(loadFixture("rest", "team"));
+    expect(team.id).toBe(TEAM_ID);
+    expect(team.members.filter((m) => m.isLead)).toHaveLength(1);
+    expect(team.members.map((m) => m.agent).sort()).toEqual(["claude", "codex"]);
+    expect(team.rooms.filter((r) => r.kind === "group")).toHaveLength(1);
+    expect(team.rooms.filter((r) => r.kind === "dm").map((r) => r.memberId).sort()).toEqual(
+      team.members.map((m) => m.id).sort(),
+    );
+    expect(team.rooms.find((r) => r.kind === "group")?.memberId).toBeNull();
+    for (const m of team.members) {
+      expect(m.branch).toBe(`mam/${team.name}/${m.handle}`);
+      expect(m.worktreePath).toBe(`/Users/alice/.mam/teams/${team.id}/worktrees/${m.id}`);
+    }
+    expect(team.settings).toEqual({ maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40 });
+  });
+
+  it("teams·team-detail 의 팀은 team.json 과 같고, team-detail 은 running 1·queued 1·changes 1 이다", () => {
+    const team = TeamSchema.parse(loadFixture("rest", "team"));
+    expect(TeamsResponseSchema.parse(loadFixture("rest", "teams")).teams).toEqual([team]);
+    const detail = TeamDetailResponseSchema.parse(loadFixture("rest", "team-detail"));
+    expect(detail.team).toEqual(team);
+    expect(detail.dispatch.running).toHaveLength(1);
+    expect(detail.dispatch.queued).toHaveLength(1);
+    expect(detail.changes).toHaveLength(1);
+    expect(detail.changes[0]?.status).toBe("ready");
+  });
+
+  it("room 은 text/approval/changes/system 네 kind 를 seq 순으로 담고 kind 별 부속 필드만 채운다", () => {
+    const { room, messages, truncated } = RoomDetailResponseSchema.parse(loadFixture("rest", "room"));
+    expect(truncated).toBe(false);
+    expect(room.kind).toBe("group");
+    expect(new Set(messages.map((m) => m.kind))).toEqual(new Set(["text", "approval", "changes", "system"]));
+    const seqs = messages.map((m) => m.seq);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    expect(room.lastSeq).toBeGreaterThanOrEqual(seqs.at(-1) ?? 0);
+    for (const m of messages) {
+      expect(m.roomId).toBe(room.id);
+      expect(m.approval !== null).toBe(m.kind === "approval");
+      expect(m.changes !== null).toBe(m.kind === "changes");
+      if (m.work !== null) expect(m.kind === "text" && m.author.kind === "agent").toBe(true);
+      if (m.author.kind !== "agent") expect(m.dispatchId).toBeNull();
+      if (m.author.kind === "user") expect(m.hop).toBe(0);
+    }
+    const changes = messages.find((m) => m.kind === "changes");
+    expect(changes?.changes?.messageId).toBe(changes?.id);
+  });
+
+  it("room-message-post 는 사용자 메시지와 디스패치 ID 를 돌려준다", () => {
+    const { message, dispatches } = PostRoomMessageResponseSchema.parse(loadFixture("rest", "room-message-post"));
+    expect(message.author.kind).toBe("user");
+    expect(message.mentions).toHaveLength(1);
+    expect(dispatches).toHaveLength(1);
+  });
+
+  it("changes 와 merge-result 는 같은 ChangeSet 이며 merged 에는 mergeCommit 이 있다", () => {
+    const { changes } = ChangesResponseSchema.parse(loadFixture("rest", "changes"));
+    const merged = MergeResultSchema.parse(loadFixture("rest", "merge-result"));
+    expect(changes[0]?.id).toBe(merged.change.id);
+    expect(changes[0]?.status).toBe("ready");
+    expect(merged.change.status).toBe("merged");
+    expect(merged.mergeCommit).toMatch(/^[0-9a-f]{40}$/);
+    expect(merged.change.commit).toMatch(/^[0-9a-f]{40}$/);
+    expect(merged.change.conflictFiles).toEqual([]);
+  });
+
+  it("team-template 은 런타임 필드 없이 팀원 정의만 담는다", () => {
+    const template = TeamTemplateSchema.parse(loadFixture("rest", "team-template"));
+    expect(TeamTemplatesResponseSchema.parse(loadFixture("rest", "team-templates")).templates).toEqual([template]);
+    expect(template.members.filter((m) => m.isLead)).toHaveLength(1);
+    for (const raw of (loadFixture("rest", "team-template") as { members: Record<string, unknown>[] }).members) {
+      for (const key of ["id", "sessionId", "branch", "worktreePath", "state", "createdAt"]) {
+        expect(key in raw, key).toBe(false);
+      }
+    }
+  });
+});
+
+describe("room-ws fixtures", () => {
+  for (const [name, expected] of Object.entries(ROOM_WS)) {
+    it(`room-ws/${name}.json 이 RoomServerEventSchema 를 통과하고 type 이 ${expected.type} 이다`, () => {
+      const event = expectLossless(RoomServerEventSchema, loadFixture("room-ws", name)) as {
+        type: string;
+        seq: number;
+        roomId: string;
+        teamId: string;
+        // `room.message*` 는 RoomMessage 객체, `room.error` 는 문자열이다.
+        message?: { kind: string; author: { kind: string }; roomId: string } | string;
+      };
+      expect(event.type).toBe(expected.type);
+      expect(event.teamId).toBe("team_01J8ZQ4K5N7P9R3S6T8V0W2XT1");
+      const message = typeof event.message === "object" ? event.message : undefined;
+      if (expected.messageKind) expect(message?.kind).toBe(expected.messageKind);
+      if (expected.authorKind) expect(message?.author.kind).toBe(expected.authorKind);
+      if (message) expect(message.roomId).toBe(event.roomId);
+      if (expected.type === "room.error") expect(typeof event.message).toBe("string");
+      if (expected.type === "room.snapshot" || expected.type === "pong") {
+        expect(event.seq).toBe(0);
+      } else {
+        expect(event.seq).toBeGreaterThan(0);
+      }
+    });
+  }
+
+  it("room.snapshot 은 미해결 승인과 waiting_approval 팀원, running 디스패치를 담는다", () => {
+    const event = RoomServerEventSchema.parse(loadFixture("room-ws", "room.snapshot"));
+    if (event.type !== "room.snapshot") throw new Error("type mismatch");
+    expect(event.messages.length).toBeGreaterThan(0);
+    expect(event.pendingApprovals).toHaveLength(1);
+    expect(event.pendingApprovals[0]?.resolution).toBeNull();
+    expect(event.members.map((m) => m.state).sort()).toEqual(["idle", "waiting_approval"]);
+    expect(event.dispatch.running).toHaveLength(1);
+    expect(event.replayFrom).toBe(0);
+    expect(event.truncated).toBe(false);
+    expect(event.room.lastSeq).toBe(event.messages.at(-1)?.seq);
+  });
+
+  it("room.message.agent 는 hop 1 과 work 를, room.message.user 는 멘션 1개와 hop 0 을 담는다", () => {
+    const agent = RoomServerEventSchema.parse(loadFixture("room-ws", "room.message.agent"));
+    if (agent.type !== "room.message") throw new Error("type mismatch");
+    expect(agent.message.hop).toBe(1);
+    expect(agent.message.work).not.toBeNull();
+    expect(agent.message.dispatchId).toMatch(/^dsp_/);
+    const user = RoomServerEventSchema.parse(loadFixture("room-ws", "room.message.user"));
+    if (user.type !== "room.message") throw new Error("type mismatch");
+    expect(user.message.mentions).toHaveLength(1);
+    expect(user.message.hop).toBe(0);
+    expect(user.message.work).toBeNull();
+  });
+
+  it("room.message.updated 는 approval 메시지에 resolution 이 채워진 것이고 message.seq 는 원래 값이다", () => {
+    const posted = RoomServerEventSchema.parse(loadFixture("room-ws", "room.message.approval"));
+    const updated = RoomServerEventSchema.parse(loadFixture("room-ws", "room.message.updated"));
+    if (posted.type !== "room.message" || updated.type !== "room.message.updated") throw new Error("type mismatch");
+    expect(posted.message.approval?.resolution).toBeNull();
+    expect(updated.message.approval?.resolution?.optionId).toBe("allow_session");
+    expect(updated.message.id).toBe(posted.message.id);
+    expect(updated.message.seq).toBe(posted.message.seq);
+    expect(updated.seq).toBeGreaterThan(posted.seq);
+  });
+});
+
+describe("room-client fixtures", () => {
+  for (const [name, expected] of Object.entries(ROOM_CLIENT)) {
+    it(`room-client/${name}.json 이 RoomClientMessageSchema 를 통과하고 type 이 ${expected.type} 이다`, () => {
+      const message = expectLossless(RoomClientMessageSchema, loadFixture("room-client", name)) as {
+        type: string;
+      };
+      expect(message.type).toBe(expected.type);
+    });
+  }
 });
 
 describe("client fixtures", () => {

@@ -1,0 +1,234 @@
+{
+  "room": {
+    "id": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+    "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+    "kind": "group",
+    "memberId": null,
+    "name": "전체",
+    "lastSeq": 9,
+    "lastMessageAt": "2026-09-12T09:31:30Z"
+  },
+  "messages": [
+    {
+      "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM1",
+      "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+      "seq": 1,
+      "author": {
+        "kind": "system"
+      },
+      "kind": "system",
+      "text": "지연(개발자, Codex)이 팀에 합류했습니다. 브랜치 mam/backend/jiyeon",
+      "mentions": [],
+      "hop": 0,
+      "dispatchId": null,
+      "createdAt": "2026-09-12T09:00:05Z",
+      "work": null,
+      "approval": null,
+      "changes": null
+    },
+    {
+      "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM2",
+      "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+      "seq": 2,
+      "author": {
+        "kind": "user"
+      },
+      "kind": "text",
+      "text": "@민수 로그인 버그를 고치고 테스트를 돌려줘",
+      "mentions": [
+        "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1"
+      ],
+      "hop": 0,
+      "dispatchId": null,
+      "createdAt": "2026-09-12T09:10:00Z",
+      "work": null,
+      "approval": null,
+      "changes": null
+    },
+    {
+      "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM3",
+      "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+      "seq": 3,
+      "author": {
+        "kind": "agent",
+        "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1"
+      },
+      "kind": "text",
+      "text": "@지연 `src/login.ts` 의 토큰 만료 검사를 추가하고 테스트를 돌려줘. 끝나면 결과를 알려줘.",
+      "mentions": [
+        "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+      ],
+      "hop": 1,
+      "dispatchId": "dsp_01J8ZQ4K5N7P9R3S6T8V0W2XH1",
+      "createdAt": "2026-09-12T09:10:08Z",
+      "work": {
+        "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS1",
+        "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC2",
+        "toolCalls": 2,
+        "filesChanged": [],
+        "durationMs": 8200,
+        "usage": {
+          "inputTokens": 5200,
+          "outputTokens": 310,
+          "cacheReadTokens": 12000
+        },
+        "costUsd": 0.04
+      },
+      "approval": null,
+      "changes": null
+    },
+    {
+      "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM4",
+      "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+      "seq": 4,
+      "author": {
+        "kind": "agent",
+        "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+      },
+      "kind": "approval",
+      "text": "npm test 실행",
+      "mentions": [],
+      "hop": 2,
+      "dispatchId": "dsp_01J8ZQ4K5N7P9R3S6T8V0W2XH2",
+      "createdAt": "2026-09-12T09:10:12Z",
+      "work": null,
+      "approval": {
+        "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+        "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS2",
+        "approval": {
+          "approvalId": "apr_01J8ZQ4K5N7P9R3S6T8V0W2XE5",
+          "itemId": "itm_01J8ZQ4K5N7P9R3S6T8V0W2XDE",
+          "kind": "command",
+          "title": "npm test 실행",
+          "prompt": "Codex wants to run: npm test",
+          "detail": "cwd: /Users/alice/.mam/teams/team_01J8ZQ4K5N7P9R3S6T8V0W2XT1/worktrees/agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2\n$ npm test",
+          "diff": null,
+          "options": [
+            {
+              "id": "allow",
+              "label": "허용",
+              "style": "primary"
+            },
+            {
+              "id": "allow_session",
+              "label": "이 세션에서 항상 허용",
+              "style": "secondary"
+            },
+            {
+              "id": "deny",
+              "label": "거절",
+              "style": "destructive"
+            }
+          ],
+          "inputFields": [],
+          "requestedAt": "2026-09-12T09:10:12Z"
+        },
+        "resolution": {
+          "optionId": "allow_session",
+          "by": "client",
+          "at": "2026-09-12T09:10:20Z"
+        }
+      },
+      "changes": null
+    },
+    {
+      "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM5",
+      "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+      "seq": 6,
+      "author": {
+        "kind": "agent",
+        "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+      },
+      "kind": "text",
+      "text": "만료 검사를 추가하고 테스트 3개를 통과시켰습니다. 변경은 `mam/backend/jiyeon` 에 커밋했습니다.",
+      "mentions": [],
+      "hop": 2,
+      "dispatchId": "dsp_01J8ZQ4K5N7P9R3S6T8V0W2XH2",
+      "createdAt": "2026-09-12T09:10:42Z",
+      "work": {
+        "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS2",
+        "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC3",
+        "toolCalls": 5,
+        "filesChanged": [
+          "src/login.ts",
+          "src/login.test.ts"
+        ],
+        "durationMs": 30412,
+        "usage": {
+          "inputTokens": 18420,
+          "outputTokens": 1275,
+          "cacheReadTokens": 16000
+        }
+      },
+      "approval": null,
+      "changes": null
+    },
+    {
+      "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM6",
+      "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+      "seq": 7,
+      "author": {
+        "kind": "agent",
+        "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+      },
+      "kind": "changes",
+      "text": "변경 준비됨 · 파일 2개 · 커밋 1개",
+      "mentions": [],
+      "hop": 2,
+      "dispatchId": "dsp_01J8ZQ4K5N7P9R3S6T8V0W2XH2",
+      "createdAt": "2026-09-12T09:10:45Z",
+      "work": null,
+      "approval": null,
+      "changes": {
+        "id": "chg_01J8ZQ4K5N7P9R3S6T8V0W2XG1",
+        "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+        "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+        "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS2",
+        "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC3",
+        "branch": "mam/backend/jiyeon",
+        "baseBranch": "main",
+        "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+        "files": [
+          {
+            "path": "src/login.ts",
+            "kind": "modify",
+            "additions": 3,
+            "deletions": 1
+          },
+          {
+            "path": "src/login.test.ts",
+            "kind": "modify",
+            "additions": 12,
+            "deletions": 0
+          }
+        ],
+        "commits": 1,
+        "status": "ready",
+        "conflictFiles": [],
+        "messageId": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM6",
+        "createdAt": "2026-09-12T09:10:45Z",
+        "updatedAt": "2026-09-12T09:10:45Z"
+      }
+    },
+    {
+      "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM7",
+      "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+      "seq": 8,
+      "author": {
+        "kind": "user"
+      },
+      "kind": "text",
+      "text": "@지연 README 에 변경 내용도 적어줘",
+      "mentions": [
+        "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+      ],
+      "hop": 0,
+      "dispatchId": null,
+      "createdAt": "2026-09-12T09:31:30Z",
+      "work": null,
+      "approval": null,
+      "changes": null
+    }
+  ],
+  "truncated": false
+}

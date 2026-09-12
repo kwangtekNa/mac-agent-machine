@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { ClientMessageSchema, ServerEventSchema } from "./ws.js";
+import { RoomClientMessageSchema, RoomServerEventSchema } from "./room-ws.js";
 import type {
   AgentKindSchema,
   ErrorCodeSchema,
@@ -24,6 +25,7 @@ import type {
   PatchSessionRequestSchema,
   SessionContextSchema,
   SessionSchema,
+  SessionTeamRefSchema,
   SessionUsageSchema,
   TurnInputSchema,
   UsageSchema,
@@ -98,6 +100,55 @@ import type {
   TurnInterruptMessageSchema,
   TurnStartMessageSchema,
 } from "./ws.js";
+import type {
+  ChangeSetSchema,
+  ChangeSetStatusSchema,
+  ChangesResponseSchema,
+  CreateTeamRequestSchema,
+  CreateTeamTemplateRequestSchema,
+  DispatchStateSchema,
+  MemberInputSchema,
+  MergeResultSchema,
+  PatchMemberRequestSchema,
+  PatchTeamRequestSchema,
+  PatchTeamTemplateRequestSchema,
+  PostRoomMessageRequestSchema,
+  PostRoomMessageResponseSchema,
+  QueuedDispatchSchema,
+  RoleIdSchema,
+  RolePresetSchema,
+  RoomApprovalSchema,
+  RoomAuthorSchema,
+  RoomDetailResponseSchema,
+  RoomKindSchema,
+  RoomMessageKindSchema,
+  RoomMessageSchema,
+  RoomSchema,
+  RunningDispatchSchema,
+  TeamDetailResponseSchema,
+  TeamMemberSchema,
+  TeamMemberStateSchema,
+  TeamRolesResponseSchema,
+  TeamSchema,
+  TeamSettingsSchema,
+  TeamTemplateMemberSchema,
+  TeamTemplateSchema,
+  TeamTemplatesResponseSchema,
+  TeamsResponseSchema,
+  WorkSummarySchema,
+} from "./teams.js";
+import type {
+  RoomErrorEventSchema,
+  RoomInterruptMessageSchema,
+  RoomMemberStatusSchema,
+  RoomMessageEventSchema,
+  RoomMessageUpdatedEventSchema,
+  RoomPingMessageSchema,
+  RoomPongEventSchema,
+  RoomSendMessageSchema,
+  RoomSnapshotEventSchema,
+  RoomStatusEventSchema,
+} from "./room-ws.js";
 
 export * from "./common.js";
 export * from "./session.js";
@@ -105,6 +156,8 @@ export * from "./approval.js";
 export * from "./timeline.js";
 export * from "./rest.js";
 export * from "./ws.js";
+export * from "./teams.js";
+export * from "./room-ws.js";
 
 // common
 export type AgentKind = z.infer<typeof AgentKindSchema>;
@@ -121,6 +174,7 @@ export type SessionUsage = z.infer<typeof SessionUsageSchema>;
 export type Attachment = z.infer<typeof AttachmentSchema>;
 export type TurnInput = z.infer<typeof TurnInputSchema>;
 export type Session = z.infer<typeof SessionSchema>;
+export type SessionTeamRef = z.infer<typeof SessionTeamRefSchema>;
 export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;
 export type PatchSessionRequest = z.infer<typeof PatchSessionRequestSchema>;
 
@@ -223,4 +277,74 @@ export function parseClientMessage(input: unknown): ClientMessage {
 /** 클라이언트 메시지를 검증한다. 던지지 않고 결과 객체를 돌려준다. */
 export function safeParseClientMessage(input: unknown): z.ZodSafeParseResult<ClientMessage> {
   return ClientMessageSchema.safeParse(input);
+}
+
+// teams (2026-09-12 추가)
+export type RoleId = z.infer<typeof RoleIdSchema>;
+export type RolePreset = z.infer<typeof RolePresetSchema>;
+export type TeamMemberState = z.infer<typeof TeamMemberStateSchema>;
+export type TeamMember = z.infer<typeof TeamMemberSchema>;
+export type TeamSettings = z.infer<typeof TeamSettingsSchema>;
+export type RoomKind = z.infer<typeof RoomKindSchema>;
+export type Room = z.infer<typeof RoomSchema>;
+export type Team = z.infer<typeof TeamSchema>;
+export type RoomAuthor = z.infer<typeof RoomAuthorSchema>;
+export type WorkSummary = z.infer<typeof WorkSummarySchema>;
+export type ChangeSetStatus = z.infer<typeof ChangeSetStatusSchema>;
+export type ChangeSet = z.infer<typeof ChangeSetSchema>;
+export type RoomMessageKind = z.infer<typeof RoomMessageKindSchema>;
+export type RoomApproval = z.infer<typeof RoomApprovalSchema>;
+export type RoomMessage = z.infer<typeof RoomMessageSchema>;
+export type MergeResult = z.infer<typeof MergeResultSchema>;
+export type RunningDispatch = z.infer<typeof RunningDispatchSchema>;
+export type QueuedDispatch = z.infer<typeof QueuedDispatchSchema>;
+export type DispatchState = z.infer<typeof DispatchStateSchema>;
+export type TeamTemplateMember = z.infer<typeof TeamTemplateMemberSchema>;
+export type TeamTemplate = z.infer<typeof TeamTemplateSchema>;
+export type MemberInput = z.infer<typeof MemberInputSchema>;
+export type CreateTeamRequest = z.infer<typeof CreateTeamRequestSchema>;
+export type PatchTeamRequest = z.infer<typeof PatchTeamRequestSchema>;
+export type PatchMemberRequest = z.infer<typeof PatchMemberRequestSchema>;
+export type PostRoomMessageRequest = z.infer<typeof PostRoomMessageRequestSchema>;
+export type CreateTeamTemplateRequest = z.infer<typeof CreateTeamTemplateRequestSchema>;
+export type PatchTeamTemplateRequest = z.infer<typeof PatchTeamTemplateRequestSchema>;
+export type TeamRolesResponse = z.infer<typeof TeamRolesResponseSchema>;
+export type TeamsResponse = z.infer<typeof TeamsResponseSchema>;
+export type TeamDetailResponse = z.infer<typeof TeamDetailResponseSchema>;
+export type RoomDetailResponse = z.infer<typeof RoomDetailResponseSchema>;
+export type PostRoomMessageResponse = z.infer<typeof PostRoomMessageResponseSchema>;
+export type ChangesResponse = z.infer<typeof ChangesResponseSchema>;
+export type TeamTemplatesResponse = z.infer<typeof TeamTemplatesResponseSchema>;
+
+// room ws: server → client
+export type RoomServerEvent = z.infer<typeof RoomServerEventSchema>;
+export type RoomServerEventType = RoomServerEvent["type"];
+export type RoomMemberStatus = z.infer<typeof RoomMemberStatusSchema>;
+export type RoomSnapshotEvent = z.infer<typeof RoomSnapshotEventSchema>;
+export type RoomMessageEvent = z.infer<typeof RoomMessageEventSchema>;
+export type RoomMessageUpdatedEvent = z.infer<typeof RoomMessageUpdatedEventSchema>;
+export type RoomStatusEvent = z.infer<typeof RoomStatusEventSchema>;
+export type RoomErrorEvent = z.infer<typeof RoomErrorEventSchema>;
+export type RoomPongEvent = z.infer<typeof RoomPongEventSchema>;
+
+// room ws: client → server
+export type RoomClientMessage = z.infer<typeof RoomClientMessageSchema>;
+export type RoomClientMessageType = RoomClientMessage["type"];
+export type RoomSendMessage = z.infer<typeof RoomSendMessageSchema>;
+export type RoomInterruptMessage = z.infer<typeof RoomInterruptMessageSchema>;
+export type RoomPingMessage = z.infer<typeof RoomPingMessageSchema>;
+
+/** 방 서버 이벤트를 검증한다. 실패하면 `ZodError` 를 던진다. */
+export function parseRoomServerEvent(input: unknown): RoomServerEvent {
+  return RoomServerEventSchema.parse(input);
+}
+
+/** 방 클라이언트 메시지를 검증한다. 실패하면 `ZodError` 를 던진다. */
+export function parseRoomClientMessage(input: unknown): RoomClientMessage {
+  return RoomClientMessageSchema.parse(input);
+}
+
+/** 방 클라이언트 메시지를 검증한다. 던지지 않고 결과 객체를 돌려준다. */
+export function safeParseRoomClientMessage(input: unknown): z.ZodSafeParseResult<RoomClientMessage> {
+  return RoomClientMessageSchema.safeParse(input);
 }

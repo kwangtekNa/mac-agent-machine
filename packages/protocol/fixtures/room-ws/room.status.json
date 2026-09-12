@@ -1,0 +1,40 @@
+{
+  "type": "room.status",
+  "seq": 9,
+  "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+  "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+  "ts": "2026-09-12T09:31:30Z",
+  "dispatch": {
+    "running": [
+      {
+        "dispatchId": "dsp_01J8ZQ4K5N7P9R3S6T8V0W2XH3",
+        "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+        "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR2",
+        "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS2",
+        "turnId": "trn_01J8ZQ4K5N7P9R3S6T8V0W2XC4",
+        "hop": 1
+      }
+    ],
+    "queued": [
+      {
+        "dispatchId": "dsp_01J8ZQ4K5N7P9R3S6T8V0W2XH4",
+        "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+        "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+        "hop": 1,
+        "enqueuedAt": "2026-09-12T09:31:30Z"
+      }
+    ]
+  },
+  "members": [
+    {
+      "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1",
+      "state": "idle",
+      "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS1"
+    },
+    {
+      "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+      "state": "running",
+      "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS2"
+    }
+  ]
+}

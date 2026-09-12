@@ -2,8 +2,9 @@ import Foundation
 import XCTest
 @testable import MacAgent
 
-/// 계약 테스트: `packages/protocol/fixtures/` 의 46개 JSON 을 Swift Codable 로 전수 디코딩한다.
+/// 계약 테스트: `packages/protocol/fixtures/` 의 69개 JSON 을 Swift Codable 로 전수 디코딩한다.
 /// TS 쪽 `packages/protocol/test/fixtures.test.ts` 의 매핑표와 대칭이다.
+/// 팀·방(2026-09-12 추가) fixture 는 phase `4-teams-ios` 가 실제 타입을 만들기 전까지 `JSONValue` 로만 등록한다.
 final class ProtocolFixturesTests: XCTestCase {
     private typealias Decoder = (Data) throws -> Any
 
@@ -43,8 +44,39 @@ final class ProtocolFixturesTests: XCTestCase {
         for name in clientExpectations.keys {
             t["client/\(name).json"] = decode(ClientMessage.self)
         }
+        // 2026-09-12 추가분(팀·방) 23개: 임시로 JSONValue. 4-teams-ios 가 실제 타입으로 바꾼다.
+        for path in ADDED_2026_09_12 {
+            t[path] = decode(JSONValue.self)
+        }
         return t
     }
+
+    /// TS 쪽 fixtures.test.ts 의 ADDED_2026_09_12 와 같은 집합(rest 10 + room-ws 10 + room-client 3).
+    private static let ADDED_2026_09_12: Set<String> = [
+        "rest/team-roles.json",
+        "rest/teams.json",
+        "rest/team.json",
+        "rest/team-detail.json",
+        "rest/room.json",
+        "rest/room-message-post.json",
+        "rest/changes.json",
+        "rest/merge-result.json",
+        "rest/team-templates.json",
+        "rest/team-template.json",
+        "room-ws/room.snapshot.json",
+        "room-ws/room.message.user.json",
+        "room-ws/room.message.agent.json",
+        "room-ws/room.message.approval.json",
+        "room-ws/room.message.changes.json",
+        "room-ws/room.message.system.json",
+        "room-ws/room.message.updated.json",
+        "room-ws/room.status.json",
+        "room-ws/room.error.json",
+        "room-ws/pong.json",
+        "room-client/room.send.json",
+        "room-client/room.interrupt.json",
+        "room-client/ping.json",
+    ]
 
     /// `ws/<type>[.<variant>].json` → 기대하는 type 과 (있으면) 아이템 kind / 승인 kind.
     private static let wsExpectations: [String: (type: ServerEvent.EventType, itemKind: TimelineItemKind?, approvalKind: ApprovalKind?)] = [
@@ -91,7 +123,7 @@ final class ProtocolFixturesTests: XCTestCase {
         let files = try FixtureLoader.allJSONPaths()
         let keys = Self.table().keys.sorted()
         XCTAssertEqual(files, keys, "fixtures/ 의 파일 목록과 매핑표가 다르다")
-        XCTAssertEqual(files.count, 46)
+        XCTAssertEqual(files.count, 69)
         // TS 쪽 fixtures.test.ts 의 ADDED_2026_09_10 과 같은 집합
         for added in [
             "rest/usage.json", "rest/usage-empty.json", "rest/models-claude.json", "rest/models-codex.json",
@@ -99,6 +131,13 @@ final class ProtocolFixturesTests: XCTestCase {
         ] {
             XCTAssertTrue(keys.contains(added), "\(added) 이 매핑표에 없다")
         }
+        // TS 쪽 fixtures.test.ts 의 ADDED_2026_09_12 와 같은 집합(팀·방 23개)
+        XCTAssertEqual(Self.ADDED_2026_09_12.count, 23)
+        for added in Self.ADDED_2026_09_12 {
+            XCTAssertTrue(keys.contains(added), "\(added) 이 매핑표에 없다")
+        }
+        // 방 이벤트는 ws/·client/ 가 아니라 room-ws/·room-client/ 에만 있다(ServerEvent enum 이 깨지지 않도록)
+        XCTAssertFalse(files.contains { $0.hasPrefix("ws/room.") || $0.hasPrefix("client/room.") })
     }
 
     func testTableCoversEveryEventTypeItemKindAndClientType() {

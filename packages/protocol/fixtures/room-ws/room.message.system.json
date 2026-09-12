@@ -1,0 +1,24 @@
+{
+  "type": "room.message",
+  "seq": 1,
+  "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+  "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+  "ts": "2026-09-12T09:00:05Z",
+  "message": {
+    "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM1",
+    "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+    "seq": 1,
+    "author": {
+      "kind": "system"
+    },
+    "kind": "system",
+    "text": "지연(개발자, Codex)이 팀에 합류했습니다. 브랜치 mam/backend/jiyeon",
+    "mentions": [],
+    "hop": 0,
+    "dispatchId": null,
+    "createdAt": "2026-09-12T09:00:05Z",
+    "work": null,
+    "approval": null,
+    "changes": null
+  }
+}

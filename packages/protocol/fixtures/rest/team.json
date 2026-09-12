@@ -1,0 +1,84 @@
+{
+  "id": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+  "name": "backend",
+  "cwd": "/Users/alice/work/app",
+  "baseBranch": "main",
+  "settings": {
+    "maxHops": 6,
+    "maxConcurrent": 2,
+    "contextMaxMessages": 40
+  },
+  "members": [
+    {
+      "id": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1",
+      "name": "민수",
+      "handle": "minsu",
+      "role": "team-lead",
+      "roleLabel": "팀장",
+      "emoji": "🧑‍💼",
+      "agent": "claude",
+      "prompt": "You are the team lead. Understand the request, delegate to teammates with @mentions, and summarize the outcome for the user.",
+      "mode": "auto-edit",
+      "model": "claude-opus-5",
+      "effort": "high",
+      "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS1",
+      "branch": "mam/backend/minsu",
+      "worktreePath": "/Users/alice/.mam/teams/team_01J8ZQ4K5N7P9R3S6T8V0W2XT1/worktrees/agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1",
+      "isLead": true,
+      "state": "idle",
+      "createdAt": "2026-09-12T09:00:00Z",
+      "updatedAt": "2026-09-12T09:10:08Z"
+    },
+    {
+      "id": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+      "name": "지연",
+      "handle": "jiyeon",
+      "role": "developer",
+      "roleLabel": "개발자",
+      "emoji": "🧑‍💻",
+      "agent": "codex",
+      "prompt": "You are a software developer on this team. Implement the requested change in your worktree, run the tests, and report what changed.",
+      "mode": "auto-edit",
+      "model": "gpt-5-codex",
+      "effort": "medium",
+      "sessionId": "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS2",
+      "branch": "mam/backend/jiyeon",
+      "worktreePath": "/Users/alice/.mam/teams/team_01J8ZQ4K5N7P9R3S6T8V0W2XT1/worktrees/agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+      "isLead": false,
+      "state": "running",
+      "createdAt": "2026-09-12T09:00:05Z",
+      "updatedAt": "2026-09-12T09:31:00Z"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+      "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+      "kind": "group",
+      "memberId": null,
+      "name": "전체",
+      "lastSeq": 9,
+      "lastMessageAt": "2026-09-12T09:31:30Z"
+    },
+    {
+      "id": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR1",
+      "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+      "kind": "dm",
+      "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1",
+      "name": "민수",
+      "lastSeq": 0,
+      "lastMessageAt": null
+    },
+    {
+      "id": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR2",
+      "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+      "kind": "dm",
+      "memberId": "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+      "name": "지연",
+      "lastSeq": 1,
+      "lastMessageAt": "2026-09-12T09:31:00Z"
+    }
+  ],
+  "createdAt": "2026-09-12T09:00:00Z",
+  "updatedAt": "2026-09-12T09:31:30Z"
+}
