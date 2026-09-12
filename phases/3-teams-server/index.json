@@ -54,10 +54,28 @@
     {
       "step": 2,
       "name": "git-worktrees",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-12T21:03:11+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "096d79d7-cddf-4b2e-9b5c-4d3f7f9ddf8b",
+          "cost_usd": 4.9028485,
+          "duration_s": 512.7,
+          "num_turns": 22,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 4.902849,
+      "duration_s": 512.7,
+      "retries": 0,
+      "session_id": "096d79d7-cddf-4b2e-9b5c-4d3f7f9ddf8b",
+      "summary": "Step 2 git-worktrees done: new packages/server/src/git/worktree.ts (pure git helper, no team/session imports) exporting WorktreeError class (code not_repo|detached|dirty|wrong_branch|conflict|git_failed, detail = stderr first 3 lines), LONG_GIT_TIMEOUT_MS=60s, detectBaseBranch (rev-parse --show-toplevel → not_repo; symbolic-ref --quiet --short HEAD exit 1 → detached), isValidBranchName (^[A-Za-z0-9._/-]+$, rejects '..', leading '-', leading/trailing '/', '//', '.lock', '.'-leading segments), addWorktree (mkdir parent; `worktree add -b branch path base`, or `worktree add path branch` when refs/heads/<branch> exists), worktreeIsDirty (status --porcelain), removeWorktree (dirty → code dirty; `worktree remove` without force; then `worktree prune`; branch kept), commitAll (add -A; `diff --cached --quiet` exit 0 → null; commit -q -m msg --author; returns HEAD sha), changesVsBase (rev-list --count base..branch; diff --numstat --no-renames -z base...branch, binary → 0/0; head = rev-parse branch^{commit}), mergeIntoBase (status dirty → {dirty}; detectBaseBranch != base → {wrong_branch,current}; merge --no-ff --no-edit -m msg branch; on failure with MERGE_HEAD → collect diff --name-only --diff-filter=U -z, merge --abort, {conflict,conflictFiles}; otherwise git_failed), syncFromBase (merge-base --is-ancestor → up_to_date; merge --no-edit base → merged; conflict leaves markers+MERGE_HEAD), hasMergeInProgress (rev-parse --verify MERGE_HEAD). Relative paths / invalid branch names throw existing InvalidRequestError (code invalid_request). All git via runGit([\"-C\", …]) with timeoutMs option; no reset/rebase/push/force. TDD: test/git/worktree.test.ts (32 tests: detached/not_repo, branch validation, worktree add/attach/re-attach, dirty detection incl. .gitignore, commitAll author `민수 (mam-team)` <minsu@mam.local>, numstat with Korean path + binary + three-dot, merge success/dirty/wrong_branch/detached/conflict-with-clean-base, sync merged/up_to_date/conflict+MERGE_HEAD, remove clean/dirty) — RED (module missing) then GREEN. AC: npm ci, npm run typecheck OK; npm test 617 passed/4 skipped; file/runGit/no-shell greps OK; bash scripts/test.sh (TS + iOS) OK. packages/protocol, phases/, team/session code untouched.",
+      "completed_at": "2026-09-12T21:11:45+0900"
     },
     {
       "step": 3,
