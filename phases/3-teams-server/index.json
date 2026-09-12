@@ -28,10 +28,28 @@
     {
       "step": 1,
       "name": "adapter-instructions",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-12T20:55:50+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "6d867f4e-cb39-4f3c-8975-9b11473f9b2d",
+          "cost_usd": 7.911562499999999,
+          "duration_s": 440.3,
+          "num_turns": 58,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 7.911562,
+      "duration_s": 440.3,
+      "retries": 0,
+      "session_id": "6d867f4e-cb39-4f3c-8975-9b11473f9b2d",
+      "summary": "Step 1 adapter-instructions done: StartOptions.instructions?: string (agents/types.ts); Claude openProcess() adds systemPrompt {type:\"preset\",preset:\"claude_code\",append} only when instructions present (snapshot untouched, next_session policy commented, extraOptions still override); Codex start() puts developerInstructions in thread/start and thread/resume, not turn/start; Fake: ScriptContext.cwd added, FakeSession emits one `system` item (\"instructions: …\", turnId null, status completed) before the first turn's script when instructions exist; new sessions/types.ts with SessionRecordSchema = SessionSchema.extend({instructions optional}) + CreateSessionExtras {instructions, team, deferStart}; SessionManager.create(req & extras) — deferStart registers idle/nativeId null without start() (first startTurn opens via existing resume path), team stored on Session (key omitted otherwise), instructions kept on Runtime only, persisted in sessions/<id>.json, forwarded by startAgent() on first start and resumeNativeId resume, split out on open() (legacy records load), never in list/get/detail/patch responses or logs; POST /sessions route unchanged. Tests (TDD, RED→GREEN): test/agents/claude/instructions.test.ts (5), test/agents/codex/instructions.test.ts (4), test/sessions/manager-instructions.test.ts (8) incl. deferStart, idle-timeout resume, manager restart, legacy records, close/interrupt/shutdown safety, ctx.cwd. Optional MAM_IT_CLAUDE/MAM_IT_CODEX \"PONG\" instructions cases added to both integration.test.ts but NOT executed (needs login + user's spend approval). AC: npm ci, npm run typecheck OK; npm test 585 passed/4 skipped; bash scripts/dev-smoke.sh OK; bash scripts/test.sh (TS + iOS) OK. packages/protocol and phases/ untouched by this session.",
+      "completed_at": "2026-09-12T21:03:10+0900"
     },
     {
       "step": 2,
