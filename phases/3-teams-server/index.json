@@ -221,10 +221,28 @@
     {
       "step": 8,
       "name": "teams-smoke-and-docs",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         7
-      ]
+      ],
+      "started_at": "2026-09-12T22:25:08+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "1fce4006-0f39-4794-b5aa-cfb4c0753431",
+          "cost_usd": 8.237357,
+          "duration_s": 750.2,
+          "num_turns": 44,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 8.237357,
+      "duration_s": 750.2,
+      "retries": 0,
+      "session_id": "1fce4006-0f39-4794-b5aa-cfb4c0753431",
+      "summary": "Step 8 teams-smoke-and-docs done. Fake defaultScript (agents/fake/script.ts): `write file <name>` writes one line to ctx.cwd/<name> and emits file_change (add|modify, before turn_summary) with names limited to [A-Za-z0-9._-]+ followed by whitespace/end (../x, sub/x, ., .. ignored); `ask @<handle>` appends \" @<handle> 확인 부탁해요.\" as an extra delta; other behaviour unchanged. TDD RED→GREEN: new test/agents/fake/script.test.ts (6). scripts/dev-smoke.mjs steps 15–20 via teamSteps(cwd): git init + first commit through spawn(\"git\", [...]) in ~/.mam/smoke/<ts>/repo; 15 GET /team-roles=5, POST /teams 201 (민수 claude lead, 지연 codex), sessionIds present, worktrees exist under ~/.mam/teams/<id>/worktrees, 2 mam/smoke/* branches; 16 group WS room.snapshot seq0 → POST messages \"hello\" 201 → room.message(user) → approval card answered via POST /sessions/:id/approvals/:approvalId (Fake asks approval every turn; room.message.updated keeps message.seq, new event seq) → 민수 reply with work (hop 1, dispatchId) → room.status idle; 17 \"@jiyeon write file smoke.txt\" → reply filesChanged=[smoke.txt] → room.message(changes) ready with smoke.txt → GET /changes = 1; 18 DM WS room.send \"ask @minsu\" → user mentions [] → 지연 reply contains \"@minsu 확인 부탁해요.\" → dispatch empty, group message count unchanged (REST + WS); 19 merge → merged + 40-char mergeCommit, git log --merges = 1, git show --stat HEAD has smoke.txt, HEAD on main, card updated merged, POST stop → {running:[],queued:[]}; 20 DELETE 200 → worktrees gone, team not listed, member sessions in GET /sessions?status=closed with team field and no instructions. assertMonotonicSeq per room; failure prints step + exit 1; best-effort team cleanup (fallback keepWorktrees=true). Observed smoke run: 20 steps OK, nothing left in ~/.mam/teams or ~/.mam/smoke. New gated test/teams/integration.test.ts (MAM_IT_CLAUDE=1 Claude ask + maxTurns 1/allowedTools [], MAM_IT_CODEX=1 Codex plan; pong → reply hop 1, work.toolCalls number; approvals auto-denied) — NOT executed (needs login + spend approval). Docs: README (dev-smoke line, POST /teams + POST messages curl, worktree/node_modules note), ARCHITECTURE (diagram teams/ line, 2.2 data dir, new 2.5 TeamManager, src/teams + git/worktree.ts in tree, ~/.mam/teams and team-templates runtime rows, 6 security worktree-in-home/git spawn), RUNBOOK (new \"6. 팀 운영\": 팀 만들기, 머지 승인, 충돌 흐름, keepWorktrees 삭제, 한도 재개, 프롬프트 next-session/reset, worktree 의존성 수동, 재시작, 개발 확인; 보안 노트 → 7; TestFlight ref → Phase 6), PRD (F16 row, phase table 0/1/2/3 팀 서버/4 팀 iOS/5 웹/6 운영, F10 → 5, out-of-scope + worktree 의존성 자동 설치·자동 머지·실시간 스트리밍, Phase 3 refs → 6). AC: npm ci OK, typecheck OK, npm test 754 passed/6 skipped, dev-smoke OK, 3 greps OK, bash scripts/test.sh (TS + iOS) OK. ios/, packages/protocol, phases/ untouched.",
+      "completed_at": "2026-09-12T22:37:39+0900"
     }
   ],
   "created_at": "2026-09-12T20:40:52+0900"
