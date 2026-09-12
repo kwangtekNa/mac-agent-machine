@@ -14,8 +14,9 @@
                                    ├─ sessions/  SessionManager: 세션 레지스트리, 이벤트 로그(JSONL), 팬아웃, 유휴 종료
                                    ├─ agents/claude  Claude Agent SDK → claude CLI (사용자 ~/.claude 자격증명)
                                    ├─ agents/codex   codex app-server (JSON-RPC over stdio, 사용자 ~/.codex)
+                                   ├─ teams/    TeamManager: 팀·방(JSONL)·멘션 디스패처·worktree 커밋·머지 (Phase 3)
                                    ├─ fs/   홈 디렉토리로 제한된 파일 목록/읽기
-                                   └─ git/  status/diff (git CLI 래핑)
+                                   └─ git/  status/diff, worktree/merge (git CLI 래핑)
 ```
 
 설계 원칙은 sshd와 같다. root로 도는 코드는 최소(수락, 신원, 프로세스 생성, 프록시)이고, 실제 작업은 전부 해당 사용자 권한의 프로세스에서 일어난다.
@@ -39,7 +40,7 @@
 - 해당 macOS 사용자 권한으로 실행. Fastify 5가 unix socket에서 listen. `@fastify/websocket`으로 WS.
 - 모든 요청의 `X-MAM-User`가 자기 프로세스의 사용자(`os.userInfo().username`)와 같아야 한다. 다르면 403. gateway 외에는 소켓에 접근할 수 없지만 방어를 겹친다.
 - 시작 시 사용자의 로그인 셸로 도구 경로를 확인한다: `$SHELL -lc 'command -v claude; command -v codex'`. 환경변수 `MAM_CLAUDE_BIN`, `MAM_CODEX_BIN`이 있으면 우선한다. 결과는 `GET /me`의 `agents[]`에 반영한다.
-- 데이터 디렉토리 `~/.mam/`: `sessions/<id>.json`(메타), `sessions/<id>.events.jsonl`(정규화 이벤트, seq 순), `agent-host.log`, `prefs.json`.
+- 데이터 디렉토리 `~/.mam/`: `sessions/<id>.json`(메타), `sessions/<id>.events.jsonl`(정규화 이벤트, seq 순), `teams/<teamId>/`(팀·방·변경·worktree, 2.5), `team-templates/<tplId>.json`, `agent-host.log`, `prefs.json`.
 
 ### 2.3 에이전트 어댑터
 
@@ -75,6 +76,16 @@ interface AgentSession {
 - 상태 기계: `starting → idle ⇄ running → waiting_approval → running → idle`, 어디서든 `error`, `closed`.
 - 유휴 종료: 마지막 이벤트 후 `idleTimeoutMinutes`가 지나고 WS 클라이언트가 없으면 어댑터 세션을 닫고 상태를 `idle`(재개 가능)로 둔다. 다음 turn.start가 오면 `resumeNativeId`로 다시 연다.
 
+### 2.5 TeamManager (Phase 3, `src/teams/`)
+
+에이전트 팀(PROTOCOL.md 6절, ADR-017)을 SessionManager **위에** 얹는다. 새 실행 모델은 없고 팀원은 `Session.team = { teamId, memberId }` 가 붙은 보통 세션이다.
+
+- **팀·팀원** (`team-manager.ts`, `store.ts`): `~/.mam/teams/<teamId>/team.json`. 팀 생성·팀원 추가 때 `git worktree add -b mam/<team-slug>/<handle> ~/.mam/teams/<teamId>/worktrees/<memberId> <baseBranch>` 를 만들고, 세션은 그 worktree 를 `cwd` 로 **지연 시작**(`deferStart`) 등록한다. 어댑터 프로세스는 첫 디스패치 때 뜬다. 역할 프리셋(`roles.ts`)의 프롬프트에 "## Team protocol"(worktree 범위, 메시지 접두어, `@멘션` 규칙, 커밋 금지) 을 덧붙여 세션 `instructions` 로 넘긴다. 프롬프트·모델 변경은 다음 세션부터 적용된다(`reset`).
+- **방** (`room-manager.ts`): 그룹방 1 + 팀원별 DM 방. 방 이벤트(`room.message`, `room.message.updated`, `room.status`, `room.error`)는 세션 WS 와 별도 스트림이고 **방마다 독립된 seq** 를 RoomManager 만 발급한다. 저장은 SessionManager 와 같은 방식(링버퍼 500 + `rooms/<roomId>.events.jsonl` + `since` 재생).
+- **디스패처** (`dispatcher.ts`, `mentions.ts`, `format.ts`): 그룹방은 멘션된 팀원(없으면 팀장), DM 은 그 팀원만. 팀별 FIFO 큐로 `maxConcurrent` 와 "팀원당 동시 1턴" 을 지키고, 에이전트 답변의 멘션으로 연쇄하되 `maxHops` 를 넘기면 시스템 메시지로 끊는다. 턴 입력은 그 팀원이 아직 못 본(`lastSeen` 이후) 그룹방+DM 메시지에 `[#전체] @민수(개발자): …` 접두어를 붙인 맥락 + 트리거 + 꼬리말이다.
+- **턴 실행**: 세션 구독은 **턴 동안만** 유지한다(구독자가 있으면 세션 유휴 종료가 막히기 때문). 턴 전에 `baseBranch` 를 worktree 에 머지해 최신화하고(충돌이면 마커를 남기고 안내문을 턴 앞에 붙인다), 승인 요청은 방에 `kind: approval` 카드로 미러링하며 응답은 기존 `POST /sessions/:id/approvals/:approvalId` 다. 턴이 끝나면 마지막 `assistant_message` 를 `work`(tool_call 수, 변경 파일, 사용량) 와 함께 방에 게시한다. 스트리밍은 없다.
+- **커밋·머지** (`changes.ts`, `git/worktree.ts`): 턴 종료 시 서버가 worktree 를 `git add -A && git commit` (작성자 `<이름> (mam-team) <handle@mam.local>`) 하고 ChangeSet(`ready`) 카드를 그룹방에 올린다(`changes.json`). 머지는 사용자가 `POST .../changes/:id/merge` 로 승인할 때만 원본 저장소에서 `git merge --no-ff` 를 실행한다. 베이스가 더럽거나 다른 브랜치면 409, 충돌이면 `merge --abort` 후 `conflict` 로 보고하고 그 팀원 DM 에 해결 턴을 디스패치한다. 자동 머지는 없다. 재시작 시 `merging`/`ready` 상태를 git 과 대조해 `merged`/`stale` 로 정리한다.
+
 ## 3. 저장소 구조
 
 ```
@@ -94,9 +105,10 @@ mac-agent-machine/
 │       ├── src/gateway/         # server.ts identity.ts users.ts supervisor.ts proxy.ts tls.ts
 │       ├── src/agent-host/      # app.ts routes/{me,sessions,fs,git,auth}.ts ws.ts
 │       ├── src/sessions/        # manager.ts event-log.ts types.ts
+│       ├── src/teams/           # team-manager.ts room-manager.ts dispatcher.ts mentions.ts format.ts summary.ts changes.ts roles.ts store.ts templates.ts (Phase 3)
 │       ├── src/agents/          # types.ts fake/ claude/ codex/
 │       ├── src/fs/              # sandbox.ts list.ts read.ts language.ts
-│       ├── src/git/             # status.ts diff.ts
+│       ├── src/git/             # status.ts diff.ts worktree.ts
 │       └── test/                # vitest. 통합 테스트는 MAM_IT_CLAUDE=1 / MAM_IT_CODEX=1 일 때만
 ├── apps/
 │   └── web/                     # Phase 2. Vite + React + TS. @mam/protocol 재사용
@@ -124,6 +136,8 @@ mac-agent-machine/
 | `/var/run/mam/<user>/agent.sock` | user, dir 0700 | gateway ↔ agent-host |
 | `/var/log/mam/gateway.log` | root | gateway 로그 (launchd StandardOut/ErrorPath) |
 | `~/.mam/` | user | 세션 메타, 이벤트 로그, agent-host 로그 |
+| `~/.mam/teams/<teamId>/` | user, 0700 | `team.json`, `rooms/<roomId>.events.jsonl`, `changes.json`, `worktrees/<memberId>/`(팀원 git worktree, 브랜치 `mam/<team-slug>/<handle>`) |
+| `~/.mam/team-templates/<tplId>.json` | user | 팀 템플릿(사용자별) |
 | `~/work/` | user | 기본 워크스페이스 루트 (설정 가능) |
 
 ## 5. 설정 (`/etc/mam/config.json`)
@@ -151,6 +165,7 @@ mac-agent-machine/
 - 권한 분리: gateway(root)는 사용자 데이터를 읽지 않는다. 파일·git·에이전트는 전부 agent-host(사용자 권한)가 처리한다.
 - 파일 샌드박스: 요청 경로를 `realpath`로 해석한 뒤 사용자 홈 아래인지 확인한다. 심볼릭 링크로 홈 밖을 가리키면 거부한다. `..`는 해석 후 검사하므로 별도 처리하지 않는다.
 - 셸 실행 금지: 서버 코드는 사용자 입력 문자열을 셸에 넘기지 않는다. 자식 프로세스는 항상 인자 배열로 spawn한다. git도 `spawn('git', [...])`.
+- 팀 worktree 도 홈 안(`~/.mam/teams/<teamId>/worktrees/`)에 두고 `resolveInsideHome()` 을 거친 경로만 세션 `cwd` 와 파일 API 에 쓴다. 저장소 밖에 두는 이유는 이웃 worktree 를 에이전트가 함께 보지 않게 하기 위해서다(ADR-017). worktree·커밋·머지의 git 실행은 전부 `src/git/worktree.ts` 의 `spawn('git', ['-C', …])` 이며 브랜치 이름은 `^[A-Za-z0-9._/-]+$` 로 검증한다. 방 메시지 본문·프롬프트는 로그에 남기지 않는다.
 - 로그에 토큰, 승인 요청 본문의 비밀값, 파일 내용을 남기지 않는다.
 - SSH: setup 스크립트가 `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `PermitRootLogin no`를 `/etc/ssh/sshd_config.d/mam.conf`에 쓴다. macOS 방화벽에서 sshd는 tailnet 인터페이스만 허용하도록 안내한다.
 

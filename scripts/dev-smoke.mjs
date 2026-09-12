@@ -2,8 +2,10 @@
 // 개발 모드 gateway(scripts/dev-smoke.sh 가 기동)에 대해 REST → WS → 승인 응답 → 완료를 검증한다.
 // docs/PROTOCOL.md 2절의 WS 이벤트 순서를 그대로 따라간다. 실패하면 단계와 받은 이벤트를 출력하고 exit 1.
 // 11~14단계는 2026-09-10 추가분(PROTOCOL.md: /fs/mkdir, Session.usage + session.usage, /usage, /models, PATCH model).
+// 15~20단계는 2026-09-12 추가분(PROTOCOL.md 6절: 팀 생성 → 방 WS → 멘션 디스패치 → 변경 카드 → DM → 머지 → 삭제).
 import { strict as assert } from "node:assert";
-import { mkdir, rm } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
@@ -271,6 +273,8 @@ async function main() {
     } finally {
       await api("POST", `/api/v1/sessions/${second.json.id}/close`);
     }
+
+    await teamSteps(cwd);
   } finally {
     await rm(cwd, { recursive: true }).catch(() => {});
   }
@@ -279,6 +283,220 @@ async function main() {
   for (const line of log) console.log(`  ${line}`);
   await closeAll();
   process.exit(0);
+}
+
+/** 셸 없이 `git -C <cwd> <args>` 를 실행하고 stdout 을 돌려준다(CRITICAL 4). */
+function git(cwd, ...args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("git", ["-C", cwd, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (err += d));
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code === 0) resolve(out);
+      else reject(new Error(`git ${args.join(" ")} exit ${code}: ${err.trim()}`));
+    });
+  });
+}
+
+const GIT_IDENTITY = ["-c", "user.name=mam-smoke", "-c", "user.email=mam-smoke@example.com"];
+
+/**
+ * 팀원 세션의 승인 요청은 방에 `kind: approval` 카드로 미러링된다(PROTOCOL 6.4). 응답은 방 WS 가 아니라
+ * 기존 `POST /sessions/:id/approvals/:approvalId` 로 보내고, 방에는 `room.message.updated` 로 resolution 이 채워진다(6.3).
+ * Fake 기본 스크립트는 턴마다 `echo hi` 승인을 요청하므로 팀원 턴마다 한 번씩 부른다.
+ */
+const handledApprovals = new Set();
+async function allowApproval(stream, memberId) {
+  const card = await stream.waitFor(
+    (e) => e.type === "room.message" && e.message.kind === "approval" && e.message.author.kind === "agent" && e.message.author.memberId === memberId
+      && e.message.approval !== null && !handledApprovals.has(e.message.approval.approval.approvalId),
+    30_000,
+    "room.message(approval)",
+  );
+  const { sessionId, approval, resolution } = card.message.approval;
+  assert.equal(resolution, null, "승인 카드의 resolution 이 처음부터 채워져 있음");
+  handledApprovals.add(approval.approvalId);
+  const res = await api("POST", `/api/v1/sessions/${sessionId}/approvals/${approval.approvalId}`, { optionId: "allow" });
+  assert.equal(res.status, 200, `approval respond status ${res.status}: ${JSON.stringify(res.json)}`);
+  const updated = await stream.waitFor(
+    (e) => e.type === "room.message.updated" && e.message.id === card.message.id && e.message.approval?.resolution,
+    30_000,
+    "room.message.updated(approval resolved)",
+  );
+  assert.equal(updated.message.approval.resolution.optionId, "allow", "resolution.optionId");
+  assert.equal(updated.message.seq, card.message.seq, "room.message.updated 의 message.seq 는 원래 값을 유지해야 함");
+  assert.ok(updated.seq > card.seq, "room.message.updated 는 새 seq 를 받아야 함");
+  return card;
+}
+
+const isAgentText = (memberId) => (e) =>
+  e.type === "room.message" && e.message.kind === "text" && e.message.author.kind === "agent" && e.message.author.memberId === memberId;
+const isIdleStatusAfter = (seq) => (e) => e.type === "room.status" && e.seq > seq && e.members.every((m) => m.state === "idle");
+
+/** 15~20단계: PROTOCOL.md 6절 종단 검증. 실패해도 팀은 best-effort 로 지운다(worktree 가 더러우면 keepWorktrees). */
+async function teamSteps(cwd) {
+  let team = null;
+  let deleted = false;
+  try {
+    step = "15. GET /api/v1/team-roles, git init, POST /api/v1/teams";
+    const roles = await api("GET", "/api/v1/team-roles");
+    assert.equal(roles.status, 200, `team-roles status ${roles.status}: ${JSON.stringify(roles.json)}`);
+    assert.equal(roles.json.roles.length, 5, `roles.length ${roles.json.roles.length} !== 5`);
+    const repo = path.join(cwd, "repo");
+    await mkdir(repo, { recursive: true });
+    await git(repo, "init", "-q", "-b", "main");
+    await writeFile(path.join(repo, "README.md"), "# smoke\n");
+    await git(repo, "add", "README.md");
+    await git(repo, ...GIT_IDENTITY, "commit", "-q", "-m", "init");
+    const created = await api("POST", "/api/v1/teams", {
+      cwd: repo,
+      name: "smoke",
+      members: [
+        { name: "민수", handle: "minsu", role: "team-lead", agent: "claude", isLead: true },
+        { name: "지연", handle: "jiyeon", role: "developer", agent: "codex" },
+      ],
+    });
+    assert.equal(created.status, 201, `POST /teams status ${created.status}: ${JSON.stringify(created.json)}`);
+    team = created.json;
+    assert.equal(team.baseBranch, "main", `baseBranch ${team.baseBranch}`);
+    assert.equal(team.members.length, 2, `members.length ${team.members.length}`);
+    const teamsRoot = path.join(homedir(), ".mam", "teams", team.id, "worktrees");
+    for (const m of team.members) {
+      assert.equal(typeof m.sessionId, "string", `${m.name}.sessionId 가 없음`);
+      assert.ok(m.worktreePath.startsWith(teamsRoot), `worktreePath ${m.worktreePath} 가 ${teamsRoot} 밖`);
+      assert.ok((await stat(m.worktreePath)).isDirectory(), `worktree 디렉토리 없음: ${m.worktreePath}`);
+      assert.equal(m.branch, `mam/smoke/${m.handle}`, `branch ${m.branch}`);
+    }
+    const branches = (await git(repo, "branch", "--list", "mam/smoke/*")).split("\n").map((l) => l.trim()).filter(Boolean);
+    assert.equal(branches.length, 2, `mam/smoke/* 브랜치 ${branches.length}개: ${branches.join(",")}`);
+    const minsu = team.members.find((m) => m.handle === "minsu");
+    const jiyeon = team.members.find((m) => m.handle === "jiyeon");
+    const group = team.rooms.find((r) => r.kind === "group");
+    const dm = team.rooms.find((r) => r.kind === "dm" && r.memberId === jiyeon.id);
+    assert.ok(minsu && jiyeon && group && dm, "팀원·방 구성이 예상과 다름");
+    note(`15. team ${team.id} (lead=${minsu.handle}, dev=${jiyeon.handle}, branches=${branches.join(",")}) OK`);
+
+    step = "16. 그룹방 WS → room.snapshot, POST messages(hello) → user/approval/agent(work)/status";
+    const groupWs = await connect(`${WS_BASE}/api/v1/teams/${team.id}/rooms/${group.id}/ws`);
+    const snapshot = await groupWs.waitFor((e) => e.type === "room.snapshot", 5000, "room.snapshot");
+    assert.equal(snapshot.seq, 0, "room.snapshot seq");
+    assert.equal(snapshot.roomId, group.id, "room.snapshot roomId");
+    assert.equal(snapshot.messages.length, 0, "새 그룹방에 메시지가 있음");
+    assert.equal(snapshot.members.length, 2, "snapshot.members");
+    const hello = await api("POST", `/api/v1/teams/${team.id}/rooms/${group.id}/messages`, { text: "hello" });
+    assert.equal(hello.status, 201, `POST messages status ${hello.status}: ${JSON.stringify(hello.json)}`);
+    assert.equal(hello.json.dispatches.length, 1, `dispatches ${JSON.stringify(hello.json.dispatches)}`);
+    const helloEvent = await groupWs.waitFor((e) => e.type === "room.message" && e.message.id === hello.json.message.id, 5000, "room.message(user)");
+    assert.equal(helloEvent.message.author.kind, "user");
+    assert.equal(helloEvent.message.hop, 0);
+    await allowApproval(groupWs, minsu.id);
+    const leadReply = await groupWs.waitFor(isAgentText(minsu.id), 30_000, "room.message(agent 민수)");
+    assert.ok(leadReply.seq > helloEvent.seq, "팀장 답변 seq 가 사용자 메시지보다 앞섬");
+    assert.equal(leadReply.message.hop, 1, `hop ${leadReply.message.hop}`);
+    assert.equal(leadReply.message.dispatchId, hello.json.dispatches[0], "dispatchId");
+    assert.ok(leadReply.message.work, "work 가 없음");
+    assert.equal(leadReply.message.work.sessionId, minsu.sessionId, "work.sessionId");
+    assert.ok(Number.isInteger(leadReply.message.work.toolCalls) && leadReply.message.work.toolCalls >= 1, `work.toolCalls ${leadReply.message.work.toolCalls}`);
+    await groupWs.waitFor(isIdleStatusAfter(leadReply.seq), 5000, "room.status(idle)");
+    assertMonotonicSeq(groupWs.events);
+    note(`16. group room: user(seq ${helloEvent.seq}) → approval allow → 민수 reply(seq ${leadReply.seq}, toolCalls=${leadReply.message.work.toolCalls}) → status idle OK`);
+
+    step = "17. @jiyeon write file smoke.txt → 지연 답변 + changes 카드(ready) + GET /changes";
+    const ask = await api("POST", `/api/v1/teams/${team.id}/rooms/${group.id}/messages`, { text: "@jiyeon write file smoke.txt" });
+    assert.equal(ask.status, 201, `POST messages status ${ask.status}`);
+    assert.deepEqual(ask.json.message.mentions, [jiyeon.id], "mentions");
+    await allowApproval(groupWs, jiyeon.id);
+    const devReply = await groupWs.waitFor(isAgentText(jiyeon.id), 30_000, "room.message(agent 지연)");
+    assert.deepEqual(devReply.message.work.filesChanged, ["smoke.txt"], `work.filesChanged ${JSON.stringify(devReply.message.work.filesChanged)}`);
+    const card = await groupWs.waitFor((e) => e.type === "room.message" && e.message.kind === "changes", 30_000, "room.message(changes)");
+    assert.equal(card.message.changes.status, "ready", `changes.status ${card.message.changes.status}`);
+    assert.equal(card.message.changes.memberId, jiyeon.id, "changes.memberId");
+    assert.equal(card.message.changes.branch, jiyeon.branch, "changes.branch");
+    assert.ok(card.message.changes.files.some((f) => f.path === "smoke.txt"), `changes.files ${JSON.stringify(card.message.changes.files)}`);
+    assert.equal(card.message.changes.messageId, card.message.id, "changes.messageId");
+    await groupWs.waitFor(isIdleStatusAfter(card.seq), 5000, "room.status(idle)");
+    const changes = await api("GET", `/api/v1/teams/${team.id}/changes`);
+    assert.equal(changes.status, 200);
+    assert.equal(changes.json.changes.length, 1, `changes.length ${changes.json.changes.length}`);
+    const changeId = changes.json.changes[0].id;
+    assert.equal(changeId, card.message.changes.id, "changes 목록과 카드의 id 가 다름");
+    assertMonotonicSeq(groupWs.events);
+    note(`17. 지연 reply(files=${devReply.message.work.filesChanged}) + changes card ${changeId} ready(${card.message.changes.commits} commit) OK`);
+
+    step = "18. DM WS → room.send(ask @minsu) → 지연 답변에 @minsu, 그룹방 연쇄 없음";
+    const dmWs = await connect(`${WS_BASE}/api/v1/teams/${team.id}/rooms/${dm.id}/ws`);
+    const dmSnapshot = await dmWs.waitFor((e) => e.type === "room.snapshot", 5000, "room.snapshot(dm)");
+    assert.equal(dmSnapshot.room.kind, "dm");
+    assert.equal(dmSnapshot.room.memberId, jiyeon.id);
+    const groupBefore = await api("GET", `/api/v1/teams/${team.id}/rooms/${group.id}`);
+    const groupMessagesBefore = groupBefore.json.messages.length;
+    const groupEventsBefore = groupWs.events.filter((e) => e.type === "room.message").length;
+    dmWs.send({ type: "room.send", text: "ask @minsu" });
+    const dmUser = await dmWs.waitFor((e) => e.type === "room.message" && e.message.author.kind === "user", 5000, "room.message(dm user)");
+    assert.deepEqual(dmUser.message.mentions, [], "DM 사용자 메시지의 mentions 는 비어 있어야 함");
+    await allowApproval(dmWs, jiyeon.id);
+    const dmReply = await dmWs.waitFor(isAgentText(jiyeon.id), 30_000, "room.message(dm agent 지연)");
+    assert.ok(dmReply.message.text.includes("@minsu 확인 부탁해요."), `DM 답변에 @minsu 없음: ${dmReply.message.text}`);
+    await dmWs.waitFor(isIdleStatusAfter(dmReply.seq), 5000, "room.status(dm idle)");
+    const detailAfterDm = await api("GET", `/api/v1/teams/${team.id}`);
+    assert.equal(detailAfterDm.json.dispatch.running.length + detailAfterDm.json.dispatch.queued.length, 0, `DM 답변 멘션이 디스패치됨: ${JSON.stringify(detailAfterDm.json.dispatch)}`);
+    const groupAfter = await api("GET", `/api/v1/teams/${team.id}/rooms/${group.id}`);
+    assert.equal(groupAfter.json.messages.length, groupMessagesBefore, "DM 멘션이 그룹방 메시지를 만들었음");
+    assert.equal(groupWs.events.filter((e) => e.type === "room.message").length, groupEventsBefore, "DM 멘션이 그룹방 WS 에 메시지를 보냈음");
+    assertMonotonicSeq(dmWs.events);
+    assertMonotonicSeq(groupWs.events);
+    note(`18. DM: 지연 reply(seq ${dmReply.seq}) mentions @minsu, group messages ${groupMessagesBefore} → ${groupAfter.json.messages.length} (연쇄 없음) OK`);
+
+    step = "19. POST changes/:id/merge → merged, git log --merges 1개, show --stat 에 smoke.txt; POST stop";
+    const merged = await api("POST", `/api/v1/teams/${team.id}/changes/${changeId}/merge`);
+    assert.equal(merged.status, 200, `merge status ${merged.status}: ${JSON.stringify(merged.json)}`);
+    assert.equal(merged.json.change.status, "merged", `change.status ${merged.json.change.status}`);
+    assert.ok(typeof merged.json.mergeCommit === "string" && merged.json.mergeCommit.length === 40, `mergeCommit ${merged.json.mergeCommit}`);
+    const mergesLog = (await git(repo, "log", "--merges", "--oneline")).split("\n").filter((l) => l.trim() !== "");
+    assert.equal(mergesLog.length, 1, `merge 커밋 ${mergesLog.length}개: ${mergesLog.join(" | ")}`);
+    assert.ok(mergesLog[0].startsWith(merged.json.mergeCommit.slice(0, 7)), `merge 커밋이 mergeCommit 과 다름: ${mergesLog[0]}`);
+    const shown = await git(repo, "show", "--stat", "HEAD");
+    assert.ok(shown.includes("smoke.txt"), "git show --stat HEAD 에 smoke.txt 가 없음");
+    assert.equal((await git(repo, "rev-parse", "--abbrev-ref", "HEAD")).trim(), "main", "머지 후 현재 브랜치");
+    const cardMerged = await groupWs.waitFor((e) => e.type === "room.message.updated" && e.message.kind === "changes" && e.message.changes.status === "merged", 5000, "room.message.updated(changes merged)");
+    assert.equal(cardMerged.message.seq, card.message.seq, "변경 카드 갱신은 message.seq 를 유지해야 함");
+    const stopped = await api("POST", `/api/v1/teams/${team.id}/stop`);
+    assert.equal(stopped.status, 200, `stop status ${stopped.status}`);
+    assert.deepEqual(stopped.json, { running: [], queued: [] }, `stop 결과 ${JSON.stringify(stopped.json)}`);
+    assertMonotonicSeq(groupWs.events);
+    note(`19. merge ${merged.json.mergeCommit.slice(0, 7)} (${mergesLog[0]}) + stop OK`);
+
+    step = "20. DELETE /api/v1/teams/:id → worktree 없음, 목록에 없음, 세션 closed + team";
+    const del = await api("DELETE", `/api/v1/teams/${team.id}`);
+    assert.equal(del.status, 200, `delete status ${del.status}: ${JSON.stringify(del.json)}`);
+    deleted = true;
+    for (const m of team.members) {
+      await assert.rejects(stat(m.worktreePath), `worktree 가 남아 있음: ${m.worktreePath}`);
+    }
+    await assert.rejects(stat(path.join(homedir(), ".mam", "teams", team.id, "worktrees")), "worktrees 디렉토리가 남아 있음");
+    const list = await api("GET", "/api/v1/teams");
+    assert.equal(list.status, 200);
+    assert.ok(!list.json.teams.some((t) => t.id === team.id), "삭제한 팀이 목록에 있음");
+    const closedSessions = await api("GET", "/api/v1/sessions?status=closed");
+    assert.equal(closedSessions.status, 200);
+    for (const m of team.members) {
+      const s = closedSessions.json.sessions.find((x) => x.id === m.sessionId);
+      assert.ok(s, `팀원 세션 ${m.sessionId} 이 closed 목록에 없음`);
+      assert.deepEqual(s.team, { teamId: team.id, memberId: m.id }, `session.team ${JSON.stringify(s.team)}`);
+      assert.equal(s.instructions, undefined, "세션 응답에 instructions 가 노출됨");
+    }
+    await groupWs.close();
+    await dmWs.close();
+    note(`20. team deleted, worktrees gone, ${team.members.length} member sessions closed with team OK`);
+  } finally {
+    if (team && !deleted) {
+      const res = await api("DELETE", `/api/v1/teams/${team.id}`).catch(() => null);
+      if (!res || res.status !== 200) await api("DELETE", `/api/v1/teams/${team.id}?keepWorktrees=true`).catch(() => null);
+    }
+  }
 }
 
 async function closeAll() {

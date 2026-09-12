@@ -51,7 +51,7 @@ authorized_keys 에 공개키 추가
 6. 앱에서 사용 한도 보기: 설정 > 구독 사용 한도(또는 세션 정보 시트의 "구독 한도"). Codex 는 열 때마다 즉시 조회되지만, Claude 한도는 세션을 한 번 돌려야(턴을 보내야) 관측값이 갱신되며 카드에 "마지막 관측 HH:mm" 이 표시된다.
 
 
-### iPhone에 설치 (개발 빌드, TestFlight 는 Phase 3)
+### iPhone에 설치 (개발 빌드, TestFlight 는 Phase 6)
 
 1. `ios/Local.xcconfig` 를 만들고(`cp ios/Local.xcconfig.example ios/Local.xcconfig`) `DEVELOPMENT_TEAM` 에 Apple Developer 팀 ID를 적는다. 무료 Apple ID 도 된다.
 2. `cd ios && xcodegen generate && open MacAgent.xcodeproj` 로 Xcode 를 연다.
@@ -106,6 +106,20 @@ Codex 는 `POST /api/v1/auth/codex/login` 이 `{ url, instructions: "링크를 �
 | Claude "로그인 필요" | 사용자 홈의 `~/.claude/.credentials.json` 존재 여부와 `~/.mam/secrets/claude-oauth-token`(앱 로그인, 우선 적용, 330일 이상이면 경고) 확인 |
 | gateway가 안 뜸 | `sudo launchctl print system/dev.mam.gateway`, `/var/log/mam/gateway.log` |
 
-## 6. 보안 노트
+## 6. 팀 운영 (Phase 3, `docs/PROTOCOL.md` 6절)
+
+한 프로젝트(git 저장소)에 역할별 에이전트 팀을 꾸리고 방에서 지시한다. 팀원은 각자 `~/.mam/teams/<teamId>/worktrees/<memberId>/` 의 git worktree(브랜치 `mam/<팀-slug>/<handle>`)에서 일하고, 커밋은 서버가, 머지는 사용자가 한다.
+
+- **팀 만들기**: `POST /api/v1/teams { cwd, name, members[] }`. `cwd` 는 홈 안의 git 저장소여야 하고 현재 브랜치가 머지 대상(`baseBranch`)이 된다. 팀장(`isLead`)은 정확히 1명. 그룹방(`#전체`)과 팀원별 DM 방이 생기고, 세션은 첫 메시지 때 시작된다. 멘션 없는 그룹방 메시지는 팀장이, `@이름`/`@handle` 이 있으면 그 팀원이 받는다. 자주 쓰는 구성은 `POST /api/v1/team-templates` 로 저장해 `templateId` 로 재사용한다.
+- **머지 승인**: 팀원 턴이 끝나면 서버가 worktree 변경을 커밋하고 그룹방에 "변경 준비됨"(`kind: changes`, `status: ready`) 카드를 올린다. 사용자가 `POST /api/v1/teams/:id/changes/:changeId/merge` 를 부르면 원본 저장소에서 `git merge --no-ff` 가 실행되고 브랜치는 남는다. 원본 저장소에 커밋되지 않은 변경이 있거나 현재 브랜치가 `baseBranch` 가 아니면 409 가 나므로 먼저 커밋/stash 하거나 브랜치를 되돌린다. 필요 없는 변경은 `.../dismiss`.
+- **충돌 시 흐름**: 머지가 충돌하면 서버가 `merge --abort` 로 원본을 깨끗하게 되돌리고 카드가 `conflict` 가 된다. 그 팀원 worktree 에만 충돌 마커를 남기고 DM 방에 시스템 메시지와 함께 해결 턴이 디스패치된다. 팀원이 파일을 정리하면 턴 종료 시 머지 커밋이 만들어지고 새 `ready` 카드가 올라오니 다시 머지를 승인한다. 턴 전 `baseBranch` 최신화가 충돌해도 같은 방식(안내문이 턴 앞에 붙는다)이다.
+- **팀·팀원 삭제**: `DELETE /api/v1/teams/:id` 는 worktree 에 커밋되지 않은 변경이 있으면 409 로 거절한다. 그 변경이 필요 없으면 `?keepWorktrees=true` 로 등록만 해제한 뒤 `~/.mam/teams/<teamId>/worktrees/` 를 직접 살펴보고 `git -C <repo> worktree remove <경로>` 로 정리한다(팀원 하나는 `?keepWorktree=true`). 브랜치는 삭제해도 남는다.
+- **한도 걸림 시 재개**: 팀원 턴이 구독 사용 한도(rate limit) 오류로 끝나면 그룹방에 "구독 사용 한도에 걸려 팀 작업을 멈췄습니다" 가 올라오고 팀 디스패치가 멈춘다. 한도가 풀린 뒤 방에 메시지를 보내면 다시 시작한다. 실행 중 턴을 전부 끊으려면 `POST /api/v1/teams/:id/stop`.
+- **프롬프트·모델 수정**: `PATCH /api/v1/teams/:id/members/:memberId` 의 `prompt`·`model` 은 다음 세션부터 적용된다(Claude Agent SDK 가 system prompt 를 세션 시작 시 고정). 바로 반영하려면 앱의 "기억 초기화" 버튼(`POST .../members/:memberId/reset`)으로 세션을 새로 연다. worktree 와 브랜치는 유지된다. `mode`·`effort` 는 즉시 적용.
+- **worktree 의존성**: worktree 는 `git worktree add` 로 만든 깨끗한 체크아웃이라 `node_modules` 같은 설치물이 없다. 테스트·빌드가 필요하면 사용자가 그 worktree 디렉토리에서 직접 설치한다(자동 설치는 후속 과제).
+- **재시작**: agent-host 가 다시 뜨면 진행 중이던 턴은 취소되고 그룹방에 안내가 올라온다. `merging` 이던 카드는 git 을 대조해 `merged` 또는 `ready` 로, 브랜치가 바뀐 `ready` 카드는 `stale` 로 정리된다.
+- **개발 확인**: `bash scripts/dev-smoke.sh` 의 15~20단계가 Fake 어댑터로 팀 생성 → 방 WS → 멘션 디스패치 → 변경 카드 → DM → 머지 → 삭제를 통과한다. 실제 CLI 는 `MAM_IT_CLAUDE=1`/`MAM_IT_CODEX=1 npx vitest run --root packages/server test/teams/integration.test.ts`(비용 수 센트).
+
+## 7. 보안 노트
 
 네트워크 경계는 Tailscale이며 gateway는 tailnet IP에만 바인딩한다. 신원은 전송 계층(`tailscale whois`)에서만 오고 클라이언트 헤더는 덮어쓴다. root 코드는 gateway뿐이며 파일·git·에이전트는 사용자 권한 agent-host가 처리한다. 파일 접근은 홈 안으로 제한된다. 서버 코드는 셸 문자열을 실행하지 않는다. 토큰·승인 본문·파일 내용·비밀번호는 로그에 남기지 않는다. SSH는 공개키 전용(`/etc/ssh/sshd_config.d/mam.conf`)이며 방화벽에서 sshd를 tailnet 인터페이스로만 허용하도록 권장한다.

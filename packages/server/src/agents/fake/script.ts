@@ -1,3 +1,5 @@
+import { stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Approval, SessionMode, TurnInput } from "@mam/protocol";
 import { newId } from "../../ids.js";
 import type { AgentEvent } from "../types.js";
@@ -35,15 +37,24 @@ export type FakeScript = (ctx: ScriptContext) => Promise<void>;
 export const FAKE_FAIL_MESSAGE = "가짜 에이전트 프로세스가 예기치 않게 종료되었습니다 (exit 1)";
 
 const ASSISTANT_CHUNKS = ["안녕하세요. ", "요청하신 명령을 ", "실행하겠습니다."];
+/** `write file <이름>`: 경로 구분자 없는 파일 이름만. 뒤에 공백·줄끝이 와야 한다(`../x` 는 `..` 로 잘리지 않고 무시된다). */
+const WRITE_FILE_RE = /write file ([A-Za-z0-9._-]+)(?=\s|$)/;
+/** `ask @<핸들>`: 답변에 `@<핸들> 확인 부탁해요.` 를 붙인다(팀 연쇄 검증용). */
+const ASK_RE = /ask @([A-Za-z0-9][A-Za-z0-9-]*)/;
 
 /**
  * 기본 스크립트: user_message → assistant_message(델타 3개) → tool_call(bash "echo hi")
- * → 승인 요청(autoApprove 가 아니면) → tool_call 완료 → turn_summary + turn.completed → status idle.
+ * → 승인 요청(autoApprove 가 아니면) → tool_call 완료 → [file_change] → turn_summary + turn.completed → status idle.
  * 텍스트에 "fail" 이 있으면 error 아이템과 복구 불가 error 이벤트를 낸다.
+ * 2026-09-12: "write file <이름>" 이 있으면 `ctx.cwd/<이름>` 에 한 줄을 쓰고 file_change(add|modify) 를 낸다.
+ * "ask @<핸들>" 이 있으면 답변 끝에 `@<핸들> 확인 부탁해요.` 를 넣는다.
  */
 export const defaultScript: FakeScript = async (ctx) => {
   const { input, turnId } = ctx;
   const startedAt = Date.parse(ctx.now());
+  const writeName = WRITE_FILE_RE.exec(input.text)?.[1];
+  const askHandle = ASK_RE.exec(input.text)?.[1];
+  const chunks = askHandle === undefined ? ASSISTANT_CHUNKS : [...ASSISTANT_CHUNKS, ` @${askHandle} 확인 부탁해요.`];
   const userAt = ctx.now();
   ctx.emit({
     type: "item.started",
@@ -91,7 +102,7 @@ export const defaultScript: FakeScript = async (ctx) => {
       payload: { text: "", phase: "final" },
     },
   });
-  for (const chunk of ASSISTANT_CHUNKS) {
+  for (const chunk of chunks) {
     await ctx.delay();
     ctx.emit({ type: "item.delta", itemId: assistantId, field: "text", delta: chunk });
   }
@@ -104,7 +115,7 @@ export const defaultScript: FakeScript = async (ctx) => {
       status: "completed",
       createdAt: assistantAt,
       completedAt: ctx.now(),
-      payload: { text: ASSISTANT_CHUNKS.join(""), phase: "final" },
+      payload: { text: chunks.join(""), phase: "final" },
     },
   });
 
@@ -231,6 +242,28 @@ export const defaultScript: FakeScript = async (ctx) => {
         createdAt: toolAt,
         completedAt: ctx.now(),
         payload: { ...toolPayload, output: "hi\n", exitCode: 0 },
+      },
+    });
+  }
+
+  if (writeName !== undefined && writeName !== "." && writeName !== "..") {
+    const target = join(ctx.cwd, writeName);
+    const existed = await stat(target).then(() => true, () => false);
+    await writeFile(target, `${writeName}\n`);
+    const changeAt = ctx.now();
+    ctx.emit({
+      type: "item.started",
+      item: {
+        id: newId("itm"),
+        turnId,
+        kind: "file_change",
+        status: "completed",
+        createdAt: changeAt,
+        completedAt: changeAt,
+        payload: {
+          files: [{ path: writeName, kind: existed ? "modify" : "add", additions: 1, deletions: existed ? 1 : 0 }],
+          patch: `--- ${existed ? "a/" + writeName : "/dev/null"}\n+++ b/${writeName}\n@@ -0,0 +1 @@\n+${writeName}\n`,
+        },
       },
     });
   }

@@ -35,7 +35,7 @@ Mac 한 대를 여러 사용자의 에이전트 코딩 서버로 만드는 프�
 
 ```bash
 npm ci
-bash scripts/dev-smoke.sh --keep   # 빌드 → Fake 어댑터로 gateway 기동(:7777) → REST/WS 검증 → 서버 유지
+bash scripts/dev-smoke.sh --keep   # 빌드 → Fake 어댑터로 gateway 기동(:7777) → REST/WS 검증(세션 1~14 + 팀 15~20단계) → 서버 유지
 ```
 
 `--keep`으로 띄운 서버는 Phase 1(iOS)과 Phase 2(웹) 개발 백엔드로 그대로 쓸 수 있다(`http://127.0.0.1:7777`). Ctrl-C로 종료한다.
@@ -53,6 +53,19 @@ curl -s -H 'X-MAM-Protocol: 1' -H 'Content-Type: application/json' \
   http://127.0.0.1:7777/api/v1/sessions
 curl -s -H 'X-MAM-Protocol: 1' http://127.0.0.1:7777/api/v1/usage   # 에이전트별 구독 사용 한도(Claude 는 세션을 한 번 돌린 뒤 관측값이 생긴다)
 ```
+
+에이전트 팀(`docs/PROTOCOL.md` 6절): git 저장소인 프로젝트에 팀장 1명 + 개발자 1명을 만들고 그룹방(`rooms[]` 의 `kind: "group"`)에 지시한다. 멘션이 없으면 팀장이, `@이름`/`@handle` 이 있으면 그 팀원이 답한다.
+
+```bash
+curl -s -H 'X-MAM-Protocol: 1' -H 'Content-Type: application/json' \
+  -d '{"cwd":"'"$HOME"'/work/app","name":"backend","members":[{"name":"민수","role":"team-lead","agent":"claude","isLead":true},{"name":"지연","role":"developer","agent":"codex"}]}' \
+  http://127.0.0.1:7777/api/v1/teams                                        # → 201 Team (id, members[].sessionId, rooms[])
+curl -s -H 'X-MAM-Protocol: 1' -H 'Content-Type: application/json' \
+  -d '{"text":"@지연 README 에 설치 절을 추가해줘"}' \
+  http://127.0.0.1:7777/api/v1/teams/<teamId>/rooms/<groupRoomId>/messages  # → 201 { message, dispatches }. 답변·변경 카드는 GET .../rooms/<roomId> 또는 방 WS
+```
+
+에이전트 worktree 는 `~/.mam/teams/<teamId>/worktrees/` 에 생기고 `node_modules` 는 없다(의존성이 필요하면 사용자가 그 디렉토리에서 직접 설치한다).
 
 테스트:
 
