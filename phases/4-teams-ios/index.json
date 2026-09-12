@@ -81,10 +81,28 @@
     {
       "step": 3,
       "name": "approval-banner-generalization",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-13T00:05:48+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "9ca97d1b-8878-490c-9f63-d6ae5f0c1f90",
+          "cost_usd": 7.0548545,
+          "duration_s": 537.4,
+          "num_turns": 44,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 7.054855,
+      "duration_s": 537.4,
+      "retries": 0,
+      "session_id": "9ca97d1b-8878-490c-9f63-d6ae5f0c1f90",
+      "summary": "Generalized the approval banner/sheets over a new `ApprovalResponding` protocol (Features/Approvals/ApprovalResponding.swift: `@MainActor protocol ApprovalResponding: AnyObject, Observable` with pendingApprovals/approvalSubmit/respond(to:optionId:inputs:message:)/authorLabel defaulting nil; `TimelineModel` bare conformance). `RoomModel` conforms in RoomModel.swift: stored list renamed `pendingApprovals: [RoomApproval]` → `pendingRoomApprovals` (Swift can't overload a property by type), protocol `pendingApprovals` = `pendingRoomApprovals.map(\\.approval)` (requestedAt order kept), `respond(to: Approval…)` finds the RoomApproval by approvalId and delegates to the step 2 REST respond, `authorLabel` = \"emoji name · roleLabel\" (nil if not pending or members unknown). `ApprovalBanner`/`ApprovalSheet`/`ApprovalDetailForm`/`PendingApprovalsSheet` now take `any ApprovalResponding`; banner shows one `.caption .secondary` author line above the title only when authorLabel exists, all other layout/text/identifiers unchanged. `ItemCard` now stores `CardChrome { status, createdAt, summary }` with `init(chrome:…)`; `init(item:…)` builds the chrome via `ItemAccessibility.summary` and delegates (other card files untouched). `ApprovalCard` renders new `ApprovalCardBody(approval:resolution:onShowDetail:)` (owns resolutionLabel; ApprovalCard.resolutionLabel forwards), visuals identical. Tests first: new ApprovalRespondingTests (6: requestedAt order, POST /sessions/<sessionId>/approvals/<approvalId> via StubURLProtocol, unknown approval ignored, authorLabel \"🧑‍💻 지연 · 개발자\", nil without members, TimelineModel nil) and ItemCardChromeTests (3: chrome equals ItemAccessibility.summary, nil for messages, chrome init keeps values); RoomModelTests only mechanically renamed to pendingRoomApprovals; ApprovalBannerLogicTests and other approval tests unchanged. AC: xcodegen generate + xcodebuild test green (iOS 326 tests: 323 passed, 0 failed, 3 UI skipped; 0 warnings in touched files), file/grep checks OK, bash scripts/test.sh OK (TS 754 passed). TimelineModel.swift, fixtures, docs, phases/ untouched.",
+      "completed_at": "2026-09-13T00:14:45+0900"
     },
     {
       "step": 4,
