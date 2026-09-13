@@ -37,7 +37,9 @@ ios/
 │   │   ├── Sessions/                # 프로젝트·세션 목록, 새 세션 시트
 │   │   ├── Timeline/                # 세션 화면: 카드, 컴포저, 모드 메뉴
 │   │   ├── Approvals/               # 승인 배너, 승인 시트, 입력 폼
-│   │   └── Files/                   # 파일 브라우저, 파일 뷰어, diff 뷰
+│   │   ├── Files/                   # 파일 브라우저, 파일 뷰어, diff 뷰
+│   │   ├── Teams/                   # 팀 목록 행, 새 팀 시트, 팀원 편집기, 팀 설정, 방 목록, TeamsStore (10절)
+│   │   └── Rooms/                   # 방 화면, 컴포저, RoomModel, 멘션 파서, 방 카드(Cards/) (10절)
 │   ├── Shared/                      # ItemStyle(아이콘·색), 공용 뷰, 포맷터, 햅틱
 │   └── Resources/                   # Assets.xcassets, Localizable.xcstrings
 └── MacAgentTests/                   # 단위 테스트. fixtures 폴더 참조(../packages/protocol/fixtures)
@@ -51,7 +53,11 @@ iPhone(compact):
 ConnectView ──(연결 성공)──▶ SessionsHome
                                ├─ 프로젝트 목록 (섹션) ─▶ 프로젝트의 세션 목록
                                ├─ 최근 세션
-                               ├─ [+] 새 세션 시트 (에이전트 · 디렉토리 · 모드)
+                               ├─ [+] 메뉴: 새 세션 시트 (에이전트 · 디렉토리 · 모드) · 새 팀 시트 (10.1)
+                               ├─ 팀 (섹션) ─▶ TeamRoomsView (#전체 · DM 목록, 툴바: 중단 · 팀 설정)
+                               │                └─ 방 ─▶ RoomView
+                               │                          ├─ 승인 배너 · 상태 줄("중단") · 컴포저(멘션 제안)
+                               │                          └─ 작업 요약 카드 ─▶ 팀원 TimelineView
                                └─ 세션 ─▶ TimelineView
                                             ├─ 툴바: 파일(시트) · 모드 메뉴 · 세션 정보
                                             ├─ 승인 배너 (있을 때만, 컴포저 위에 고정)
@@ -165,6 +171,62 @@ iPad(regular): `NavigationSplitView` 3열. 사이드바 = 프로젝트·세션, 
 - **설정 > 구독 사용 한도**: 에이전트별 카드. 요금제 이름, 창마다 `ProgressView`와 `42% · 3시간 후 초기화`. Claude는 `live: false`라 "마지막 관측 HH:mm" 캡션, Codex는 새로고침 버튼으로 즉시 재조회. `warning`은 노랑, `exceeded`는 빨강 + "한도 도달". 화면 등장 시 1회 조회, 이후 60초마다.
 - 숫자 표기: 토큰은 `Formatters.tokens`(1.2k, 3.4M), 비용은 `$0.42`, 초기화 시각은 상대 시간.
 
-## 10. 범위 밖 (Phase 1)
+## 10. 3차 추가분 (2026-09-12, Phase `4-teams-ios`)
+
+서버 Phase 3 의 에이전트 팀(`docs/PROTOCOL.md` 6절, ADR-017)을 폰에서 쓰기 위한 화면. 팀을 꾸리고, 방에서 `@멘션`으로 지시하고, 승인과 머지를 방 안에서 끝낸다. 팀원은 보통 세션이므로 팀원 타임라인은 기존 `TimelineView` 를 그대로 쓴다. 프로토콜은 바꾸지 않았다(방 이벤트는 세션 WS 와 별도 스트림).
+
+### 10.1 세션 홈의 팀
+
+- **"팀" 섹션**(진행 중 아래, 프로젝트 위): `TeamRow`(이름 · cwd · 팀원 이모지 · 활동 상태). 팀이 없으면 "아직 팀이 없습니다. + 에서 새 팀을 만드세요." 세션 목록과 함께 15초마다 새로고침.
+- **`+` 는 메뉴**: "새 세션"(기존 시트) / "새 팀". 라벨과 식별자(`home.add`, `home.newSession`)는 유지한다(UI 테스트가 누른다).
+- **팀원 세션의 팀 배지**: 세션 행 캡션과 타임라인 부제 앞에 `🧑‍💻 지연 · backend`(`TeamsStore.badge`, `Session.team` 조인).
+- **새 팀 시트**(`NewTeamSheet`): 템플릿(있을 때) → 이름 → 디렉토리(새 세션과 같은 `DirectoryFormSection`, git 저장소여야 한다) → 팀원 → 고급 설정(연쇄 상한 · 동시 실행) → "팀 만들기". 첫 팀원은 자동으로 팀장, 행을 밀어 팀장 변경·삭제. 제출 규칙은 `NewTeamFormState`(이름 1~60, 디렉토리, 팀원 1명 이상, 팀장 정확히 1명, 팀원 검증 통과) 이고 막히는 이유를 버튼 아래 캡션으로 보여준다. 만든 뒤 방 목록으로 push(iPad 는 사이드바 선택).
+- **팀원 편집기**(`MemberEditorView`): 역할 피커 = 서버 프리셋("기본 프리셋", `GET /team-roles`) + 앱 로컬 프리셋("내 프리셋", `RolePresetStore` UserDefaults). 이름(`@멘션`에 쓰인다. `@`·공백 금지, 팀 안에서 유일) · 이모지 한 글자 · 에이전트(Claude/Codex, `/me` 로 사용 가능 여부) · 모드 `ask / auto-edit / plan`(**`full-auto` 없음**) · 지시문 · 팀장 토글. 커스텀 역할은 "프리셋으로 저장". 기존 팀원 편집은 `PATCH` 가 받는 필드만(역할·에이전트·팀장 고정), 지시문·모델을 바꾸면 "다음 세션부터 적용됩니다(기억 초기화로 바로 적용)" 캡션.
+- **팀 설정**(`TeamSettingsView`): 이름·설정 저장, 팀원 편집·기억 초기화·제거·추가, 작업 전부 중단, 팀 삭제. 삭제·제거가 409(커밋되지 않은 worktree 변경)면 "worktree 남기고 삭제" 알림으로 `keepWorktrees=true`(팀원은 `keepWorktree=true`) 재시도.
+
+### 10.2 방 목록과 방 화면
+
+- **방 목록**(`TeamRoomsView`): `#전체` 먼저(마지막 메시지 상대 시간), DM 은 팀원 순서(`MemberChip` + 상태 점 + 팀장 캡션). 상태는 세션 목록의 팀원 세션 status 매핑(`MemberStatus`), 없으면 서버 `member.state`. 툴바: 작업 전부 중단(확인 대화상자), 팀 설정(compact 는 push, iPad 는 시트).
+- **방 화면**(`RoomView` → `RoomScreen`): 타임라인과 같은 골격(바닥 앵커, 위로 올라가 있으면 "새 메시지" 칩, `safeAreaInset` 에 승인 배너 + 상태 줄 + 컴포저, 백그라운드에서 소켓 닫고 복귀 시 `since` 재접속). 제목은 `#전체` 또는 팀원 칩 + 팀 이름. 툴바 팀원 시트(상태·브랜치, 탭하면 그 세션의 타임라인).
+- **작업 중 말풍선**: 목록 끝에 "지연이 작업 중…"(`ProgressView`) / "민수가 대기 중…"(시계). 답변이 오고 `room.status` 로 상태가 바뀌면 사라진다. **상태 줄**: 컴포저 위 "지연 작업 중 · 민수 대기 중" + **"중단"**(팀 전체 `room.interrupt`). 아무도 일하지 않으면 없다.
+- **컴포저**: 그룹방에서 텍스트 끝의 `@토큰` 에 이름·핸들이 맞는 팀원을 제안 칩으로(탭 → `@이름 `), 멘션이 없으면 **팀장 캡션** "팀장 민수에게 전달됩니다", 모르는 `@토큰` 은 "모르는 팀원 @xxx 는 무시됩니다"(우선, 입력 중인 끝 토큰은 제외). DM 은 캡션도 제안도 없다(서버가 멘션을 무시한다). 정지 버튼은 없고, 소켓이 닫혀 있어도 REST 로 보낸다.
+- **길게 눌러 답장**: 에이전트 메시지 컨텍스트 메뉴 "@이름에게 답장"(컴포저 끝에 `@이름 ` 삽입) · 복사.
+- **답변은 턴 종료 후 한 번에**(스트리밍 없음). 사용자 메시지도 낙관적으로 넣지 않고 서버의 `room.message` 를 기다린다.
+- **승인은 방 배너에서**: 미러링된 승인 카드에는 버튼이 없다. 배너(제목 위 **작성자 캡션** `🧑‍💻 지연 · 개발자`)·시트가 카드의 `sessionId` 로 기존 `POST /sessions/:id/approvals/:approvalId` 를 부르고, 확정은 `room.message.updated` 다. 409/404 는 "이미 처리됨" 을 잠깐 보여주고 방을 다시 읽는다. 세션 화면과 같은 배너를 쓴다(`ApprovalResponding`).
+
+### 10.3 카드
+
+- **작업 요약**(`WorkSummaryCard`): 에이전트 답변 바로 아래 한 줄 `도구 7회 · 파일 3개 변경 · 12초`(+ ` · $0.04 추정`, 파일 0개면 "파일 변경 없음"). 전체가 버튼이며 탭하면 그 팀원의 타임라인(`work.sessionId`, compact push / iPad 디테일 열).
+- **승인**(`RoomApprovalCard`): 대기 중은 노란 배경 + `hand.raised.fill` + 팀원 칩 + 타임라인 `ApprovalCard` 와 같은 본문("자세히 보기" → 시트), 해결되면 "허용됨 · 12:03" 한 줄.
+- **변경 준비됨**(`ChangesReadyCard`, `.contain` 접근성): 팀원 칩, `mam/backend/jiyeon → main`, 파일 행(최대 5개 + "외 N개"). `ready` → **"<base>에 병합"**(확인 대화상자 "main에 병합합니다. 프로젝트의 작업 트리가 깨끗해야 합니다." 후 `POST .../merge`) + **"거절"**. `merging`/전송 중 → 진행 표시와 버튼 비활성. `merged` → 초록 체크 "병합됨 · a1b2c3d". `conflict` → 빨간 삼각형 + **충돌 파일** + "충돌이 났습니다. 지연이 worktree 에서 해결하면 새 카드가 올라옵니다"(해결 UI 는 없다. 해결은 팀원 턴이 한다). `dismissed` → "거절됨", `stale` → "새 변경으로 대체됨". 상태 확정은 서버 값(응답 ChangeSet 또는 `room.message.updated`)이며 낙관적 갱신은 없다. 서버 409 문구(더러운 작업 트리·다른 브랜치)는 카드 아래 빨간 캡션.
+
+### 10.4 iPad
+
+사이드바에 "팀" 섹션(세션 선택과 배타적). content 열 = 방 목록 → 방 화면(`AppState.selectedRoom` 으로 스택 경로), detail 열 = 팀원 목록(상태·브랜치) → 팀원 타임라인(`AppState.selectedMemberSessionId`). 작업 요약 카드 탭도 detail 열을 바꾼다. 팀 설정은 시트.
+
+### 10.5 상태 흐름
+
+- `TeamsStore`(앱 전역): `/teams` · `/team-templates` · `/team-roles` 를 병렬로 읽고 실패한 쪽은 이전 값을 유지한다. 생성·수정·삭제·팀원 편집은 응답 `Team` 으로 목록을 교체한다(낙관적 갱신 없음). `team(forSession:)` 으로 세션 ↔ 팀원을 조인한다.
+- `RoomModel`(방당 1개): `apply(_ event: RoomEvent)` 가 **유일한 변경 경로**. `room.snapshot` → 메시지 upsert · pending · 팀원 상태 · `isReplaying`, `room.message` → id 로 upsert(승인이면 pending 추가 + 햅틱, 재생 중은 제외), `room.message.updated` → id 교체 + pending·mergeSubmit 정리, `room.status` → 팀원 상태·디스패치, `room.error` → recoverable 이면 컴포저 위 3초 캡션, 아니면 상단 배너. `seq ≤ lastSeq` 는 무시(snapshot/pong 은 seq 0). `start()` = `GET /teams/:id`(팀원·방) → `GET /teams/:id/rooms/:roomId` → `since=lastSeq` 로 소켓.
+- `AppState` LRU(8): 세션(타임라인 + 파일 브라우저)과 방(`RoomModel`)이 같은 목록에서 오래된 순으로 밀려나며 밀려나면 `stop()`.
+- `RoomSocket` = `EventSocket<RoomEvent, RoomClientMessage>`(세션 소켓과 같은 제네릭·정책): 끊기면 1s→2s→…30s 백오프로 `since=lastSeq` 재접속, 20초 `ping`, close 4004(방 없음)는 재접속하지 않고 "방이 없습니다". 세션 이벤트 프레임은 무시한다.
+
+### 10.6 접근성 식별자
+
+UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로. `MAM_UI_TEST_SERVER` 와 `MAM_UI_TEST_REPO`(`bash scripts/dev-smoke.sh --keep` 이 출력하는 git 저장소) 가 없으면 `XCTSkip`. 흐름은 새 팀 → `#전체` → `@지` 제안 칩 → `write file ui.txt` → 배너 허용 → 작업 요약 → 팀원 타임라인 → "main에 병합" → "병합됨" 이고, 끝에 REST 로 팀을 지운다(`keepWorktrees=true`).
+
+| 식별자 | 위치 |
+|---|---|
+| `home.newTeam` | 세션 홈 `+` 메뉴의 "새 팀" |
+| `teams.row.<teamId>` | 세션 홈 "팀" 섹션의 팀 행 |
+| `newTeam.name` · `newTeam.addMember` · `newTeam.submit` | 새 팀 시트의 이름 · "팀원 추가" · "팀 만들기" (디렉토리는 `newTeam.customToggle` 등 `newTeam.*`) |
+| `memberEditor.name` · `memberEditor.save` | 팀원 편집기의 이름 · "완료" (역할 `memberEditor.role`, 팀장 `memberEditor.lead`) |
+| `rooms.group` · `rooms.dm.<memberId>` | 방 목록의 `#전체` · DM 행 |
+| `room.composer.input` · `room.composer.send` | 방 컴포저의 입력 · 보내기 |
+| `room.mention.<memberId>` | 컴포저 위 멘션 제안 칩 |
+| `room.workSummary.<messageId>` | 에이전트 답변 아래 작업 요약(탭 → 팀원 타임라인) |
+| `room.merge.<changeId>` · `room.dismiss.<changeId>` | 변경 준비됨 카드의 "<base>에 병합" · "거절" |
+
+## 11. 범위 밖 (Phase 1)
 
 - 파일 편집·업로드, 터미널, 푸시 알림(APNs, Phase 3), 여러 서버 동시 관리(서버 1개만 저장), 세션 검색, 위젯·Live Activity, iPad 멀티윈도우.

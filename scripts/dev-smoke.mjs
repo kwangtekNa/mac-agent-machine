@@ -10,6 +10,8 @@ import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
 
+/** `--keep`(dev-smoke.sh --keep 가 전달): 임시 cwd 와 그 안의 git 저장소를 남기고 `MAM_UI_TEST_REPO=<repo>` 한 줄을 출력한다(iOS TeamRoomUITests 용). 팀·worktree 는 그대로 정리한다. */
+const KEEP = process.argv.includes("--keep");
 const PORT = Number(process.env.MAM_DEV_PORT ?? 7777);
 const BASE = `http://127.0.0.1:${PORT}`;
 const WS_BASE = `ws://127.0.0.1:${PORT}`;
@@ -132,6 +134,7 @@ async function main() {
   const cwd = path.join(homedir(), ".mam", "smoke", String(Date.now()));
   await mkdir(cwd, { recursive: true });
   note(`2. tmp cwd: ${cwd}`);
+  let uiTestRepo = null;
 
   try {
     step = "3. POST /api/v1/sessions";
@@ -274,13 +277,14 @@ async function main() {
       await api("POST", `/api/v1/sessions/${second.json.id}/close`);
     }
 
-    await teamSteps(cwd);
+    uiTestRepo = await teamSteps(cwd);
   } finally {
-    await rm(cwd, { recursive: true }).catch(() => {});
+    if (!KEEP) await rm(cwd, { recursive: true }).catch(() => {});
   }
 
   console.log("dev-smoke: OK");
   for (const line of log) console.log(`  ${line}`);
+  if (KEEP && uiTestRepo) console.log(`MAM_UI_TEST_REPO=${uiTestRepo}`);
   await closeAll();
   process.exit(0);
 }
@@ -336,16 +340,16 @@ const isAgentText = (memberId) => (e) =>
   e.type === "room.message" && e.message.kind === "text" && e.message.author.kind === "agent" && e.message.author.memberId === memberId;
 const isIdleStatusAfter = (seq) => (e) => e.type === "room.status" && e.seq > seq && e.members.every((m) => m.state === "idle");
 
-/** 15~20단계: PROTOCOL.md 6절 종단 검증. 실패해도 팀은 best-effort 로 지운다(worktree 가 더러우면 keepWorktrees). */
+/** 15~20단계: PROTOCOL.md 6절 종단 검증. 실패해도 팀은 best-effort 로 지운다(worktree 가 더러우면 keepWorktrees). 만든 git 저장소 경로를 돌려준다. */
 async function teamSteps(cwd) {
   let team = null;
   let deleted = false;
+  const repo = path.join(cwd, "repo");
   try {
     step = "15. GET /api/v1/team-roles, git init, POST /api/v1/teams";
     const roles = await api("GET", "/api/v1/team-roles");
     assert.equal(roles.status, 200, `team-roles status ${roles.status}: ${JSON.stringify(roles.json)}`);
     assert.equal(roles.json.roles.length, 5, `roles.length ${roles.json.roles.length} !== 5`);
-    const repo = path.join(cwd, "repo");
     await mkdir(repo, { recursive: true });
     await git(repo, "init", "-q", "-b", "main");
     await writeFile(path.join(repo, "README.md"), "# smoke\n");
@@ -497,6 +501,7 @@ async function teamSteps(cwd) {
       if (!res || res.status !== 200) await api("DELETE", `/api/v1/teams/${team.id}?keepWorktrees=true`).catch(() => null);
     }
   }
+  return repo;
 }
 
 async function closeAll() {

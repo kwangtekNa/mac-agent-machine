@@ -124,7 +124,7 @@ struct MemberEditorView: View {
                         dismiss()
                     }
                     .disabled(!errors.isEmpty)
-                    .accessibilityIdentifier("memberEditor.done")
+                    .accessibilityIdentifier("memberEditor.save")
                 }
             }
         }

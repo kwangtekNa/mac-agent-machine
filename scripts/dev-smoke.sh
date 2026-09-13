@@ -83,9 +83,14 @@ if [ "$ready" -ne 1 ]; then
 fi
 
 echo "==> scripts/dev-smoke.mjs"
-MAM_DEV_PORT="$PORT" node scripts/dev-smoke.mjs
+if [ "$KEEP" -eq 1 ]; then
+  # --keep 이면 스모크가 만든 git 저장소를 남기고 `MAM_UI_TEST_REPO=<경로>` 를 출력한다(iOS TeamRoomUITests 가 쓴다).
+  MAM_DEV_PORT="$PORT" node scripts/dev-smoke.mjs --keep
+else
+  MAM_DEV_PORT="$PORT" node scripts/dev-smoke.mjs
+fi
 
 if [ "$KEEP" -eq 1 ]; then
-  echo "==> --keep: gateway 를 유지합니다 (http://127.0.0.1:$PORT). Ctrl-C 로 종료하세요."
+  echo "==> --keep: gateway 를 유지합니다 (http://127.0.0.1:$PORT). Ctrl-C 로 종료하세요. 위 MAM_UI_TEST_REPO 는 UI 테스트용 저장소입니다."
   wait "$GATEWAY_PID"
 fi

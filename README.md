@@ -83,11 +83,16 @@ iOS 앱(`ios/`, 설계는 `docs/IOS.md`):
 cd ios && xcodegen generate                                   # MacAgent.xcodeproj 생성(생성물, 커밋하지 않음)
 open MacAgent.xcodeproj                                       # Xcode 에서 iPhone 17 Pro 시뮬레이터로 실행(⌘R)
 xcodebuild test -scheme MacAgent -destination 'platform=iOS Simulator,name=iPhone 17 Pro'   # 단위 테스트
-# UI 테스트 2개(ApprovalFlowUITests: hello → 승인 허용 → 완료, UsageAndFilesUITests: 찾아보기 → 새 폴더 → 파일 탭 → 컨텍스트 게이지 → 세션 정보 시트).
-# 다른 터미널에서 bash scripts/dev-smoke.sh --keep 으로 개발 서버를 띄운 뒤 실행한다. MAM_UI_TEST_SERVER 가 없으면 둘 다 XCTSkip.
-MAM_UI_TEST_SERVER=http://127.0.0.1:7777 xcodebuild test -scheme MacAgent \
+# UI 테스트 3개(ApprovalFlowUITests: hello → 승인 허용 → 완료, UsageAndFilesUITests: 찾아보기 → 새 폴더 → 파일 탭 → 컨텍스트 게이지 → 세션 정보 시트,
+# TeamRoomUITests: 새 팀 → #전체 → @멘션 → write file → 승인 허용 → 작업 요약 → 팀원 타임라인 → main에 병합 → 병합됨).
+# 다른 터미널에서 bash scripts/dev-smoke.sh --keep 으로 개발 서버를 띄운 뒤 실행한다. MAM_UI_TEST_SERVER 가 없으면 셋 다 XCTSkip.
+# TeamRoomUITests 는 MAM_UI_TEST_REPO(dev-smoke --keep 이 마지막에 `MAM_UI_TEST_REPO=<git 저장소>` 로 출력하는 경로)도 필요하며 없으면 XCTSkip.
+# 같은 저장소에 두 번 돌리면 ui.txt 가 이미 main 에 있어 변경 카드가 안 올라오므로 서버를 다시 띄워 새 저장소로 돌린다.
+MAM_UI_TEST_SERVER=http://127.0.0.1:7777 MAM_UI_TEST_REPO=<위 경로> xcodebuild test -scheme MacAgent \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:MacAgentUITests
 ```
+
+팀 기능(팀 섹션, 새 팀 시트, 방, 카드)은 서버 phase 3 의 API(`docs/PROTOCOL.md` 6절)를 쓴다. 화면 설계는 `docs/IOS.md` 10절.
 
 시뮬레이터 앱의 첫 화면에는 "개발 서버(127.0.0.1:7777)에 연결" 버튼이 있다. 실기기 설치는 `docs/RUNBOOK.md` 의 "iPhone에 설치" 절.
 

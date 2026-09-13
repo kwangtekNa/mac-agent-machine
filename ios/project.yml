@@ -113,3 +113,7 @@ schemes:
         - variable: MAM_UI_TEST_SERVER
           value: "$(MAM_UI_TEST_SERVER)"
           isEnabled: true
+        # TeamRoomUITests 가 팀을 만들 git 저장소(`bash scripts/dev-smoke.sh --keep` 이 출력하는 MAM_UI_TEST_REPO). 없으면 XCTSkip.
+        - variable: MAM_UI_TEST_REPO
+          value: "$(MAM_UI_TEST_REPO)"
+          isEnabled: true

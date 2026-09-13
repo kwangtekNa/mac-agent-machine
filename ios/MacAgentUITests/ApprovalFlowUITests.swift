@@ -43,9 +43,11 @@ final class ApprovalFlowUITests: XCTestCase {
             toggle.tap()
         }
         XCTAssertTrue(pathField.waitForExistence(timeout: 5))
-        // "직접 입력" 을 열면 선택돼 있던 프로젝트 경로가 미리 채워진다. 끝에 커서를 두고 지운 뒤 입력한다.
-        pathField.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
-        if let existing = pathField.value as? String, !existing.isEmpty, existing != "~/work/my-app" {
+        // "직접 입력" 을 열면 선택돼 있던 프로젝트 경로가 미리 채워진다(dev-smoke 팀 단계가 남긴 긴 worktree 경로일 수 있다).
+        // 긴 경로는 첫 탭의 커서가 보이는 부분의 끝(중간)에 놓여 한 번에 지워지지 않으므로, 끝을 다시 탭하며 비워질 때까지 지운다.
+        for _ in 0..<6 {
+            pathField.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+            guard let existing = pathField.value as? String, !existing.isEmpty, existing != "~/work/my-app" else { break }
             pathField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count + 4))
         }
         pathField.typeText("~/.mam")
