@@ -298,6 +298,11 @@ export class ClaudeSession implements AgentSession {
     const options: Options = {
       cwd: start.cwd,
       permissionMode: toPermissionMode(this.mode),
+      // SDK 는 `permissionMode: "bypassPermissions"` 에 이 플래그를 요구한다(sdk.d.ts). 플래그는 bypass 를 "허용" 할 뿐
+      // 켜지는 않는다: 실제 bypass 여부는 `permissionMode`(= 세션 mode) 가 정하고, full-auto 전환은 사용자가 앱에서
+      // 확인한 뒤 PATCH 로만 일어난다(ADR-015). 런타임 `setPermissionMode("bypassPermissions")` 도 프로세스가 이 플래그로
+      // 시작돼 있어야 적용되므로 모드와 무관하게 항상 넣는다.
+      allowDangerouslySkipPermissions: true,
       includePartialMessages: true,
       settingSources: this.cfg.settingSources,
       canUseTool: (name, input, o) => this.canUseTool(name, input, o),
@@ -523,6 +528,9 @@ export class ClaudeSession implements AgentSession {
     options: { signal: AbortSignal; suggestions?: PermissionUpdate[]; title?: string; decisionReason?: string },
   ): Promise<PermissionResult> {
     if (this.closed) return Promise.resolve({ behavior: "deny", message: "세션이 닫혔습니다", interrupt: true });
+    // 이중 안전장치: full-auto 는 모든 도구를 승인 없이 실행한다. bypassPermissions 중에도 SDK 가 canUseTool 을
+    // 부르는 도구가 있으면 승인 아이템·approval.requested 없이 즉시 허용한다. 다른 모드는 아래 그대로.
+    if (this.mode === "full-auto") return Promise.resolve({ behavior: "allow", updatedInput: input });
     const suggestions = options.suggestions ?? [];
     const title = toolTitle(toolName, input);
     let json = JSON.stringify(input, null, 2) ?? "{}";
@@ -559,6 +567,7 @@ export class ClaudeSession implements AgentSession {
     });
   }
 
+  /** 라이브 프로세스면 `setPermissionMode`, 없으면(idle) 저장만 하고 다음 `openProcess` 의 `permissionMode` 로 간다. */
   async setMode(mode: SessionMode): Promise<void> {
     this.mode = mode;
     if (this.q) await this.q.setPermissionMode(toPermissionMode(mode));

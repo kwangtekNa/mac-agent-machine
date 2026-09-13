@@ -1,5 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ClaudeAdapter } from "../../../src/agents/claude/adapter.js";
@@ -8,7 +8,71 @@ import { RateLimitStore } from "../../../src/usage/rate-limit-store.js";
 
 const enabled = process.env.MAM_IT_CLAUDE === "1";
 
+// Claude Code 기본(default) 모드는 읽기 전용 명령(`echo pong` 등)을 승인 없이 자동 허용하므로, ask 와 full-auto 를
+// 구분하려면 쓰기가 있는 명령이어야 한다(관측: 2026-09-13, `echo pong` 은 ask 에서도 승인 0건).
+const BASH_PROMPT = "Use the Bash tool to run: echo pong > pong.txt && cat pong.txt. Then reply with only the cat output.";
+
+/** 임시 cwd 는 `~/.mam/smoke/<ts>/` 아래(홈 안, 샌드박스 규칙). */
+async function smokeCwd(name: string): Promise<string> {
+  const dir = join(homedir(), ".mam", "smoke", String(Date.now()), name);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
+interface BashRun { text: string; approvals: number; toolCalls: number; completed: boolean }
+
+/** Bash 한 턴을 돌리고 승인 요청 수·tool_call 수·답변을 모은다. 승인 요청이 오면 allow 로 응답한다. */
+async function runBashTurn(mode: "ask" | "full-auto", cwd: string): Promise<BashRun> {
+  const logger = { info: () => undefined, warn: (m: string) => console.log("[it] warn", m), error: (m: string) => console.log("[it] error", m) };
+  const adapter = new ClaudeAdapter({ extraOptions: { maxTurns: 4 }, settingSources: [], dataDir: join(cwd, ".mam"), logger });
+  const s = await adapter.start({ cwd, mode });
+  const run: BashRun = { text: "", approvals: 0, toolCalls: 0, completed: false };
+  try {
+    await s.sendTurn({ text: BASH_PROMPT });
+    for await (const e of s.events) {
+      if (e.type === "approval.requested") {
+        run.approvals += 1;
+        await s.respondApproval(e.approval.approvalId, "allow");
+      }
+      if (e.type === "item.completed" && e.item.kind === "tool_call") run.toolCalls += 1;
+      if (e.type === "item.completed" && e.item.kind === "assistant_message") run.text += e.item.payload.text;
+      if (e.type === "error") console.log("[it] error", e.message);
+      if (e.type === "turn.completed") run.completed = true;
+      if (e.type === "status" && e.status === "idle" && run.completed) break;
+    }
+  } finally {
+    await s.close();
+  }
+  console.log(`[it] ${mode} approvals=${run.approvals} toolCalls=${run.toolCalls} text=${JSON.stringify(run.text)}`);
+  return run;
+}
+
 describe.skipIf(!enabled)("ClaudeAdapter 통합(MAM_IT_CLAUDE=1)", () => {
+  it("full-auto: Bash 실행에 approval.requested 0건, tool_call 아이템, pong 답변", { timeout: 120_000 }, async () => {
+    const cwd = await smokeCwd("claude-full-auto");
+    try {
+      const run = await runBashTurn("full-auto", cwd);
+      expect(run.completed).toBe(true);
+      expect(run.approvals).toBe(0);
+      expect(run.toolCalls).toBeGreaterThanOrEqual(1);
+      expect(run.text.toLowerCase()).toContain("pong");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("ask: 같은 지시에 approval.requested 1건 이상", { timeout: 120_000 }, async () => {
+    const cwd = await smokeCwd("claude-ask");
+    try {
+      const run = await runBashTurn("ask", cwd);
+      expect(run.completed).toBe(true);
+      expect(run.approvals).toBeGreaterThanOrEqual(1);
+      expect(run.text.toLowerCase()).toContain("pong");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("실제 SDK: pong 응답과 turn.completed", { timeout: 120_000 }, async () => {
     const cwd = await mkdtemp(join(tmpdir(), "mam-it-claude-"));
     const dataDir = join(cwd, ".mam");

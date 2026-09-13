@@ -219,6 +219,7 @@ export class CodexSession implements AgentSession {
     if (this.closed) throw new ConflictError("Codex 세션이 닫혔습니다");
     if (this.turnActive) throw new AgentBusyError();
     this.turnActive = true;
+    // setMode 로 바뀐 mode 는 여기서 읽어 다음 turn/start 에 실린다. 진행 중인 턴에는 적용되지 않는다.
     const { approvalPolicy, sandbox } = toCodexPolicy(this.mode);
     const userInput: UserInput[] = [{ type: "text", text: input.text, text_elements: [] }];
     for (const a of input.attachments ?? []) userInput.push({ type: "image", url: `data:${a.mediaType};base64,${a.base64}` });
@@ -296,6 +297,12 @@ export class CodexSession implements AgentSession {
     const mapped = this.mapper.mapRequest(method, params);
     if (!mapped) return Promise.reject(new Error(`지원하지 않는 요청: ${method}`));
     if (this.closed) return Promise.resolve(mapped.respond("abort"));
+    // 이중 안전장치: full-auto(approvalPolicy never) 에서는 승인 요청이 오지 않아야 하지만, 오면 승인 아이템 없이
+    // 자동 승인한다. 사용자 입력 요청(질문)은 권한이 아니므로 그대로 사용자에게 보낸다. 본문은 로그에 남기지 않는다.
+    if (this.mode === "full-auto" && mapped.approval.kind !== "user_input") {
+      this.cfg.logger.info(`[codex] full-auto: ${method} 자동 승인`);
+      return Promise.resolve(mapped.respond("allow"));
+    }
     return new Promise<unknown>((resolve) => {
       const p: PendingApproval = { ...mapped, resolve };
       this.pending.set(mapped.approval.approvalId, p);

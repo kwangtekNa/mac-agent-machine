@@ -1,5 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CodexAdapter } from "../../../src/agents/codex/adapter.js";
@@ -7,8 +7,73 @@ import type { AgentEvent } from "../../../src/agents/types.js";
 
 const IT = process.env.MAM_IT_CODEX === "1";
 
+const BASH_PROMPT = "Use the Bash tool to run: echo pong. Then reply with only its output.";
+
+/** 임시 cwd 는 `~/.mam/smoke/<ts>/` 아래(홈 안, 샌드박스 규칙). */
+async function smokeCwd(name: string): Promise<string> {
+  const dir = join(homedir(), ".mam", "smoke", String(Date.now()), name);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
+interface BashRun { text: string; approvals: number; toolCalls: number; completed: boolean }
+
+/** 명령 한 턴을 돌리고 승인 요청 수·tool_call 수·답변을 모은다. 승인 요청이 오면 allow 로 응답한다. */
+async function runBashTurn(mode: "ask" | "full-auto", cwd: string): Promise<BashRun> {
+  const adapter = new CodexAdapter({ dataDir: join(cwd, ".mam") });
+  const session = await adapter.start({ cwd, mode });
+  const run: BashRun = { text: "", approvals: 0, toolCalls: 0, completed: false };
+  try {
+    const iter = session.events[Symbol.asyncIterator]();
+    await session.sendTurn({ text: BASH_PROMPT });
+    while (true) {
+      const r = await iter.next();
+      if (r.done) break;
+      const e = r.value;
+      if (e.type === "approval.requested") {
+        run.approvals += 1;
+        await session.respondApproval(e.approval.approvalId, "allow");
+      }
+      if (e.type === "item.completed" && e.item.kind === "tool_call") run.toolCalls += 1;
+      if (e.type === "item.completed" && e.item.kind === "assistant_message") run.text += e.item.payload.text;
+      if (e.type === "turn.completed") run.completed = true;
+      if (e.type === "status" && e.status === "idle" && run.completed) break;
+      if (e.type === "error") throw new Error(e.message);
+    }
+  } finally {
+    await session.close();
+  }
+  console.log(`[codex IT] ${mode} approvals=${run.approvals} toolCalls=${run.toolCalls} text=${JSON.stringify(run.text)}`);
+  return run;
+}
+
 /** 실제 `codex app-server` 스모크. `MAM_IT_CODEX=1` 일 때만 실행한다(게이트 제외). */
 describe.skipIf(!IT)("codex integration (MAM_IT_CODEX=1)", () => {
+  it("full-auto: 명령 실행에 approval.requested 0건, tool_call 아이템, pong 답변", async () => {
+    const cwd = await smokeCwd("codex-full-auto");
+    try {
+      const run = await runBashTurn("full-auto", cwd);
+      expect(run.completed).toBe(true);
+      expect(run.approvals).toBe(0);
+      expect(run.toolCalls).toBeGreaterThanOrEqual(1);
+      expect(run.text.toLowerCase()).toContain("pong");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("ask: 같은 지시에 approval.requested 1건 이상", async () => {
+    const cwd = await smokeCwd("codex-ask");
+    try {
+      const run = await runBashTurn("ask", cwd);
+      expect(run.completed).toBe(true);
+      expect(run.approvals).toBeGreaterThanOrEqual(1);
+      expect(run.text.toLowerCase()).toContain("pong");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("plan 모드 세션에서 pong 응답과 turn.completed 를 받는다", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "mam-codex-it-"));
     const adapter = new CodexAdapter({ dataDir: join(cwd, ".mam") });
