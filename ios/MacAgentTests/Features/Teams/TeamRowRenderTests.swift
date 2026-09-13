@@ -9,8 +9,8 @@ final class TeamRowRenderTests: XCTestCase {
     private var team: Team!
     private var sessions: [Session] = []
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    override func setUp() async throws {
+        try await super.setUp()
         team = try JSONCoding.decoder.decode(Team.self, from: FixtureLoader.data("rest/team.json"))
         sessions = try JSONCoding.decoder.decode(SessionsResponse.self, from: FixtureLoader.data("rest/sessions.json")).sessions
     }

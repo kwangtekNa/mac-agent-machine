@@ -17,15 +17,15 @@ final class TeamsStoreTests: XCTestCase {
         var body: Data
     }
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         store = TeamsStore(client: APIClient(baseURL: baseURL, session: StubURLProtocol.makeSession()))
         requests.value = []
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         StubURLProtocol.handler = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func install(_ routes: [Route]) {
