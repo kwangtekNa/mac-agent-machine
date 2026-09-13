@@ -5,7 +5,25 @@
     {
       "step": 0,
       "name": "full-auto-adapters",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-13T21:08:33+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "990b3660-cc76-4f03-8b25-76e4f36b70dc",
+          "cost_usd": 7.6231765000000005,
+          "duration_s": 575.9,
+          "num_turns": 65,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 7.623177,
+      "duration_s": 575.9,
+      "retries": 0,
+      "session_id": "990b3660-cc76-4f03-8b25-76e4f36b70dc",
+      "summary": "full-auto 승인 버그 수정: Claude 어댑터 openProcess 에 allowDangerouslySkipPermissions:true 상시 전달 + canUseTool 이 full-auto 면 승인 아이템 없이 즉시 allow; Codex handleRequest 는 full-auto 중 승인 요청을 자동 승인(user_input 제외), setMode 는 다음 turn/start 반영 주석. SessionManager/TeamManager 는 이미 레코드+라이브 어댑터 반영이라 테스트만 추가. 신규 테스트: test/agents/claude/permissions.test.ts(5), test/agents/codex/permissions.test.ts(3), test/sessions/manager-mode.test.ts(4, 팀원 patchMember/addMember full-auto 포함), 통합 테스트에 full-auto/ask Bash 케이스 추가. 통합 관측(실제 SDK/app-server, cwd ~/.mam/smoke/<ts>/): Claude full-auto approvals=0 toolCalls=2 text=pong, Claude ask approvals=1 (Claude Code 기본 모드가 읽기 전용 `echo pong` 을 자동 허용해 ask 도 0건이 나오므로 프롬프트를 `echo pong > pong.txt && cat pong.txt` 로 바꿈), Codex full-auto approvals=0 toolCalls=1 text=pong, Codex ask approvals=1. 게이트: npm ci·typecheck·npm test(785 passed)·grep·dev-smoke(21단계 OK)·scripts/test.sh(iOS 포함) 전부 통과. 기본 모드 ask 유지, ask/auto-edit/plan 매핑·승인 동작 불변, protocol/iOS 미수정.",
+      "completed_at": "2026-09-13T21:18:09+0900"
     },
     {
       "step": 1,
@@ -23,5 +41,6 @@
         1
       ]
     }
-  ]
+  ],
+  "created_at": "2026-09-13T21:08:33+0900"
 }
