@@ -107,7 +107,7 @@ const MEMBERS: MemberInput[] = [
   { name: "지연", handle: "jiyeon", role: "developer", agent: "codex" },
 ];
 
-async function setup(opts: { settings?: Partial<TeamSettings>; home?: string } = {}) {
+async function setup(opts: { settings?: Partial<TeamSettings>; home?: string; codexStartupIdle?: boolean } = {}) {
   const home = opts.home ?? (await realpath(await makeTmpHome("mam-team-")));
   if (!opts.home) dirs.push(home);
   const dataDir = join(home, ".mam");
@@ -119,7 +119,7 @@ async function setup(opts: { settings?: Partial<TeamSettings>; home?: string } =
     await git(repo, "commit", "-q", "-m", "init");
   }
   const claude = new FakeAdapter({ kind: "claude", autoApprove: true, script: teamScript });
-  const codex = new FakeAdapter({ kind: "codex", autoApprove: true, script: teamScript });
+  const codex = new FakeAdapter({ kind: "codex", autoApprove: true, script: teamScript, startupIdle: opts.codexStartupIdle ?? false });
   const manager = await SessionManager.open({ dataDir, adapters: { claude, codex }, logger: silent });
   const teams = await TeamManager.open({ dataDir, home, manager, logger: silent });
   cleanups.push(async () => {
@@ -254,6 +254,25 @@ describe("TeamManager dispatch", () => {
     expect(teams.detail(team.id).team.members.every((m) => m.state === "idle")).toBe(true);
     expect(teams.detail(team.id).dispatch).toEqual({ running: [], queued: [] });
     c.unsubscribe();
+  });
+
+  it("ignores the adapter's startup idle status (Codex thread/start) and still posts the reply", async () => {
+    // 회귀: Codex 어댑터는 스레드 시작 직후 `status: idle` 을 한 번 내보낸다. 이 idle 은 턴 종료가 아니므로
+    // "답변 없이 턴을 끝냈습니다" 가 아니라 실제 답변이 방에 게시돼야 한다(2026-09-13 실제 어댑터 확인에서 발견).
+    const { teams, codex, create } = await setup({ codexStartupIdle: true });
+    const team = await create();
+    const group = groupRoom(team);
+    const { dispatches } = await teams.postUserMessage(team.id, group.id, { text: "@지연 pong" });
+    expect(dispatches).toHaveLength(1);
+    await waitUntil(quiet(teams, team.id));
+    expect(codex.sessions).toHaveLength(1);
+    const detail = await teams.roomDetail(team.id, group.id);
+    expect(detail.messages.filter((m) => m.author.kind === "system" && m.text.includes("답변 없이"))).toEqual([]);
+    const jiyeon = member(team, "지연");
+    const reply = detail.messages.find((m) => m.author.kind === "agent");
+    expect(reply).toMatchObject({ author: { kind: "agent", memberId: jiyeon.id }, kind: "text", text: "완료했습니다: [#전체] 사용자: 지연 pong", hop: 1, dispatchId: dispatches[0] });
+    expect(reply!.work).toMatchObject({ toolCalls: 1, durationMs: 5 });
+    expect(teams.detail(team.id).team.members.every((m) => m.state === "idle")).toBe(true);
   });
 
   it("@지연 goes only to 지연, @all to both, and context carries earlier messages with prefixes", async () => {

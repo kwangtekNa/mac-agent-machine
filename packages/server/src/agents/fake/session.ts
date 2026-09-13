@@ -19,6 +19,8 @@ export interface FakeSessionConfig {
   autoApprove: boolean;
   delayMs: number;
   script: FakeScript;
+  /** 시작 직후 `status: idle` 1회(Codex 어댑터 흉내). */
+  startupIdle: boolean;
   now: () => Date;
 }
 
@@ -69,6 +71,7 @@ export class FakeSession implements AgentSession {
     this.effort = supportsEffort(this.model) ? options.effort : undefined;
     this.events = this.queue;
     this.queue.push({ type: "native_id", nativeId: this.nativeId });
+    if (config.startupIdle) this.queue.push({ type: "status", status: "idle" });
   }
 
   get closed(): boolean {

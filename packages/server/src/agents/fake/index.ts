@@ -12,6 +12,8 @@ export interface FakeAdapterOptions {
   delayMs?: number;
   /** 턴마다 재생할 커스텀 스크립트. 기본 `defaultScript`. */
   script?: FakeScript;
+  /** 시작 직후 `status: idle` 을 한 번 내보낸다(Codex 어댑터가 `thread/start` 뒤에 하는 것과 같다). 기본 false. */
+  startupIdle?: boolean;
   now?: () => Date;
   probe?: Partial<AgentProbe>;
 }
@@ -43,6 +45,7 @@ export class FakeAdapter implements AgentAdapter {
       autoApprove: this.options.autoApprove ?? false,
       delayMs: this.options.delayMs ?? 0,
       script: this.options.script ?? defaultScript,
+      startupIdle: this.options.startupIdle ?? false,
       now: this.options.now ?? (() => new Date()),
     });
     this.sessions.push(session);

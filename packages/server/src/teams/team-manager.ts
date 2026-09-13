@@ -1034,7 +1034,9 @@ export class TeamManager {
       switch (event.type) {
         case "item.started":
         case "item.completed":
+          // 턴 아이템(user_message 부터)이 보이면 턴이 진짜 시작된 것이다. 그 뒤의 idle 만 종료로 친다.
           noteTurn(event.item.turnId);
+          started = true;
           return;
         case "approval.requested": {
           const approval = event.approval;
@@ -1076,7 +1078,9 @@ export class TeamManager {
           if (!event.recoverable) finish({ kind: "error", turnId, message: event.message });
           return;
         case "session.status":
-          if (event.status === "running" || event.status === "waiting_approval") started = true;
+          // `running` 만으로는 시작으로 보지 않는다: 지연 시작 세션은 어댑터 기동 중 running → idle 로 잠깐 튄다
+          // (Codex 어댑터가 thread/start 직후 `status: idle` 을 낸다). 아이템 없이 온 idle 은 무시한다.
+          if (event.status === "waiting_approval") started = true;
           else if (event.status === "error") finish({ kind: "error", turnId, message: event.reason ?? "세션 오류" });
           else if (event.status === "closed") finish({ kind: "interrupted", turnId });
           else if (event.status === "idle" && started) finish({ kind: run.interrupted ? "interrupted" : "ended", turnId });
