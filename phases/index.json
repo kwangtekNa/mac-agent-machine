@@ -27,7 +27,8 @@
     },
     {
       "dir": "5-git-init",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-09-13T16:34:00+0900"
     }
   ]
 }
