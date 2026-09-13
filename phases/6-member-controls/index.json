@@ -54,10 +54,46 @@
     {
       "step": 2,
       "name": "verify-and-install",
-      "status": "pending",
+      "status": "error",
       "depends_on": [
         1
-      ]
+      ],
+      "started_at": "2026-09-13T21:33:26+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "6b7770a5-8cd2-4c86-8a0f-333359ee7c94",
+          "cost_usd": 2.5294957500000006,
+          "duration_s": 29.1,
+          "num_turns": 14,
+          "exit_code": 1,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "364d2df6-e811-42c9-aa67-e2851dfad495",
+          "cost_usd": 0.007163,
+          "duration_s": 3.3,
+          "num_turns": 1,
+          "exit_code": 1,
+          "timeout": false
+        },
+        {
+          "attempt": 3,
+          "session_id": "a9e3a299-d11a-4c1e-9395-745217df97c8",
+          "cost_usd": 0.0071779999999999995,
+          "duration_s": 3.2,
+          "num_turns": 1,
+          "exit_code": 1,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 2.543837,
+      "duration_s": 35.6,
+      "retries": 2,
+      "session_id": "a9e3a299-d11a-4c1e-9395-745217df97c8",
+      "error_message": "[3회 시도 후 실패] 세션이 구조화 결과를 반환하지 않았다 (subtype: success, exit code: 1). 작업 트리에 미완성 변경이 남아있을 수 있으니 git status로 확인한 뒤 이어서 작업하라.",
+      "failed_at": "2026-09-13T21:34:02+0900"
     }
   ],
   "created_at": "2026-09-13T21:08:33+0900"
