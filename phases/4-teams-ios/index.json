@@ -162,12 +162,30 @@
     {
       "step": 5,
       "name": "rooms-list-and-room-screen",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         2,
         3,
         4
-      ]
+      ],
+      "started_at": "2026-09-13T10:39:27+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "8050eac0-a4ff-4feb-9b6e-a4f1cee4da89",
+          "cost_usd": 9.5430225,
+          "duration_s": 940.9,
+          "num_turns": 47,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 9.543022,
+      "duration_s": 940.9,
+      "retries": 0,
+      "session_id": "8050eac0-a4ff-4feb-9b6e-a4f1cee4da89",
+      "summary": "Step 5 done: new Features/Teams/TeamRoomsView.swift (RoomRef/TeamSettingsRef/MemberTimelineRef, TeamRoomsLogic rows #전체-first + DM in member order + state via TeamActivity/MemberStatus + lastMessageLabel, TeamRoomsView list with rooms.group/rooms.dm.<id> ids, toolbar stop-all confirm + settings (compact push / iPad sheet), RoomRowView, shared TeamMemberStatusList), Features/Rooms/RoomView.swift (RoomView via appState.roomModel, RoomScreen = TimelineScreen skeleton w/ bottom anchor, \"새 메시지\" chip, safeAreaInset ApprovalBanner+RoomStatusLine(\"지연 작업 중 · 민수 대기 중\" + 중단=interrupt all)+RoomComposer, fatal/transient handling, scenePhase copy, principal title #전체/MemberChip + team name, members sheet → compact push via navigationDestination(item:) / regular selectedMemberSessionId; RoomEntryRow user/agent MessageCard, system SystemRow, approval/changes ItemCard(chrome:) one-line placeholder; WorkingBubble + WorkingBubbleText + KoreanParticle), Features/Rooms/RoomComposer.swift (pure RoomComposerState.make caption rules incl. unknown-token priority and in-progress trailing token exclusion, suggestions group-only, applying/insertingReply; RoomComposer view with caption→chips(room.mention.<id>)→input(room.composer.input/send), insertRequest binding, no stop button), Features/Rooms/Cards/MessageCard.swift (user accent-10% ItemCard, agent MemberChip+Markdown Theme.macAgent, clock, contextMenu 답장/복사, a11y \"지연(개발자): …\"), Shared/MemberAvatar.swift (MemberAvatar, RoleBadge, MemberChip(+compact), MemberStatusDot system colors + icons), ItemStyle.roomStyle(for:), MentionParser.unknownTokens. AppState: selectedTeamId, selectedRoom: RoomRef?, selectedMemberSessionId (cleared on disconnect). SplitRootView: sidebar team selection (exclusive with session), content NavigationStack path bound to selectedRoom (TeamRoomsView → RoomView), detail MemberDetailColumn (member list → TimelineView path bound to selectedMemberSessionId). SessionsHomeView: Team → TeamRoomsView, RoomRef/TeamSettingsRef destinations, teamSelection binding. Tests first: RoomComposerStateTests(12), WorkingBubbleTextTests(6), TeamRoomsViewLogicTests(4), RoomViewRenderTests(3, UIHostingController); AppStateModelKeyTests updated for RoomRef. AC: xcodegen+xcodebuild test exit 0, files exist, no NavigationStack in RoomView.swift, bash scripts/test.sh OK. No fixtures/docs/phases changed, no commit.",
+      "completed_at": "2026-09-13T10:55:08+0900"
     },
     {
       "step": 6,
