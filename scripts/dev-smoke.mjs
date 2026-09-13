@@ -3,6 +3,7 @@
 // docs/PROTOCOL.md 2절의 WS 이벤트 순서를 그대로 따라간다. 실패하면 단계와 받은 이벤트를 출력하고 exit 1.
 // 11~14단계는 2026-09-10 추가분(PROTOCOL.md: /fs/mkdir, Session.usage + session.usage, /usage, /models, PATCH model).
 // 15~20단계는 2026-09-12 추가분(PROTOCOL.md 6절: 팀 생성 → 방 WS → 멘션 디스패치 → 변경 카드 → DM → 머지 → 삭제).
+// 21단계는 2026-09-13 추가분(PROTOCOL.md 1절 POST /git/init: dryRun → 초기화 → 그 디렉토리로 팀 생성 → 삭제 → 다시 409).
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
@@ -278,6 +279,7 @@ async function main() {
     }
 
     uiTestRepo = await teamSteps(cwd);
+    await gitInitSteps(cwd);
   } finally {
     if (!KEEP) await rm(cwd, { recursive: true }).catch(() => {});
   }
@@ -502,6 +504,66 @@ async function teamSteps(cwd) {
     }
   }
   return repo;
+}
+
+/**
+ * 21단계: PROTOCOL.md 1절 `POST /git/init`(2026-09-13 추가). `<cwd>/fresh` 에 파일 2개 + `node_modules/x.js` 를 두고
+ * dryRun(200, 아무것도 안 바꿈) → 초기화(201, `.gitignore` + `main` 첫 커밋, `node_modules` 제외) → 같은 디렉토리로 `POST /teams`(201)
+ * → `DELETE /teams/:id`(200) → 다시 `POST /git/init` 은 409. 팀은 실패해도 best-effort 로 지운다. `fresh` 는 cwd 와 함께 정리된다.
+ */
+async function gitInitSteps(cwd) {
+  step = "21. POST /api/v1/git/init dryRun → 초기화 → POST /teams → DELETE → 다시 409";
+  const fresh = path.join(cwd, "fresh");
+  await mkdir(path.join(fresh, "node_modules"), { recursive: true });
+  await writeFile(path.join(fresh, "index.js"), "console.log('fresh');\n");
+  await writeFile(path.join(fresh, "README.md"), "# fresh\n");
+  await writeFile(path.join(fresh, "node_modules", "x.js"), "module.exports = 1;\n");
+
+  const dry = await api("POST", "/api/v1/git/init", { cwd: fresh, dryRun: true });
+  assert.equal(dry.status, 200, `dryRun status ${dry.status}: ${JSON.stringify(dry.json)}`);
+  assert.equal(dry.json.initialized, false, "dryRun.initialized 가 false 가 아님");
+  assert.equal(dry.json.files, 2, `dryRun.files ${dry.json.files} !== 2 (node_modules 는 기본 .gitignore 로 제외)`);
+  assert.equal(dry.json.commit, null, `dryRun.commit ${dry.json.commit}`);
+  assert.equal(dry.json.createdGitignore, true, "dryRun.createdGitignore 가 true 가 아님");
+  await assert.rejects(stat(path.join(fresh, ".git")), "dryRun 이 .git 을 만들었음");
+  await assert.rejects(stat(path.join(fresh, ".gitignore")), "dryRun 이 .gitignore 를 만들었음");
+
+  const init = await api("POST", "/api/v1/git/init", { cwd: fresh });
+  assert.equal(init.status, 201, `init status ${init.status}: ${JSON.stringify(init.json)}`);
+  assert.equal(init.json.initialized, true, "init.initialized 가 true 가 아님");
+  assert.equal(init.json.branch, "main", `init.branch ${init.json.branch}`);
+  assert.match(init.json.commit ?? "", /^[0-9a-f]{40}$/, `init.commit ${init.json.commit}`);
+  assert.equal(init.json.files, dry.json.files, `init.files ${init.json.files} !== dryRun ${dry.json.files}`);
+  assert.equal(init.json.bytes, dry.json.bytes, `init.bytes ${init.json.bytes} !== dryRun ${dry.json.bytes}`);
+  assert.ok((await stat(path.join(fresh, ".gitignore"))).isFile(), ".gitignore 가 없음");
+  const logLines = (await git(fresh, "log", "--oneline")).split("\n").filter((l) => l.trim() !== "");
+  assert.equal(logLines.length, 1, `git log --oneline 이 ${logLines.length}줄: ${logLines.join(" | ")}`);
+  assert.ok(logLines[0].startsWith(init.json.commit.slice(0, 7)), `git log 첫 줄이 commit 과 다름: ${logLines[0]}`);
+  assert.equal((await git(fresh, "rev-parse", "--abbrev-ref", "HEAD")).trim(), "main", "초기화 후 현재 브랜치");
+  const tracked = (await git(fresh, "ls-files")).split("\n").filter((l) => l.trim() !== "").sort();
+  assert.ok(!tracked.some((p) => p.startsWith("node_modules")), `git ls-files 에 node_modules 가 있음: ${tracked.join(",")}`);
+  assert.deepEqual(tracked, [".gitignore", "README.md", "index.js"], `git ls-files ${tracked.join(",")}`);
+
+  const created = await api("POST", "/api/v1/teams", {
+    cwd: fresh,
+    name: "fresh",
+    members: [{ name: "민수", handle: "minsu", role: "team-lead", agent: "claude", isLead: true }],
+  });
+  assert.equal(created.status, 201, `POST /teams status ${created.status}: ${JSON.stringify(created.json)}`);
+  assert.equal(created.json.baseBranch, "main", `baseBranch ${created.json.baseBranch}`);
+  let deleted = false;
+  try {
+    const del = await api("DELETE", `/api/v1/teams/${created.json.id}`);
+    assert.equal(del.status, 200, `DELETE /teams status ${del.status}: ${JSON.stringify(del.json)}`);
+    deleted = true;
+  } finally {
+    if (!deleted) await api("DELETE", `/api/v1/teams/${created.json.id}?keepWorktrees=true`).catch(() => null);
+  }
+
+  const again = await api("POST", "/api/v1/git/init", { cwd: fresh });
+  assert.equal(again.status, 409, `init(again) status ${again.status}: ${JSON.stringify(again.json)}`);
+  assert.equal(again.json.error.code, "conflict", `init(again) error.code ${again.json.error.code}`);
+  note(`21. git/init dryRun(files=${dry.json.files}, bytes=${dry.json.bytes}, .git 없음) → init ${init.json.commit.slice(0, 7)} (main, ls-files=${tracked.join(",")}) → team ${created.json.id} 201 → delete 200 → again 409 OK`);
 }
 
 async function closeAll() {

@@ -15,7 +15,7 @@ Mac 한 대를 여러 사용자의 에이전트 코딩 서버로 만드는 프�
                                    ├─ agents/claude  Claude Agent SDK → claude CLI (사용자 ~/.claude 자격증명)
                                    ├─ agents/codex   codex app-server (JSON-RPC over stdio, 사용자 ~/.codex)
                                    ├─ fs/   홈 디렉토리로 제한된 파일 목록/읽기
-                                   └─ git/  status/diff (git CLI 래핑)
+                                   └─ git/  status/diff/init (git CLI 래핑)
 ```
 
 자세한 설계는 `docs/ARCHITECTURE.md`를 참고한다.
@@ -35,7 +35,7 @@ Mac 한 대를 여러 사용자의 에이전트 코딩 서버로 만드는 프�
 
 ```bash
 npm ci
-bash scripts/dev-smoke.sh --keep   # 빌드 → Fake 어댑터로 gateway 기동(:7777) → REST/WS 검증(세션 1~14 + 팀 15~20단계) → 서버 유지
+bash scripts/dev-smoke.sh --keep   # 빌드 → Fake 어댑터로 gateway 기동(:7777) → REST/WS 검증(세션 1~14 + 팀 15~20 + git init 21단계) → 서버 유지
 ```
 
 `--keep`으로 띄운 서버는 Phase 1(iOS)과 Phase 2(웹) 개발 백엔드로 그대로 쓸 수 있다(`http://127.0.0.1:7777`). Ctrl-C로 종료한다.
@@ -83,10 +83,11 @@ iOS 앱(`ios/`, 설계는 `docs/IOS.md`):
 cd ios && xcodegen generate                                   # MacAgent.xcodeproj 생성(생성물, 커밋하지 않음)
 open MacAgent.xcodeproj                                       # Xcode 에서 iPhone 17 Pro 시뮬레이터로 실행(⌘R)
 xcodebuild test -scheme MacAgent -destination 'platform=iOS Simulator,name=iPhone 17 Pro'   # 단위 테스트
-# UI 테스트 3개(ApprovalFlowUITests: hello → 승인 허용 → 완료, UsageAndFilesUITests: 찾아보기 → 새 폴더 → 파일 탭 → 컨텍스트 게이지 → 세션 정보 시트,
-# TeamRoomUITests: 새 팀 → #전체 → @멘션 → write file → 승인 허용 → 작업 요약 → 팀원 타임라인 → main에 병합 → 병합됨).
-# 다른 터미널에서 bash scripts/dev-smoke.sh --keep 으로 개발 서버를 띄운 뒤 실행한다. MAM_UI_TEST_SERVER 가 없으면 셋 다 XCTSkip.
-# TeamRoomUITests 는 MAM_UI_TEST_REPO(dev-smoke --keep 이 마지막에 `MAM_UI_TEST_REPO=<git 저장소>` 로 출력하는 경로)도 필요하며 없으면 XCTSkip.
+# UI 테스트 4개(ApprovalFlowUITests: hello → 승인 허용 → 완료, UsageAndFilesUITests: 찾아보기 → 새 폴더 → 파일 탭 → 컨텍스트 게이지 → 세션 정보 시트,
+# TeamRoomUITests: 새 팀 → #전체 → @멘션 → write file → 승인 허용 → 작업 요약 → 팀원 타임라인 → main에 병합 → 병합됨,
+# GitInitUITests: 새 팀 → 찾아보기 → 새 폴더 → 피커에서 저장소 초기화 → 이 폴더 선택 → 팀 만들기 / 직접 입력 → 시트에서 저장소 초기화 → "git 저장소 (main)").
+# 다른 터미널에서 bash scripts/dev-smoke.sh --keep 으로 개발 서버를 띄운 뒤 실행한다. MAM_UI_TEST_SERVER 가 없으면 넷 다 XCTSkip.
+# TeamRoomUITests(와 GitInitUITests 의 직접 입력 시나리오)는 MAM_UI_TEST_REPO(dev-smoke --keep 이 마지막에 `MAM_UI_TEST_REPO=<git 저장소>` 로 출력하는 경로)도 필요하며 없으면 XCTSkip.
 # 같은 저장소에 두 번 돌리면 ui.txt 가 이미 main 에 있어 변경 카드가 안 올라오므로 서버를 다시 띄워 새 저장소로 돌린다.
 MAM_UI_TEST_SERVER=http://127.0.0.1:7777 MAM_UI_TEST_REPO=<위 경로> xcodebuild test -scheme MacAgent \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:MacAgentUITests

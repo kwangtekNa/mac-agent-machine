@@ -226,6 +226,18 @@ UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로.
 | `room.mention.<memberId>` | 컴포저 위 멘션 제안 칩 |
 | `room.workSummary.<messageId>` | 에이전트 답변 아래 작업 요약(탭 → 팀원 타임라인) |
 | `room.merge.<changeId>` · `room.dismiss.<changeId>` | 변경 준비됨 카드의 "<base>에 병합" · "거절" |
+| `newTeam.gitInit` · `newTeam.gitReady` | 새 팀 시트 디렉토리 아래의 "저장소 초기화" · 초기화 뒤 "git 저장소 (main)" 행 (10.7) |
+| `directoryPicker.gitInit` | 디렉토리 피커 툴바의 "저장소 초기화"(현재 폴더가 저장소가 아닐 때만) (10.7) |
+
+### 10.7 저장소 초기화 (2026-09-13, Phase `5-git-init`)
+
+새 팀은 git 저장소가 필요하다(`POST /teams` 가 400). 고른 디렉토리가 저장소가 아니면 폰에서 그 자리에서 초기화한다(`POST /git/init`, PROTOCOL.md 1절: 기본 `.gitignore` → `git init -b main` → 기존 파일 전부를 첫 커밋에). 모델은 `Features/Files/GitInitFlow.swift`(`GitInitFlow.Phase` `idle → checking → notRepo → previewing → confirming → initializing → done | failed` + `GitInitModel`) 하나이고 두 진입점이 각자 인스턴스를 갖는다. 프로토콜 변경은 `POST /git/init` 추가뿐이다.
+
+- **진입점 1 — 새 팀 시트**: 디렉토리를 고르거나 직접 입력이 멈추면(600ms 디바운스) `GET /git/status` 로 확인한다. 저장소가 아니면 디렉토리 섹션 아래에 주황 "git 저장소가 아닙니다" 행 + **"저장소 초기화"**(`newTeam.gitInit`) 가 나오고 "팀 만들기" 는 막힌다(캡션 "git 저장소가 아닙니다. 먼저 저장소를 초기화하세요."). 초기화가 끝나면 같은 자리가 초록 "git 저장소 (main)" + "git 저장소를 만들었습니다 (main, 파일 N개)"(`newTeam.gitReady`) 로 바뀌고 제출할 수 있다. 이미 저장소인 경로(피커에서 초기화하고 고른 폴더 포함)는 아무 행도 보이지 않는다. 서버가 `POST /teams` 에 400 "git 저장소가 아닙니다" 를 주면 다시 확인해 같은 행을 띄운다.
+- **진입점 2 — 디렉토리 피커**: 현재 폴더의 `isGitRepo == false` 일 때만 툴바에 `arrow.triangle.branch` **"저장소 초기화"**(`directoryPicker.gitInit`). 서버의 `isGitRepo` 는 상위 저장소 안의 하위 폴더도 true 라 중첩 저장소는 만들 수 없다. 끝나면 목록을 다시 읽어 버튼이 사라지고 목록 위에 초록 체크 "git 저장소를 만들었습니다 (main, 파일 N개)" 안내가 남는다. 그대로 "이 폴더 선택" 을 누르면 새 팀 시트가 보통 저장소로 받아들인다.
+- **확인 문구 규칙**: 초기화는 항상 `dryRun` 미리보기 → `confirmationDialog`("git 저장소를 만들까요?") → 실제 초기화 순서다(기존 파일 전부가 첫 커밋에 담기는 되돌리기 어려운 동작이라 확인 없이 초기화하지 않는다). 본문은 `GitInitFlow.confirmMessage`: 파일이 있으면 "파일 12개 · 47 KB를 첫 커밋에 담습니다.", 없으면 "빈 저장소를 만듭니다.", 기본 `.gitignore` 를 만들 때만 "기본 .gitignore 를 만듭니다." 를 덧붙인다. 버튼은 "초기화" / "취소". 취소는 "저장소 아님" 상태로 돌아간다.
+- **오류**: 409(이미 저장소·상위가 저장소)는 "이미 git 저장소입니다." 를 보인 뒤 다시 확인해 저장소면 조용히 통과, 400 은 서버 문구 그대로, 403 은 홈 밖 경로 문구, 그 외는 공통 매핑. 경로가 바뀐 뒤 늦게 온 응답은 버린다.
+- **UI 테스트** `MacAgentUITests/GitInitUITests.swift`(`MAM_UI_TEST_SERVER` 없으면 `XCTSkip`): (1) 새 팀 → 찾아보기 → 새 폴더 `ui-git-<ts>` → 피커 초기화 → 확인("빈 저장소") → 안내 → 이 폴더 선택 → 팀장 1명 → 팀 만들기 → `rooms.group`. 정리는 REST 팀 삭제(409 면 `keepWorktrees=true`) + 폴더 삭제. (2) 직접 입력에 새 빈 폴더(`MAM_UI_TEST_REPO` 의 부모에 만든다) → `newTeam.gitInit` → 초기화 → "git 저장소 (main)" 로 바뀌고 버튼이 사라진다.
 
 ## 11. 범위 밖 (Phase 1)
 
