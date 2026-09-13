@@ -107,7 +107,7 @@
     {
       "step": 4,
       "name": "teams-store-and-team-ui",
-      "status": "error",
+      "status": "completed",
       "depends_on": [
         0,
         2,
@@ -141,14 +141,23 @@
           "num_turns": 1,
           "exit_code": 1,
           "timeout": false
+        },
+        {
+          "attempt": 1,
+          "session_id": "bc7962f0-1748-43bc-a3a5-44fd527a9e70",
+          "cost_usd": 7.198104749999999,
+          "duration_s": 662.9,
+          "num_turns": 58,
+          "exit_code": 0,
+          "timeout": false
         }
       ],
-      "cost_usd": 7.2134,
-      "duration_s": 1576.3,
-      "retries": 2,
-      "session_id": "42bc716b-c5ac-425d-baa5-a120059a63be",
-      "error_message": "[3회 시도 후 실패] 세션이 구조화 결과를 반환하지 않았다 (subtype: success, exit code: 1). 작업 트리에 미완성 변경이 남아있을 수 있으니 git status로 확인한 뒤 이어서 작업하라.",
-      "failed_at": "2026-09-13T00:40:58+0900"
+      "cost_usd": 14.411505,
+      "duration_s": 2239.2,
+      "retries": 3,
+      "session_id": "bc7962f0-1748-43bc-a3a5-44fd527a9e70",
+      "summary": "Step 4 re-run: attempt-1 code (commit bdec81b) verified complete against the spec — TeamsStore (parallel refresh w/ partial-failure capture, create/patch/delete(keepWorktrees)/member ops/templates, team(forSession:), badge \"emoji name · team\"), RolePresetStore (UserDefaults JSON, LocalRolePreset), NewTeamFormState + MemberDraft (all validation rules, preset/localPreset/template apply, memberInput/templateMember/patchRequest), views TeamRow (teams.row.<id>), NewTeamSheet (DirectoryFormSection extracted from NewSessionSheet and shared), MemberEditorView (RolePresetPicker 기본/내 프리셋, ask/auto-edit/plan only, 프리셋으로 저장, next-session caption), TeamSettingsView (409 → keepWorktrees retry dialog; temporary Team row destination), SessionsHomeView \"팀\" section + `+` Menu (home.add → home.newSession \"새 세션\"/home.newTeam \"새 팀\"), SessionRowView team badge, ErrorMessages.teamMessage, AppState ModelKey LRU 8 with roomModel(for:roomId:client:) + stop() on evict/clear + selectedRoom; ConnectedRootView injects TeamsStore/RolePresetStore. Only change this run: converted setUp/tearDown/setUpWithError to `async throws` in AppStateModelKeyTests, RolePresetStoreTests, TeamRowRenderTests, TeamsStoreTests (14 Swift 6 actor warnings → 0 in those files). AC: xcodegen+xcodebuild test exit 0, file/grep checks OK, bash scripts/test.sh OK (TS 754 passed; iOS 354 tests: 351 passed, 0 failed, 3 UI skipped). Extra: ran ApprovalFlowUITests against dev-smoke — `+` menu → \"새 세션\" entry works; the test then fails at 세션 시작 because POST /sessions returns 404 (path mangled while clearing a long prefilled worktree path from smoke-run projects), a pre-existing test flakiness unrelated to step 4 (UI tests are skipped in the gate). Dev server stopped, port 7777 free. No fixtures/docs/phases changed, no commit.",
+      "completed_at": "2026-09-13T10:39:27+0900"
     },
     {
       "step": 5,
