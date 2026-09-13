@@ -28,10 +28,28 @@
     {
       "step": 1,
       "name": "ios-git-init-ui",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-13T15:14:10+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "1caf47f2-5dc2-48b7-ab1e-538a6bd0a334",
+          "cost_usd": 8.1736095,
+          "duration_s": 722.9,
+          "num_turns": 34,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 8.173609,
+      "duration_s": 722.9,
+      "retries": 0,
+      "session_id": "1caf47f2-5dc2-48b7-ab1e-538a6bd0a334",
+      "summary": "iOS git-init UI 구현 완료: REST.swift GitInitRequest(dryRun nil→키 생략)/GitInitResponse, APIClient.initRepository(cwd:dryRun:) POST /git/init; 신규 Features/Files/GitInitFlow.swift(GitInitFlow.Phase idle/checking/notRepo/previewing/confirming/initializing/done/failed + needsInit·isBusy·preview, confirmMessage/doneMessage, @MainActor @Observable GitInitModel check→preview(dryRun)→confirm, 경로 변경 시 stale 응답 폐기, 409는 gitInitConflict 문구 후 재확인해 저장소면 idle); NewTeamSheet 디렉토리 아래 orange 경고행+“저장소 초기화”(newTeam.gitInit)→confirmationDialog(dryRun 수치)→done 시 “git 저장소 (main)” 캡션, .task(id: selectedPath) 체크(직접 입력 600ms 디바운스), POST /teams 400 teamNotGitRepo면 재확인해 같은 행 표시; NewTeamFormState.canSubmit/blockingReason에 gitPhase 추가(notRepo·previewing·confirming·initializing 차단); DirectoryPickerView 현재 목록 isGitRepo==false일 때만 툴바 arrow.triangle.branch 버튼(directoryPicker.gitInit, 서버 isGitRepo는 상위 저장소도 true라 중첩 방지) 동일 흐름 후 목록 새로고침, DirectoryListContent에 notice(초록 체크) 파라미터; ErrorMessages.gitInitConflict/gitInitMessage(409 고정, 400 서버 메시지, 403 pathForbidden). 테스트: GitInitFlowTests(문구 3종·doneMessage·모델 전이·본문 dryRun 유무·409 2경로·오류 문구), NewTeamFormStateTests.testNotRepoBlocksSubmit, APIClientTests initRepository 3건, ProtocolFixturesTests JSONValue→GitInitResponse(71개 유지)+값 검증. xcodegen generate 실행, 파일 AC 4건 통과, bash scripts/test.sh 통과(TS 773 passed, iOS build+test 성공, GATE_EXIT=0). 서버·protocol 미수정, 커밋 없음.",
+      "completed_at": "2026-09-13T15:26:13+0900"
     },
     {
       "step": 2,
