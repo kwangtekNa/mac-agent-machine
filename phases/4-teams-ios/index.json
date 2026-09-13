@@ -190,10 +190,28 @@
     {
       "step": 6,
       "name": "work-summary-approval-merge-cards",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         5
-      ]
+      ],
+      "started_at": "2026-09-13T10:55:08+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "33db3c03-4f42-479e-a471-067d5de0d17e",
+          "cost_usd": 9.078172999999998,
+          "duration_s": 774.1,
+          "num_turns": 72,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 9.078173,
+      "duration_s": 774.1,
+      "retries": 0,
+      "session_id": "33db3c03-4f42-479e-a471-067d5de0d17e",
+      "summary": "Step 6 done: three room cards replace the step-5 placeholder. New Features/Rooms/Cards/WorkSummaryCard.swift (WorkSummaryLabel.parts/line/accessibilityLabel → \"도구 7회 · 파일 3개 변경 · 12초\"(+\" · $0.04 추정\"), 0 files → \"파일 변경 없음\"; WorkSummaryCard = whole-row Button with hammer icon + chevron, id room.workSummary.<messageId>, a11y \"작업 요약, 도구 7회, …\", tap → onOpen(work.sessionId)), Cards/RoomApprovalCard.swift (RoomApprovalCardState.make: title/subtitle \"🧑‍💻 지연 · 개발자\"/resolutionLine via ApprovalCardBody.resolutionLabel + Formatters.clock/isPending, nil-approval fallback; RoomApprovalCard = ItemCard(chrome:) yellow-when-pending + MemberChip + ApprovalCardBody, no option buttons, \"자세히 보기\" → ApprovalSheet), Cards/ChangesReadyCard.swift (ChangesCardState.make for 6 statuses: ready → .merge(label:\"main에 병합\")+canDismiss, merging/submitting → .merging (ProgressView, buttons disabled), merged → \"병합됨 · a1b2c3d\" green checkmark, conflict → red triangle + conflictFiles + caption \"충돌이 났습니다. 지연이 worktree 에서 해결하면 새 카드가 올라옵니다\"(KoreanParticle, \"팀원\" when unknown), dismissed \"거절됨\"/stale \"새 변경으로 대체됨\" secondary; files max 5 + \"외 N개\", branchLine, errorLine from mergeSubmit.failed, mergeConfirmation text; view = ItemCard(.contain) + MemberChip + FileChangeRow rows + confirmationDialog before onMerge, ids room.merge.<changeId>/room.dismiss.<changeId>). Supporting edits: ItemCard gained accessibilityChildren param (default .combine), FileChangeCard row extracted to shared FileChangeRow, RoomEntryRow now renders WorkSummaryCard under agent MessageCard (12pt) / RoomApprovalCard / ChangesReadyCard with closures (onOpenMember, onApprovalDetail, mergeSubmit, onMerge, onDismiss); RoomScreen wires them to model.requestMerge/dismiss, ApprovalSheet(item:), and openMember (compact push MemberTimelineRef → TimelineView, regular selectedMemberSessionId). TimelineView shows team badge (TeamsStore.badge, optional env) as subtitle prefix via new ContextGaugeView.prefix. Tests first: WorkSummaryLabelTests(5), ChangesCardStateTests(9), RoomApprovalCardStateTests(4), RoomCardsRenderTests(4, UIHostingController heights + state text), RoomModelTests +1 (409 failed → updated merged clears mergeSubmit, card statusLine \"병합됨 · a1b2c3d\"). AC: xcodegen generate + xcodebuild test exit 0 (0 warnings in touched files), 3 files exist, grep \"에 병합\" OK, bash scripts/test.sh exit 0 (TS 754 passed). No fixtures/docs/phases changed, no commit.",
+      "completed_at": "2026-09-13T11:08:02+0900"
     },
     {
       "step": 7,
