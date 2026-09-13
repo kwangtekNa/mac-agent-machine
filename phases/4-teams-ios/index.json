@@ -216,10 +216,37 @@
     {
       "step": 7,
       "name": "ios-docs-and-ui-test",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         6
-      ]
+      ],
+      "started_at": "2026-09-13T11:08:02+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "46e2957b-296b-4e1c-82b1-e313dda28eb7",
+          "cost_usd": 9.773107,
+          "duration_s": 1114.0,
+          "num_turns": 49,
+          "exit_code": 0,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "5f5b82f6-d295-4caa-bdfc-9d332961bd17",
+          "cost_usd": 7.430820499999998,
+          "duration_s": 1295.6,
+          "num_turns": 32,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 17.203927,
+      "duration_s": 2409.6,
+      "retries": 1,
+      "session_id": "5f5b82f6-d295-4caa-bdfc-9d332961bd17",
+      "summary": "Step 7 done. Docs: docs/IOS.md 10절 \"3차 추가분\"(10.1~10.6 + 식별자 표, 3절 디렉토리·4절 내비 갱신, 기존 10절→11절), README iOS 절(UI 테스트 3개·MAM_UI_TEST_REPO·phase 3 API 한 줄). Scripts: dev-smoke.mjs/.sh `--keep` 이 임시 cwd·git 저장소를 남기고 `MAM_UI_TEST_REPO=<repo>` 출력(팀·worktree 는 정리), ios/project.yml scheme 에 MAM_UI_TEST_REPO 전달, MemberEditorView 식별자 memberEditor.done→memberEditor.save. New ios/MacAgentUITests/TeamRoomUITests.swift: 새 팀(민수 Claude 팀장 + 지연 Codex) → 방 목록(#전체 + DM 2) → @지 제안 칩 → write file ui.txt → 배너 허용 → 작업 요약(\"도구\") → 팀원 타임라인(\"초 ·\") → 뒤로 → \"main에 병합\" 확인 → \"병합됨\", teardown 에서 URLSession 으로 GET /teams?cwd= → DELETE ?keepWorktrees=true. Fixes vs. attempt 1: agent segment label is AgentKind.displayName \"Claude Code\"/\"Codex\" (found via segmentedControls.buttons + label-prefix fallback), lead toggle needs swipeUp (keyboard hides Form rows) and a tap on the switch side of the row, tree() dumps the tail (sheets). ApprovalFlowUITests: prefilled long worktree path (left by dev-smoke team steps) now cleared with a converge loop (labels/identifiers unchanged). AC verified: npm typecheck/test OK, dev-smoke OK, --keep REPO printed + dir exists, UI tests 3 passed/0 failed against dev server, server kill leaves no agent-host, docs grep OK, bash scripts/test.sh exit 0. packages/server, packages/protocol, fixtures untouched; phases/4-teams-ios/index.json diff is the executor's own attempt record; no commit.",
+      "completed_at": "2026-09-13T11:48:12+0900"
     },
     {
       "step": 8,
