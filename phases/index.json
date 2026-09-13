@@ -24,6 +24,10 @@
       "dir": "4-teams-ios",
       "status": "completed",
       "completed_at": "2026-09-13T12:07:04+0900"
+    },
+    {
+      "dir": "5-git-init",
+      "status": "pending"
     }
   ]
 }
