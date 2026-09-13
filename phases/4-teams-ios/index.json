@@ -251,10 +251,28 @@
     {
       "step": 8,
       "name": "verify-and-install",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         7
-      ]
+      ],
+      "started_at": "2026-09-13T11:48:12+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "8179fed8-d2a1-4f52-b398-d7a785299b85",
+          "cost_usd": 6.9865629999999985,
+          "duration_s": 1131.3,
+          "num_turns": 75,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 6.986563,
+      "duration_s": 1131.3,
+      "retries": 0,
+      "session_id": "8179fed8-d2a1-4f52-b398-d7a785299b85",
+      "summary": "Step 8 done. Verified: npm ci/typecheck/test OK; dev-smoke 20 steps OK; dev-smoke --keep + 3 UI tests (ApprovalFlow 42s, TeamRoom 1m33s, UsageAndFiles 55s) all passed, server killed with no agent-host left; bash scripts/test.sh OK (TS 755 passed incl. 1 new regression test, iOS build+test OK). Real adapters on loopback :7777 (MAM_CODEX_BIN from zsh -ic): Claude team-lead team → \"Reply with exactly the word pong.\" → room reply author.kind=agent hop=1 text=\"pong\", work {toolCalls 0, filesChanged [], durationMs ~2000-2700, costUsd ~0.41, usage in 2/out 4/cacheRead 11824}. Codex first run returned only system \"민수가 답변 없이 턴을 끝냈습니다\" although the session log had assistant_message final \"pong\" + turn.completed → server bug: Codex adapter emits `status: idle` right after thread/start and team-manager's turn listener treated running→idle as turn end before user_message. Fixed in packages/server/src/teams/team-manager.ts (`started` set only after a turn item; `running` alone no longer counts), added FakeAdapter/FakeSession `startupIdle` option and regression test in test/teams/team-manager.test.ts (RED→GREEN). After fix: Codex reply hop=1 text=\"pong\", work {toolCalls 0, durationMs 5965, costUsd omitted, usage in 19420/out 82}; Claude re-verified OK. All teams deleted (200; initial 400 was curl empty-JSON-body header, retried). iPhone: xcodebuild device build OK, devicectl install OK (installationURL), launch denied because device locked (FBSOpenApplicationErrorDomain 7). Docs: RUNBOOK 6절 \"앱에서 팀 만들기·방·머지\" paragraph + worktree dependency note; README MAM_DEV_BIND line extended with real-adapter LAN gateway hint. Device build shows 2 pre-existing main-actor warnings (RoomApprovalCard.swift:19, NewSessionSheet.swift:59), left untouched. Leftovers: ~/.mam/smoke/<ts>/ repos (--keep by design) and 2 ~/.mam/teams/<id>/worktrees dirs kept by UI test keepWorktrees=true. Changed files: README.md, docs/RUNBOOK.md, packages/server/src/agents/fake/{index,session}.ts, packages/server/src/teams/team-manager.ts, packages/server/test/teams/team-manager.test.ts. No fixtures/protocol/phases changes, no commit.",
+      "completed_at": "2026-09-13T12:07:03+0900"
     }
   ],
   "created_at": "2026-09-12T23:31:09+0900"
