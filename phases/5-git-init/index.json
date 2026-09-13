@@ -5,7 +5,25 @@
     {
       "step": 0,
       "name": "git-init-server",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-13T15:04:08+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "c5f38a26-9862-49ab-9fab-9e208eafcff1",
+          "cost_usd": 6.78438675,
+          "duration_s": 601.8,
+          "num_turns": 36,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 6.784387,
+      "duration_s": 601.8,
+      "retries": 0,
+      "session_id": "c5f38a26-9862-49ab-9fab-9e208eafcff1",
+      "summary": "POST /git/init 서버 구현 완료: docs/PROTOCOL.md 1절 + RUNBOOK \"폰에서 저장소 초기화\" 단락, @mam/protocol GitInitRequest/ResponseSchema + fixtures rest/git-init.json·git-init-dry-run.json(총 71개, TS ADDED_2026_09_13 검사, Swift 테이블 JSONValue 임시 등록·count 71), packages/server/src/git/init.ts(DEFAULT_GITIGNORE, initRepository: dryRun 은 임시 --git-dir + --exclude-from 으로 cwd 무흔적 계산, 실제는 .gitignore(없을 때만)→init -b main→add -A→commit --allow-empty, 작성자 fallback -c, 실패 시 .git/.gitignore 정리, assertNotInsideRepo 409), routes/git.ts POST /git/init(resolveCwd 재사용, 없는 경로 400, dryRun 200/초기화 201), test/git/init.test.ts 9건 + rest.test.ts 3건(403/400/409/201/200, 초기화 후 POST /teams 201). files/bytes 는 서버가 만든 .gitignore 제외 기존 파일 기준(dryRun=실제). npm ci·typecheck·npm test(773)·bash scripts/test.sh(iOS 포함) 모두 통과.",
+      "completed_at": "2026-09-13T15:14:10+0900"
     },
     {
       "step": 1,
@@ -23,5 +41,6 @@
         1
       ]
     }
-  ]
+  ],
+  "created_at": "2026-09-13T15:04:08+0900"
 }
