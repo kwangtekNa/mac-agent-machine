@@ -138,6 +138,27 @@ WS 없이도 응답할 수 있는 REST 경로. 본문은 WS `approval.respond`�
 
 `{ "patch": "diff --git a/... " }` unified diff. `path` 생략 시 전체.
 
+### `POST /git/init` (2026-09-13 추가)
+
+폰에서 고른 디렉토리가 git 저장소가 아닐 때(`POST /teams` 가 400 을 돌려줄 때) 그 자리에서 초기화한다. 요청 `{ "cwd": "/Users/alice/work/new-app", "dryRun"?: false }`(`~/` 허용). 초기화 = (없을 때만) 기본 `.gitignore` 생성 → `git init -b main` → `git add -A` → `git commit -m "Initial commit"`. 기존 파일은 전부 첫 커밋에 담긴다(팀원 worktree 가 베이스 브랜치를 체크아웃하므로, 6.5). 커밋할 파일이 없어도 `--allow-empty` 로 첫 커밋을 만든다. 기본 브랜치는 사용자의 git 전역 설정과 무관하게 항상 `main`. `dryRun: true` 면 아무것도 바꾸지 않고 커밋될 파일 수·바이트를 실제 git 으로 정확히 계산해 돌려준다.
+
+```json
+{ "initialized": true, "branch": "main", "commit": "9f1c2b3a4d5e6f708192a3b4c5d6e7f8091a2b3c", "files": 12, "bytes": 48213, "createdGitignore": true }
+```
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `initialized` | boolean | 실제로 초기화했으면 true, `dryRun` 이면 false |
+| `branch` | string | 항상 `main` |
+| `commit` | string \| null | 첫 커밋 sha(40자). `dryRun` 이면 null |
+| `files` | int ≥ 0 | 첫 커밋에 담기는(담길) 기존 파일 수. 서버가 만든 `.gitignore` 는 세지 않는다(`dryRun` 과 실제 값이 같다) |
+| `bytes` | int ≥ 0 | 그 파일들의 합계 크기 |
+| `createdGitignore` | boolean | 기본 `.gitignore` 를 만들었(만들)는지. 이미 있으면 건드리지 않고 false |
+
+- 상태 코드: 초기화 201, `dryRun` 200.
+- 오류: 홈 밖 403 `forbidden`; 디렉토리가 아니거나 없음 400 `invalid_request`; 이미 저장소이거나 상위 디렉토리에 저장소가 있음 409 `conflict`(메시지에 어느 경로가 저장소인지. 중첩 저장소는 팀 worktree·머지를 깨뜨리므로 허용하지 않는다).
+- 커밋 작성자: 사용자의 `user.name`/`user.email` 이 비어 있으면 그 커밋에만 `MacAgent <mam@mam.local>` 을 쓴다(전역 설정은 바꾸지 않는다). 기본 `.gitignore` 내용은 RUNBOOK "팀 운영" 절.
+
 ### `POST /fs/mkdir` (2026-09-10 추가)
 
 요청 `{ "path": "/Users/alice/work/new-app" }` 또는 `~/work/new-app`. 홈 아래여야 하고(403) 부모 디렉토리는 함께 만든다. 이미 있으면 409 `conflict`. 이름에 제어 문자가 있거나 빈 세그먼트면 400. → 201 `{ "entry": <FsEntry> }`.

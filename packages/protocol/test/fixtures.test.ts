@@ -11,6 +11,7 @@ import {
   FsMkdirResponseSchema,
   FsReadResponseSchema,
   GitDiffResponseSchema,
+  GitInitResponseSchema,
   GitStatusResponseSchema,
   LoginStartResponseSchema,
   LoginStatusResponseSchema,
@@ -50,6 +51,9 @@ const REST: Record<string, ZodType> = {
   "fs-mkdir": FsMkdirResponseSchema,
   "git-status": GitStatusResponseSchema,
   "git-diff": GitDiffResponseSchema,
+  // 2026-09-13 추가분(git init)
+  "git-init": GitInitResponseSchema,
+  "git-init-dry-run": GitInitResponseSchema,
   error: ErrorResponseSchema,
   "login-start": LoginStartResponseSchema,
   "login-status": LoginStatusResponseSchema,
@@ -154,6 +158,9 @@ const ADDED_2026_09_12 = [
   "room-client/ping",
 ];
 
+/** 2026-09-13 추가분(git init) 2개. iOS `ProtocolFixturesTests.ADDED_2026_09_13` 과 같은 집합. */
+const ADDED_2026_09_13 = ["rest/git-init", "rest/git-init-dry-run"];
+
 /** 2026-09-10 추가분(사용량·모델·mkdir). 라운드트립 테스트가 최소한 이 파일들을 반드시 포함해야 한다. */
 const ADDED_2026_09_10 = [
   "rest/usage",
@@ -257,6 +264,11 @@ describe("fixtures ↔ 매핑 테이블 (누락 방지)", () => {
     const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
     for (const added of ADDED_2026_09_12) expect(keys.has(added), added).toBe(true);
   });
+  it("2026-09-13 추가분 2개가 전부 매핑표에 있다", () => {
+    expect(ADDED_2026_09_13).toHaveLength(2);
+    const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
+    for (const added of ADDED_2026_09_13) expect(keys.has(added), added).toBe(true);
+  });
   it("ws/ 와 client/ 에는 방 이벤트가 없다 (iOS 가 엄격한 enum 으로 디코드한다)", () => {
     for (const name of listFixtures("ws")) expect(name.startsWith("room."), name).toBe(false);
     for (const name of listFixtures("client")) expect(name.startsWith("room."), name).toBe(false);
@@ -324,6 +336,24 @@ describe("rest fixtures", () => {
     expect(entry.type).toBe("dir");
     expect(entry.size).toBeNull();
     expect(entry.path.endsWith(`/${entry.name}`)).toBe(true);
+  });
+
+  it("git-init 은 main 브랜치의 첫 커밋 sha 를, git-init-dry-run 은 같은 files/bytes 에 commit null 을 돌려준다", () => {
+    const init = GitInitResponseSchema.parse(loadFixture("rest", "git-init"));
+    const dry = GitInitResponseSchema.parse(loadFixture("rest", "git-init-dry-run"));
+    expect(init.initialized).toBe(true);
+    expect(init.branch).toBe("main");
+    expect(init.commit).toMatch(/^[0-9a-f]{40}$/);
+    expect(dry.initialized).toBe(false);
+    expect(dry.branch).toBe("main");
+    expect(dry.commit).toBeNull();
+    expect({ files: dry.files, bytes: dry.bytes, createdGitignore: dry.createdGitignore }).toEqual({
+      files: init.files,
+      bytes: init.bytes,
+      createdGitignore: init.createdGitignore,
+    });
+    expect(init.files).toBeGreaterThan(0);
+    expect(init.bytes).toBeGreaterThan(0);
   });
 
   it("usage 는 claude(live:false) 와 codex(live:true) 를 담고 status ok/warning 을 섞는다", () => {

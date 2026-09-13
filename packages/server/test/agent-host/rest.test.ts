@@ -1,12 +1,15 @@
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import {
   FsMkdirResponseSchema,
+  GitInitResponseSchema,
   MeResponseSchema,
   ModelsResponseSchema,
   ProjectsResponseSchema,
   SessionDetailResponseSchema,
   SessionsResponseSchema,
+  TeamSchema,
   UsageResponseSchema,
   type Session,
 } from "@mam/protocol";
@@ -285,5 +288,70 @@ describe("usage, models, mkdir and patch model/effort (2026-09-10)", () => {
     expect(list.sessions[0]).toMatchObject({ model: "fake-1", effort: "medium" });
     const detail = SessionDetailResponseSchema.parse((await get(`/api/v1/sessions/${id}`)).json());
     expect(detail.session.usage!.costUsd).toBeCloseTo(0.012, 6);
+  });
+});
+
+describe("POST /git/init (2026-09-13)", () => {
+  async function exists(p: string): Promise<boolean> {
+    try {
+      await access(p);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("dryRun → 200 without touching cwd; real → 201 with a commit; again → 409", async () => {
+    const lib = join(fx.workspaceRoot, "lib");
+    const dry = await post("/api/v1/git/init", { cwd: "~/work/lib", dryRun: true });
+    expect(dry.statusCode).toBe(200);
+    const dryBody = GitInitResponseSchema.parse(dry.json());
+    expect(dryBody).toEqual({ initialized: false, branch: "main", commit: null, files: 0, bytes: 0, createdGitignore: true });
+    expect(await exists(join(lib, ".git"))).toBe(false);
+    expect(await exists(join(lib, ".gitignore"))).toBe(false);
+
+    const res = await post("/api/v1/git/init", { cwd: "~/work/lib" });
+    expect(res.statusCode).toBe(201);
+    const body = GitInitResponseSchema.parse(res.json());
+    expect(body).toMatchObject({ initialized: true, branch: "main", files: 0, bytes: 0, createdGitignore: true });
+    expect(body.commit).toMatch(/^[0-9a-f]{40}$/);
+    expect(await exists(join(lib, ".git"))).toBe(true);
+    expect((await get(`/api/v1/git/status?cwd=${encodeURIComponent(lib)}`)).json()).toMatchObject({ isRepo: true, branch: "main", entries: [] });
+
+    const again = await post("/api/v1/git/init", { cwd: "~/work/lib" });
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error).toMatchObject({ code: "conflict", message: expect.stringContaining(lib) });
+  });
+
+  it("403 outside home, 400 for a missing path, a file, or a bad body, 409 inside an existing repo", async () => {
+    expect((await post("/api/v1/git/init", { cwd: "/etc" })).statusCode).toBe(403);
+    expect((await post("/api/v1/git/init", { cwd: "/tmp/mam-should-not-exist" })).statusCode).toBe(403);
+    const missing = await post("/api/v1/git/init", { cwd: "~/nope" });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json().error.code).toBe("invalid_request");
+    expect((await post("/api/v1/git/init", { cwd: `${fx.app}/index.ts` })).statusCode).toBe(400);
+    expect((await post("/api/v1/git/init", {})).statusCode).toBe(400);
+    expect((await post("/api/v1/git/init", { cwd: "~/work/lib", dryRun: "yes" })).statusCode).toBe(400);
+    // 이미 저장소인 곳과 그 하위 디렉토리
+    const repo = await post("/api/v1/git/init", { cwd: fx.app });
+    expect(repo.statusCode).toBe(409);
+    expect(repo.json().error.message).toContain(fx.app);
+    const nested = await post("/api/v1/fs/mkdir", { path: "~/work/app/sub" });
+    expect(nested.statusCode).toBe(201);
+    const inside = await post("/api/v1/git/init", { cwd: "~/work/app/sub" });
+    expect(inside.statusCode).toBe(409);
+    expect(inside.json().error.message).toContain(fx.app);
+  });
+
+  it("after init, POST /teams accepts the directory (base branch main)", async () => {
+    const before = await post("/api/v1/teams", { cwd: "~/work/lib", name: "libteam", members: [{ name: "민수", handle: "minsu", role: "team-lead", agent: "claude", isLead: true }] });
+    expect(before.statusCode).toBe(400);
+    expect((await post("/api/v1/git/init", { cwd: "~/work/lib" })).statusCode).toBe(201);
+    const after = await post("/api/v1/teams", { cwd: "~/work/lib", name: "libteam", members: [{ name: "민수", handle: "minsu", role: "team-lead", agent: "claude", isLead: true }] });
+    expect(after.statusCode).toBe(201);
+    const team = TeamSchema.parse(after.json());
+    expect(team.cwd).toBe(join(fx.workspaceRoot, "lib"));
+    expect(team.baseBranch).toBe("main");
+    expect(team.members[0]?.branch).toBe("mam/libteam/minsu");
   });
 });

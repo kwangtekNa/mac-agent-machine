@@ -102,6 +102,25 @@ export const GitDiffResponseSchema = z.object({
   patch: z.string(),
 });
 
+/** `POST /git/init` 본문(2026-09-13 추가). `dryRun: true` 면 아무것도 바꾸지 않고 커밋될 파일 수·바이트만 계산한다. */
+export const GitInitRequestSchema = z.object({
+  cwd: z.string().min(1),
+  dryRun: z.boolean().optional(),
+});
+
+/**
+ * `POST /git/init` → 201(초기화) / 200(`dryRun`). `branch` 는 항상 `main`, `commit` 은 첫 커밋 sha(dryRun 이면 null).
+ * `files`/`bytes` 는 첫 커밋에 담기는(담길) 기존 파일 수와 합계 크기(서버가 만든 `.gitignore` 는 제외).
+ */
+export const GitInitResponseSchema = z.object({
+  initialized: z.boolean(),
+  branch: z.string().min(1),
+  commit: z.string().regex(/^[0-9a-f]{40}$/).nullable(),
+  files: z.int().min(0),
+  bytes: z.int().min(0),
+  createdGitignore: z.boolean(),
+});
+
 /** `POST /fs/mkdir` 본문(2026-09-10 추가). `~/` 로 시작하면 서버가 홈으로 치환한다. */
 export const FsMkdirRequestSchema = z.object({
   path: z.string().min(1),

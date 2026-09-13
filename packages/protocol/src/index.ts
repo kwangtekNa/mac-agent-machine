@@ -61,6 +61,8 @@ import type {
   FsMkdirResponseSchema,
   FsReadResponseSchema,
   GitDiffResponseSchema,
+  GitInitRequestSchema,
+  GitInitResponseSchema,
   GitStatusCodeSchema,
   GitStatusEntrySchema,
   GitStatusResponseSchema,
@@ -224,6 +226,8 @@ export type FsReadResponse = z.infer<typeof FsReadResponseSchema>;
 export type GitStatusEntry = z.infer<typeof GitStatusEntrySchema>;
 export type GitStatusResponse = z.infer<typeof GitStatusResponseSchema>;
 export type GitDiffResponse = z.infer<typeof GitDiffResponseSchema>;
+export type GitInitRequest = z.infer<typeof GitInitRequestSchema>;
+export type GitInitResponse = z.infer<typeof GitInitResponseSchema>;
 export type LoginStartResponse = z.infer<typeof LoginStartResponseSchema>;
 export type LoginFlowStatus = z.infer<typeof LoginFlowStatusSchema>;
 export type LoginStatusResponse = z.infer<typeof LoginStatusResponseSchema>;
