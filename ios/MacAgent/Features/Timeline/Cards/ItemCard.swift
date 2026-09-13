@@ -19,6 +19,8 @@ struct ItemCard<Content: View>: View {
     let titleMonospaced: Bool
     let badge: String?
     let background: Color
+    /// 기본 `.combine`(카드 하나가 한 요소). 버튼을 품는 카드(방의 "변경 준비됨")는 `.contain`.
+    let accessibilityChildren: AccessibilityChildBehavior
     let content: () -> Content
 
     init(
@@ -28,6 +30,7 @@ struct ItemCard<Content: View>: View {
         titleMonospaced: Bool = false,
         badge: String? = nil,
         background: Color = Color(.secondarySystemGroupedBackground),
+        accessibilityChildren: AccessibilityChildBehavior = .combine,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.chrome = chrome
@@ -36,6 +39,7 @@ struct ItemCard<Content: View>: View {
         self.titleMonospaced = titleMonospaced
         self.badge = badge
         self.background = background
+        self.accessibilityChildren = accessibilityChildren
         self.content = content
     }
 
@@ -82,7 +86,7 @@ struct ItemCard<Content: View>: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(background, in: RoundedRectangle(cornerRadius: 12))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: accessibilityChildren)
         .modifier(SummaryLabel(summary: chrome.summary))
     }
 }

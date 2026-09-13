@@ -34,6 +34,8 @@ struct RoomScreen: View {
     /// compact: 팀원 시트가 닫힌 뒤 push 할 타임라인.
     @State private var pendingMember: MemberTimelineRef?
     @State private var pushedMember: MemberTimelineRef?
+    /// 승인 카드 "자세히 보기" → `ApprovalSheet`(배너와 같은 모델).
+    @State private var detailApproval: Approval?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -109,6 +111,9 @@ struct RoomScreen: View {
         .navigationDestination(item: $pushedMember) { ref in
             TimelineView(sessionId: ref.sessionId)
         }
+        .sheet(item: $detailApproval) { approval in
+            ApprovalSheet(model: model, approvalId: approval.approvalId)
+        }
         .task { await model.start() }
         .onDisappear { model.stop() }
         .onChange(of: scenePhase) { _, phase in
@@ -131,8 +136,17 @@ struct RoomScreen: View {
                             .frame(maxWidth: .infinity)
                     }
                     ForEach(model.entries) { entry in
-                        RoomEntryRow(entry: entry, members: model.members, onReply: reply)
-                            .id(entry.id)
+                        RoomEntryRow(
+                            entry: entry,
+                            members: model.members,
+                            onReply: reply,
+                            onOpenMember: openMember(sessionId:),
+                            onApprovalDetail: { id in detailApproval = model.pendingApprovals.first { $0.approvalId == id } },
+                            mergeSubmit: model.mergeSubmit,
+                            onMerge: { change in Task { await model.requestMerge(change) } },
+                            onDismiss: { change in Task { await model.dismiss(change) } }
+                        )
+                        .id(entry.id)
                     }
                     WorkingBubble(members: model.workingMembers, activity: .working)
                     WorkingBubble(members: model.queuedMembers, activity: .queued)
@@ -185,19 +199,32 @@ struct RoomScreen: View {
     private func openPendingMember() {
         guard let ref = pendingMember else { return }
         pendingMember = nil
+        openMember(sessionId: ref.sessionId)
+    }
+
+    /// 팀원 타임라인 열기(작업 요약 카드·팀원 시트): compact 는 `TimelineView(sessionId:)` push, regular 는 디테일 열.
+    private func openMember(sessionId: String) {
         if horizontalSizeClass == .regular {
-            appState.selectedMemberSessionId = ref.sessionId
+            appState.selectedMemberSessionId = sessionId
         } else {
-            pushedMember = ref
+            pushedMember = MemberTimelineRef(sessionId: sessionId)
         }
     }
 }
 
-/// 항목 종류 → 카드/행. 승인·변경 카드는 step 6 전까지 한 줄 placeholder.
+/// 항목 종류 → 카드/행. 에이전트 답변은 `MessageCard` + (work 가 있으면) 아래 12pt 간격의 `WorkSummaryCard`,
+/// 승인은 `RoomApprovalCard`(응답은 배너·시트), 변경은 `ChangesReadyCard`(머지·거절은 `RoomModel` REST, 확정은 서버 값).
 struct RoomEntryRow: View {
     let entry: RoomEntry
     let members: [TeamMember]
     let onReply: (TeamMember) -> Void
+    /// 작업 요약 탭 → 그 팀원의 타임라인(sessionId).
+    var onOpenMember: ((String) -> Void)? = nil
+    /// 승인 카드 "자세히 보기"(approvalId).
+    var onApprovalDetail: ((String) -> Void)? = nil
+    var mergeSubmit: MergeSubmitState = .idle
+    var onMerge: ((ChangeSet) -> Void)? = nil
+    var onDismiss: ((ChangeSet) -> Void)? = nil
 
     var body: some View {
         switch entry {
@@ -206,24 +233,39 @@ struct RoomEntryRow: View {
             case .user:
                 MessageCard(message: message, role: .user)
             case .agent(let memberId):
-                MessageCard(message: message, role: .agent(member: members.first { $0.id == memberId }), onReply: onReply)
+                let member = member(id: memberId)
+                VStack(spacing: 12) {
+                    MessageCard(message: message, role: .agent(member: member), onReply: onReply)
+                    if let work = message.work {
+                        WorkSummaryCard(messageId: message.id, member: member, work: work) { sessionId in
+                            onOpenMember?(sessionId)
+                        }
+                    }
+                }
             case .system:
                 SystemRow(payload: SystemPayload(text: message.text))
             }
         case .system(let message):
             SystemRow(payload: SystemPayload(text: message.text))
-        case .approval(let message), .changes(let message):
-            ItemCard(
-                chrome: CardChrome(status: .completed, createdAt: message.createdAt, summary: nil),
-                style: ItemStyle.roomStyle(for: entry)
-            ) {
-                Text(message.text)
-                    .font(.subheadline)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .accessibilityIdentifier("room.card.\(message.id)")
+        case .approval(let message):
+            RoomApprovalCard(
+                message: message,
+                member: message.approval.flatMap { member(id: $0.memberId) },
+                onShowDetail: message.approval.map { mirrored in { onApprovalDetail?(mirrored.approval.approvalId) } }
+            )
+        case .changes(let message):
+            ChangesReadyCard(
+                message: message,
+                member: message.changes.flatMap { member(id: $0.memberId) },
+                submit: mergeSubmit,
+                onMerge: { if let change = message.changes { onMerge?(change) } },
+                onDismiss: { if let change = message.changes { onDismiss?(change) } }
+            )
         }
+    }
+
+    private func member(id: String) -> TeamMember? {
+        members.first { $0.id == id }
     }
 }
 

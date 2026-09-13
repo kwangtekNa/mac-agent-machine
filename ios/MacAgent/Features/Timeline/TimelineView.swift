@@ -27,6 +27,8 @@ private struct TimelineScreen: View {
 
     @Environment(AppState.self) private var appState
     @Environment(SessionsStore.self) private var store
+    /// 팀원 세션이면 부제에 팀 배지를 붙인다(세션 행 규칙과 동일). 주입되지 않은 곳(테스트)에서는 nil.
+    @Environment(TeamsStore.self) private var teamsStore: TeamsStore?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     /// `AppState` 가 세션별로 보관한다(회전·크기 변화에도 유지).
@@ -104,7 +106,8 @@ private struct TimelineScreen: View {
                     title: title,
                     statusText: statusText,
                     gauge: ContextGaugeState.make(status: model.status, context: model.contextUsage),
-                    tint: model.contextTint
+                    tint: model.contextTint,
+                    prefix: teamBadge
                 ) {
                     showsInfo = true
                 }
@@ -198,6 +201,12 @@ private struct TimelineScreen: View {
 
     private var currentSession: Session? {
         model.session ?? store.session(id: sessionId)
+    }
+
+    /// 팀원 세션의 부제 배지 `🧑‍💻 지연 · backend`(`TeamsStore.badge`). 일반 세션은 nil.
+    private var teamBadge: String? {
+        guard let session = currentSession, let teamsStore else { return nil }
+        return TeamsStore.badge(for: session, teams: teamsStore.teams)
     }
 
     /// "파일" 탭: 세션 cwd 를 루트로 하는 인라인 파일 브라우저. 모델은 `AppState` 가 세션별로 보관하므로 탭을 오가도 위치가 남는다.

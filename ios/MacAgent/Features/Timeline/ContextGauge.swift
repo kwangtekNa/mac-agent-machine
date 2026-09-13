@@ -35,13 +35,20 @@ struct ContextGaugeView: View {
     let statusText: String
     let gauge: ContextGaugeState
     let tint: Color
+    /// 부제 앞에 붙는 팀 배지(`🧑‍💻 지연 · backend`). 팀원 세션이 아니면 nil.
+    var prefix: String? = nil
     let onTap: () -> Void
+
+    /// 부제 한 줄: 팀 배지 · 컨텍스트(또는 상태).
+    var subtitle: String {
+        [prefix, gauge.subtitle ?? statusText].compactMap { $0 }.joined(separator: " · ")
+    }
 
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 2) {
                 Text(title).font(.headline).lineLimit(1)
-                Text(gauge.subtitle ?? statusText).font(.caption).foregroundStyle(.secondary)
+                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 if let percent = gauge.percent {
                     ProgressView(value: Double(percent), total: 100)
                         .progressViewStyle(.linear)
@@ -54,7 +61,7 @@ struct ContextGaugeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title), \(gauge.subtitle ?? statusText)")
+        .accessibilityLabel("\(title), \(subtitle)")
         .accessibilityHint("세션 정보 보기")
         .accessibilityIdentifier("timeline.contextGauge")
     }

@@ -557,6 +557,38 @@ final class RoomModelTests: XCTestCase {
         XCTAssertEqual(model.mergeSubmit, .idle, "이벤트로 확정된 뒤의 전송 실패는 무시한다")
     }
 
+    func testMergeFailureIsClearedByMessageUpdatedMerged() async throws {
+        install([("POST", "/api/v1/teams/\(teamId)/changes/\(changeId)/merge", 409, Data(#"{"error":{"code":"conflict","message":"작업 트리가 깨끗하지 않습니다"}}"#.utf8))])
+        let model = makeModel(failureDuration: .seconds(10))
+        model.apply(try event("room.snapshot"))
+        model.apply(try event("room.message.changes"))
+        let change = try XCTUnwrap(changes(in: model))
+        await model.requestMerge(change)
+        XCTAssertEqual(model.mergeSubmit, .failed(changeId: changeId, message: "작업 트리가 깨끗하지 않습니다"))
+        let failedEntry = try XCTUnwrap(model.entries.first { $0.id == changesMessageId }?.message)
+        XCTAssertEqual(
+            ChangesCardState.make(message: failedEntry, member: nil, submit: model.mergeSubmit).errorLine,
+            "작업 트리가 깨끗하지 않습니다", "카드 하단 빨간 캡션"
+        )
+
+        // 다른 클라이언트가 머지해 updated(merged) 가 오면 실패 문구도 걷고 카드는 서버 값으로 확정된다.
+        model.apply(try event("room.message.changes", seq: 8) { json in
+            json["type"] = "room.message.updated"
+            var m = json["message"] as! [String: Any]
+            var c = m["changes"] as! [String: Any]
+            c["status"] = "merged"
+            m["changes"] = c
+            json["message"] = m
+        })
+        XCTAssertEqual(changes(in: model)?.status, .merged)
+        XCTAssertEqual(model.mergeSubmit, .idle)
+        let mergedEntry = try XCTUnwrap(model.entries.first { $0.id == changesMessageId }?.message)
+        let state = ChangesCardState.make(message: mergedEntry, member: nil, submit: model.mergeSubmit)
+        XCTAssertEqual(state.statusLine, "병합됨 · a1b2c3d")
+        XCTAssertEqual(state.action, .none)
+        XCTAssertNil(state.errorLine)
+    }
+
     func testDismissPostsAndReplacesChanges() async throws {
         install([("POST", "/api/v1/teams/\(teamId)/changes/\(changeId)/dismiss", 200, try json("rest/merge-result.json") { json in
             var c = json["change"] as! [String: Any]

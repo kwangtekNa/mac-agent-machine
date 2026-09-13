@@ -14,20 +14,7 @@ struct FileChangeCard: View {
     var body: some View {
         ItemCard(item: item, style: ItemStyle.style(for: item), title: title) {
             ForEach(Array(payload.files.enumerated()), id: \.offset) { _, file in
-                HStack(spacing: 6) {
-                    Image(systemName: Self.symbol(for: file.kind))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 14)
-                    Text(file.path)
-                        .font(.caption.monospaced())
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 4)
-                    Text("+\(file.additions)").foregroundStyle(.green)
-                    Text("−\(file.deletions)").foregroundStyle(.red)
-                }
-                .font(.caption)
+                FileChangeRow(file: file)
             }
             if !payload.patch.isEmpty {
                 DisclosureGroup("변경 내용", isExpanded: $showsDiff) {
@@ -51,5 +38,27 @@ struct FileChangeCard: View {
         case .rename: return "arrow.right"
         case .unknown: return "questionmark"
         }
+    }
+}
+
+/// 파일 한 행: kind 아이콘 + 경로(monospaced, 가운데 말줄임) + `+N −M`. 타임라인 `FileChangeCard` 와 방의 "변경 준비됨" 카드가 같이 쓴다.
+struct FileChangeRow: View {
+    let file: FileChangeEntry
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: FileChangeCard.symbol(for: file.kind))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Text(file.path)
+                .font(.caption.monospaced())
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 4)
+            Text("+\(file.additions)").foregroundStyle(.green)
+            Text("−\(file.deletions)").foregroundStyle(.red)
+        }
+        .font(.caption)
     }
 }
