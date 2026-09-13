@@ -73,7 +73,7 @@ final class AppStateModelKeyTests: XCTestCase {
         let room = state.roomModel(for: "t", roomId: "r1", client: client)
         room.resume()
         _ = state.timelineModel(for: "s1", client: client)
-        state.selectedRoom = (teamId: "t", roomId: "r1")
+        state.selectedRoom = RoomRef(teamId: "t", roomId: "r1")
 
         state.disconnect()
 

@@ -45,6 +45,31 @@ struct ItemStyle: Equatable {
         }
     }
 
+    /// 방 항목(PROTOCOL.md 6.1 `RoomMessage.kind`)용. 메시지는 아이콘 없음, 승인·변경은 타임라인의 같은 종류와 같은 아이콘, system 은 `info.circle`.
+    static func roomStyle(for entry: RoomEntry) -> ItemStyle {
+        switch entry {
+        case .message(let message):
+            return message.author.kind == .user
+                ? ItemStyle(symbol: "", tint: .accentColor, defaultExpanded: true)
+                : ItemStyle(symbol: "", tint: .primary, defaultExpanded: true)
+        case .approval(let message):
+            return message.approval?.resolution == nil
+                ? ItemStyle(symbol: "hand.raised.fill", tint: .yellow, defaultExpanded: true)
+                : ItemStyle(symbol: "hand.raised", tint: .secondary, defaultExpanded: false)
+        case .changes(let message):
+            switch message.changes?.status {
+            case .dismissed, .stale, .merged:
+                return ItemStyle(symbol: "plus.forwardslash.minus", tint: .secondary, defaultExpanded: false)
+            case .conflict:
+                return ItemStyle(symbol: "plus.forwardslash.minus", tint: .red, defaultExpanded: true)
+            default:
+                return ItemStyle(symbol: "plus.forwardslash.minus", tint: .teal, defaultExpanded: true)
+            }
+        case .system:
+            return ItemStyle(symbol: "info.circle", tint: .secondary, defaultExpanded: true)
+        }
+    }
+
     /// 상태 오버라이드(5.2): `failed` 는 빨강, `cancelled` 는 `.secondary`.
     func tint(for status: ItemStatus) -> Color {
         switch status {

@@ -55,6 +55,24 @@ struct MentionParser {
         text.replacingCharacters(in: token, with: "@\(member.name) ")
     }
 
+    /// 팀원(이름·핸들)도 `all` 도 아닌 `@토큰`(원문, 처음 나온 순서, 중복 없음). 컴포저 캡션 "모르는 팀원 @xxx 는 무시됩니다" 의 재료.
+    /// `ignoringTrailing` 이면 텍스트 끝까지 이어져 아직 입력 중인 토큰은 뺀다(공백을 치면 확정).
+    static func unknownTokens(in text: String, members: [TeamMember], ignoringTrailing: Bool = true) -> [String] {
+        var known: Set<String> = ["all"]
+        for member in members {
+            known.insert(normalize(member.handle))
+            known.insert(normalize(member.name))
+        }
+        var result: [String] = []
+        for span in tokenSpans(in: text) {
+            if ignoringTrailing, span.end == text.endIndex { continue }
+            let key = normalize(span.token)
+            if known.contains(key) || result.contains(span.token) { continue }
+            result.append(span.token)
+        }
+        return result
+    }
+
     // MARK: - 토큰
 
     private static let trailingPunctuation: Set<Character> = [".", ",", "!", "?", ":", ";", ")", "]", "}", "\"", "'"]
@@ -65,7 +83,12 @@ struct MentionParser {
 
     /// `@` 뒤의 토큰(끝 문장부호 제거, 빈 토큰 제외). 서버 `MENTION_RE` 와 같은 문자 집합.
     private static func tokens(in text: String) -> [String] {
-        var result: [String] = []
+        tokenSpans(in: text).map(\.token)
+    }
+
+    /// 토큰과 원문에서 토큰 문자가 끝난 위치(문장부호 제거 전).
+    private static func tokenSpans(in text: String) -> [(token: String, end: String.Index)] {
+        var result: [(token: String, end: String.Index)] = []
         var index = text.startIndex
         while index < text.endIndex {
             guard text[index] == "@" else {
@@ -76,7 +99,7 @@ struct MentionParser {
             while end < text.endIndex, isTokenCharacter(text[end]) { end = text.index(after: end) }
             var token = Substring(text[text.index(after: index)..<end])
             while let last = token.last, trailingPunctuation.contains(last) { token.removeLast() }
-            if !token.isEmpty { result.append(String(token)) }
+            if !token.isEmpty { result.append((String(token), end)) }
             index = end
         }
         return result

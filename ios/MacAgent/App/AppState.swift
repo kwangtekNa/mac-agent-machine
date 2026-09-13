@@ -29,8 +29,12 @@ final class AppState {
     private(set) var client: APIClient?
     /// iPad 사이드바 선택. compact 에서는 쓰지 않는다.
     var selectedSessionId: String?
-    /// iPad 방 선택(step 5 가 쓴다). compact 에서는 쓰지 않는다.
-    var selectedRoom: (teamId: String, roomId: String)?
+    /// iPad 사이드바 팀 선택(content 열 = 방 목록). compact 에서는 쓰지 않는다.
+    var selectedTeamId: String?
+    /// iPad 방 선택(content 열 = 방 화면). compact 에서는 쓰지 않는다.
+    var selectedRoom: RoomRef?
+    /// iPad 디테일 열의 팀원 타임라인(작업 요약·팀원 목록에서 고른 팀원 세션).
+    var selectedMemberSessionId: String?
     /// 세션 id → 타임라인 모델. 뷰 갱신 중에도 넣고 빼므로 관찰 대상에서 제외한다.
     @ObservationIgnored private(set) var timelineModels: [String: TimelineModel] = [:]
     @ObservationIgnored private(set) var roomModels: [ModelKey: RoomModel] = [:]
@@ -164,7 +168,9 @@ final class AppState {
         fileBrowserModels.removeAll()
         recentKeys.removeAll()
         selectedSessionId = nil
+        selectedTeamId = nil
         selectedRoom = nil
+        selectedMemberSessionId = nil
     }
 
     private func open(_ url: URL, persist: Bool) async {

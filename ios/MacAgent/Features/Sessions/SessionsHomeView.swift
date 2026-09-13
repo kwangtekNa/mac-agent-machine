@@ -1,16 +1,19 @@
 import SwiftUI
 
 /// 연결 후 첫 화면(IOS.md 4절). 진행 중 → 팀 → 프로젝트 → 최근 세션 순의 `List` 와 새 세션·새 팀(`+` 메뉴)·설정 진입.
-/// 팀 행의 목적지는 step 5(방 목록) 전까지 `TeamSettingsView` 다.
+/// 팀 행의 목적지는 `TeamRoomsView`(방 목록)이고, 방·팀 설정 목적지도 여기 스택에 등록한다.
 /// 화면이 보이는 동안 `refreshInterval` 마다 `refresh()` 해 승인 대기 배지를 갱신한다(`.task` 가 사라지면 취소).
 struct SessionsHomeView: View {
     static let refreshInterval: Duration = .seconds(15)
 
     /// iPad 사이드바 모드(`SplitRootView`): 값이 있으면 세션 행이 push 대신 이 선택을 바꾼다.
     var selection: Binding<String?>?
+    /// iPad 사이드바 모드: 값이 있으면 팀 행이 push 대신 이 선택을 바꾼다(content 열에 방 목록).
+    var teamSelection: Binding<String?>?
 
-    init(selection: Binding<String?>? = nil) {
+    init(selection: Binding<String?>? = nil, teamSelection: Binding<String?>? = nil) {
         self.selection = selection
+        self.teamSelection = teamSelection
     }
 
     @Environment(SessionsStore.self) private var store
@@ -64,7 +67,13 @@ struct SessionsHomeView: View {
                     TimelineView(sessionId: session.id)
                 }
                 .navigationDestination(for: Team.self) { team in
-                    TeamSettingsView(teamId: team.id)
+                    TeamRoomsView(teamId: team.id)
+                }
+                .navigationDestination(for: RoomRef.self) { ref in
+                    RoomView(teamId: ref.teamId, roomId: ref.roomId)
+                }
+                .navigationDestination(for: TeamSettingsRef.self) { ref in
+                    TeamSettingsView(teamId: ref.teamId)
                 }
                 .sheet(isPresented: $showsSettings) {
                     SettingsView()
@@ -145,8 +154,19 @@ struct SessionsHomeView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(teamsStore.teams) { team in
-                    NavigationLink(value: team) {
-                        TeamRow(team: team, activity: .of(team: team, sessions: store.sessions))
+                    if let teamSelection {
+                        Button {
+                            teamSelection.wrappedValue = team.id
+                        } label: {
+                            TeamRow(team: team, activity: .of(team: team, sessions: store.sessions))
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(teamSelection.wrappedValue == team.id ? Color.accentColor.opacity(0.14) : nil)
+                        .accessibilityAddTraits(teamSelection.wrappedValue == team.id ? .isSelected : [])
+                    } else {
+                        NavigationLink(value: team) {
+                            TeamRow(team: team, activity: .of(team: team, sessions: store.sessions))
+                        }
                     }
                 }
             }
@@ -231,11 +251,15 @@ struct SessionsHomeView: View {
         open(session)
     }
 
-    /// 새 팀 시트가 닫힌 뒤 팀 화면으로 push 한다.
+    /// 새 팀 시트가 닫힌 뒤 방 목록으로 push 한다(iPad 사이드바는 선택).
     private func openCreatedTeam() {
         guard let team = createdTeam else { return }
         createdTeam = nil
-        path.append(team)
+        if let teamSelection {
+            teamSelection.wrappedValue = team.id
+        } else {
+            path.append(team)
+        }
     }
 
     /// 세션·프로젝트와 팀을 함께 새로고침한다.
