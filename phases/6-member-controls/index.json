@@ -28,10 +28,28 @@
     {
       "step": 1,
       "name": "ios-member-controls",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-13T21:18:10+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "af8d805a-143c-48e9-8af9-6ca91ea5ede8",
+          "cost_usd": 8.96988075,
+          "duration_s": 916.5,
+          "num_turns": 37,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 8.969881,
+      "duration_s": 916.5,
+      "retries": 0,
+      "session_id": "af8d805a-143c-48e9-8af9-6ca91ea5ede8",
+      "summary": "iOS 팀원 권한·모델·사고 수준 제어: MemberDraft(selectableModes에 fullAuto, modeChangeNeedsConfirmation, changeAgent→model/effort 초기화), TeamsStore.models(for:) 에이전트별 5분 캐시(실패 조용히), RoomModel.reloadMembers()(GET /teams/:id), 신규 MemberControlSheet.swift(MemberControlState make/patch 바뀐 필드만 + ModelPickerRow/EffortPickerRow SessionInfoState 규칙 재사용 + 시트: 권한/모델/사고 수준/브랜치/타임라인 열기/기억 초기화, 즉시 PATCH→응답 Team 교체→reloadMembers, 실패 빨간 캡션), MemberEditorView(full-auto 확인 다이얼로그·취소 시 유지, memberEditor.model/effort 피커, 에이전트 변경 시 초기화, 편집 모델 변경 캡션), RoomView 팀원 시트 행 탭→MemberControlSheet(room.member.<id>, 스와이프로 타임라인), TeamMemberStatusRow 분리, IOS.md 10.1/10.2 갱신 + 10.8 추가. 테스트: MemberDraft 3건, MemberControlStateTests 2건, TeamsStore 캐시 2건, RoomModel reloadMembers 1건, 렌더 1건(Form 섹션 6개 + 섹션 제목 상수 + 모델 로드; 접근성 텍스트 추출은 시뮬레이터에서 불가). 게이트 scripts/test.sh(TS 55 파일 + iOS) 통과, AC 파일/grep 통과. 서버·프로토콜 미수정, full-auto 무확인 경로 없음.",
+      "completed_at": "2026-09-13T21:33:26+0900"
     },
     {
       "step": 2,
