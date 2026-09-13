@@ -55,9 +55,9 @@ final class ProtocolFixturesTests: XCTestCase {
         t["rest/merge-result.json"] = decode(MergeResult.self)
         t["rest/team-templates.json"] = decode(TeamTemplatesResponse.self)
         t["rest/team-template.json"] = decode(TeamTemplate.self)
-        // 2026-09-13 추가분(git init) rest 2개. 임시로 JSONValue 로 등록한다 — phase 5 iOS step 1 이 GitInitResponse 로 바꾼다.
-        t["rest/git-init.json"] = decode(JSONValue.self)
-        t["rest/git-init-dry-run.json"] = decode(JSONValue.self)
+        // 2026-09-13 추가분(git init) rest 2개
+        t["rest/git-init.json"] = decode(GitInitResponse.self)
+        t["rest/git-init-dry-run.json"] = decode(GitInitResponse.self)
         // room-ws/ 10개: 전부 RoomEvent (세션 ServerEvent 와 별도 enum)
         for name in roomWsExpectations.keys {
             t["room-ws/\(name).json"] = decode(RoomEvent.self)
@@ -451,6 +451,30 @@ final class ProtocolFixturesTests: XCTestCase {
         }
         XCTAssertEqual(p.durationMs, 30412)
         XCTAssertEqual(p.usage.inputTokens, 18420)
+    }
+
+    // MARK: - 2026-09-13 추가분 (git init)
+
+    func testGitInitFixtures() throws {
+        let initialized = try decodeFixture(GitInitResponse.self, "rest/git-init.json")
+        XCTAssertTrue(initialized.initialized)
+        XCTAssertEqual(initialized.branch, "main")
+        XCTAssertEqual(initialized.commit, "9f1c2b3a4d5e6f708192a3b4c5d6e7f8091a2b3c")
+        XCTAssertEqual(initialized.files, 12)
+        XCTAssertEqual(initialized.bytes, 48213)
+        XCTAssertTrue(initialized.createdGitignore)
+
+        let dryRun = try decodeFixture(GitInitResponse.self, "rest/git-init-dry-run.json")
+        XCTAssertFalse(dryRun.initialized)
+        XCTAssertNil(dryRun.commit, "dryRun 은 commit null")
+        XCTAssertEqual(dryRun.files, initialized.files, "files/bytes 는 dryRun 과 실제가 같다")
+        XCTAssertEqual(dryRun.bytes, initialized.bytes)
+
+        // 요청 본문: dryRun nil 이면 키 생략
+        let plain = try JSONSerialization.jsonObject(with: JSONCoding.encoder.encode(GitInitRequest(cwd: "~/work/x"))) as? NSDictionary
+        XCTAssertEqual(plain, ["cwd": "~/work/x"] as NSDictionary)
+        let dry = try JSONSerialization.jsonObject(with: JSONCoding.encoder.encode(GitInitRequest(cwd: "~/work/x", dryRun: true))) as? NSDictionary
+        XCTAssertEqual(dry, ["cwd": "~/work/x", "dryRun": true] as NSDictionary)
     }
 
     // MARK: - 2026-09-10 추가분 (사용량·모델·mkdir)

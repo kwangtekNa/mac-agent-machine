@@ -18,6 +18,8 @@ struct NewTeamSheet: View {
     @State private var isSubmitting = false
     @State private var errorMessage: String?
     @State private var didPrepare = false
+    /// 선택한 디렉토리의 저장소 확인·초기화 흐름(PROTOCOL.md `POST /git/init`). 클라이언트가 준비되면 `prepare()` 가 만든다.
+    @State private var gitInit: GitInitModel?
 
     var body: some View {
         NavigationStack {
@@ -31,6 +33,7 @@ struct NewTeamSheet: View {
                 DirectoryFormSection(form: $form.directory, projects: store.projects, identifierPrefix: "newTeam") {
                     showsPicker = true
                 }
+                gitSection
                 membersSection
                 advancedSection
                 submitSection
@@ -44,6 +47,23 @@ struct NewTeamSheet: View {
                 }
             }
             .interactiveDismissDisabled(isSubmitting)
+            .confirmationDialog(
+                "git 저장소를 만들까요?", isPresented: gitInitConfirmPresented, titleVisibility: .visible, presenting: gitPhase.preview
+            ) { _ in
+                Button("초기화") { Task { await gitInit?.confirm(cwd: form.directory.selectedPath) } }
+                Button("취소", role: .cancel) { gitInit?.cancelPreview() }
+            } message: { preview in
+                Text(GitInitFlow.confirmMessage(preview))
+            }
+            // 디렉토리를 고르거나 직접 입력이 멈추면 저장소 여부를 확인한다. 직접 입력은 타이핑이 끝날 때까지 잠시 기다린다.
+            .task(id: form.directory.selectedPath) {
+                let cwd = form.directory.selectedPath
+                if form.directory.showsCustomInput, !cwd.isEmpty {
+                    try? await Task.sleep(for: .milliseconds(600))
+                    if Task.isCancelled { return }
+                }
+                await gitInit?.check(cwd: cwd)
+            }
         }
         .sheet(isPresented: $showsPicker) {
             if let client = appState.client {
@@ -78,6 +98,60 @@ struct NewTeamSheet: View {
                 .accessibilityIdentifier("newTeam.template")
             }
         }
+    }
+
+    /// 디렉토리 행 아래: 저장소가 아니면 경고 + "저장소 초기화", 초기화가 끝나면 "git 저장소 (main)" 캡션, 실패면 문구 + 다시 시도.
+    @ViewBuilder
+    private var gitSection: some View {
+        if let gitInit, !form.directory.selectedPath.isEmpty {
+            switch gitInit.flow.phase {
+            case .idle, .checking:
+                EmptyView()
+            case .notRepo, .previewing, .confirming, .initializing:
+                Section {
+                    Label("git 저장소가 아닙니다", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                    gitInitButton(gitInit)
+                } footer: {
+                    Text("팀원은 이 저장소의 브랜치에서 일합니다. 초기화하면 기존 파일이 첫 커밋에 담깁니다.")
+                }
+            case .done(let result):
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("git 저장소 (\(result.branch))", systemImage: "checkmark.circle")
+                            .foregroundStyle(.green)
+                        Text(GitInitFlow.doneMessage(result))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityIdentifier("newTeam.gitReady")
+                }
+            case .failed(let message):
+                Section {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("오류: \(message)")
+                    gitInitButton(gitInit)
+                }
+            }
+        }
+    }
+
+    private func gitInitButton(_ gitInit: GitInitModel) -> some View {
+        Button {
+            Task { await gitInit.preview(cwd: form.directory.selectedPath) }
+        } label: {
+            HStack {
+                Label("저장소 초기화", systemImage: "arrow.triangle.branch")
+                if gitInit.flow.phase.isBusy {
+                    Spacer()
+                    ProgressView()
+                }
+            }
+        }
+        .disabled(gitInit.flow.phase.isBusy || isSubmitting)
+        .accessibilityIdentifier("newTeam.gitInit")
     }
 
     private var membersSection: some View {
@@ -136,7 +210,7 @@ struct NewTeamSheet: View {
             }
             .disabled(!canSubmit)
             .accessibilityIdentifier("newTeam.submit")
-            if !isSubmitting, let reason = form.blockingReason(availableAgents: availableAgents) {
+            if !isSubmitting, let reason = form.blockingReason(availableAgents: availableAgents, gitPhase: gitPhase) {
                 Text(reason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -182,13 +256,22 @@ struct NewTeamSheet: View {
         Set([AgentKind.claude, .codex].filter { availability($0) == nil })
     }
 
+    private var gitPhase: GitInitFlow.Phase {
+        gitInit?.flow.phase ?? .idle
+    }
+
+    private var gitInitConfirmPresented: Binding<Bool> {
+        Binding(get: { gitPhase.preview != nil }, set: { if !$0 { gitInit?.cancelPreview() } })
+    }
+
     private var canSubmit: Bool {
-        form.canSubmit(availableAgents: availableAgents, isSubmitting: isSubmitting)
+        form.canSubmit(availableAgents: availableAgents, gitPhase: gitPhase, isSubmitting: isSubmitting)
     }
 
     private func prepare() {
         guard !didPrepare else { return }
         didPrepare = true
+        if let client = appState.client { gitInit = GitInitModel(client: client) }
         form = .initial(initialCwd: initialCwd, projects: store.projects)
     }
 
@@ -203,6 +286,11 @@ struct NewTeamSheet: View {
             dismiss()
         } catch {
             errorMessage = ErrorMessages.teamMessage(for: error)
+            // 확인을 건너뛰었거나 그 사이 바뀐 경우: 서버가 "git 저장소가 아니다" 라면 같은 행·버튼을 보여준다.
+            if errorMessage == ErrorMessages.teamNotGitRepo, let gitInit {
+                await gitInit.check(cwd: form.directory.selectedPath)
+                if gitInit.flow.phase == .notRepo { errorMessage = nil }
+            }
         }
     }
 }

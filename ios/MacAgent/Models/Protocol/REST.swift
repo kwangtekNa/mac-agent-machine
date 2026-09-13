@@ -115,6 +115,31 @@ struct GitDiffResponse: Codable, Hashable, Sendable {
     var patch: String
 }
 
+/// `POST /git/init` 본문(2026-09-13 추가). `~/` 허용. `dryRun` 이 nil 이면 키를 생략한다(실제 초기화).
+struct GitInitRequest: Codable, Hashable, Sendable {
+    var cwd: String
+    var dryRun: Bool?
+
+    init(cwd: String, dryRun: Bool? = nil) {
+        self.cwd = cwd
+        self.dryRun = dryRun
+    }
+}
+
+/// `POST /git/init` → 201(초기화) / 200(`dryRun`). `branch` 는 항상 `main`.
+/// `files`/`bytes` 는 첫 커밋에 담기는(담길) 기존 파일 수와 합계 크기(서버가 만든 `.gitignore` 는 제외, dryRun 과 실제가 같다).
+struct GitInitResponse: Codable, Hashable, Sendable {
+    /// 실제로 초기화했으면 true, `dryRun` 이면 false.
+    var initialized: Bool
+    var branch: String
+    /// nullable. 첫 커밋 sha(40자). `dryRun` 이면 null.
+    var commit: String?
+    var files: Int
+    var bytes: Int
+    /// 기본 `.gitignore` 를 만들었(만들)는지. 이미 있으면 건드리지 않고 false.
+    var createdGitignore: Bool
+}
+
 /// `POST /fs/mkdir` 본문(2026-09-10 추가). `~/` 로 시작하면 서버가 홈으로 치환한다.
 struct FsMkdirRequest: Codable, Hashable, Sendable {
     var path: String

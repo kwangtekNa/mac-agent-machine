@@ -107,6 +107,12 @@ struct APIClient: Sendable {
         try await get(GitStatusResponse.self, "/git/status", query: [URLQueryItem(name: "cwd", value: cwd)])
     }
 
+    /// `POST /git/init` → 201(초기화) / 200(`dryRun`). 홈 밖 403, 디렉토리가 아니거나 없음 400, 이미 저장소(또는 상위가 저장소) 409.
+    /// `dryRun` 이 false 면 본문에서 키를 생략한다.
+    func initRepository(cwd: String, dryRun: Bool = false) async throws -> GitInitResponse {
+        try await send(GitInitResponse.self, method: "POST", path: "/git/init", body: GitInitRequest(cwd: cwd, dryRun: dryRun ? true : nil))
+    }
+
     func gitDiff(cwd: String, path: String?, staged: Bool) async throws -> GitDiffResponse {
         var query = [URLQueryItem(name: "cwd", value: cwd)]
         if let path { query.append(URLQueryItem(name: "path", value: path)) }

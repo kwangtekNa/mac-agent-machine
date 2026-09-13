@@ -222,6 +222,8 @@ struct DirectoryListContent<Row: View>: View {
     let path: String
     /// 목록 위에 노란 배경으로 보이는 문구(새 폴더 오류 등). 목록이 없을 때는 보이지 않는다.
     var banner: String? = nil
+    /// 목록 위에 초록 체크와 함께 보이는 완료 안내(저장소 초기화 완료 등).
+    var notice: String? = nil
     @ViewBuilder let row: (FsEntry) -> Row
 
     private var directory: FileBrowserModel.Directory {
@@ -244,6 +246,12 @@ struct DirectoryListContent<Row: View>: View {
         } else {
             let entries = model.visibleEntries(of: dir)
             List {
+                if let notice {
+                    Label(notice, systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                        .listRowBackground(Color.green.opacity(0.12))
+                }
                 ForEach([banner, dir.error].compactMap { $0 }, id: \.self) { message in
                     Label(message, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)

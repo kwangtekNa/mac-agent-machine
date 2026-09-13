@@ -69,7 +69,7 @@ struct DirectoryPickerView: View {
     }
 }
 
-/// 피커의 디렉토리 한 단계. 행은 하위 폴더로 들어가는 링크뿐이고, 툴바에 숨김 토글과 "새 폴더"가 있다.
+/// 피커의 디렉토리 한 단계. 행은 하위 폴더로 들어가는 링크뿐이고, 툴바에 숨김 토글과 "새 폴더", (저장소가 아니면) "저장소 초기화"가 있다.
 private struct PickerDirectoryList: View {
     let model: FileBrowserModel
     let path: String
@@ -78,9 +78,34 @@ private struct PickerDirectoryList: View {
     /// 검증 실패나 서버 400/403/409 문구. 목록 위에 인라인으로 보인다.
     @State private var newFolderError: String?
     @State private var isCreating = false
+    /// 저장소 초기화 흐름(PROTOCOL.md `POST /git/init`). 단계마다 하나씩 둔다.
+    @State private var gitInit: GitInitModel
+
+    init(model: FileBrowserModel, path: String) {
+        self.model = model
+        self.path = path
+        _gitInit = State(initialValue: GitInitModel(client: model.client))
+    }
 
     private var directory: FileBrowserModel.Directory {
         model.directory(for: path) ?? FileBrowserModel.Directory(path: path)
+    }
+
+    /// 서버의 `isGitRepo` 는 상위 저장소 안의 하위 폴더도 true 라, false 인 폴더에서만 초기화 버튼을 보인다(중첩 저장소 방지).
+    private var canInitRepo: Bool { directory.listing?.isGitRepo == false }
+
+    private var gitInitError: String? {
+        if case .failed(let message) = gitInit.flow.phase { return message }
+        return nil
+    }
+
+    private var gitInitNotice: String? {
+        if case .done(let result) = gitInit.flow.phase { return GitInitFlow.doneMessage(result) }
+        return nil
+    }
+
+    private var gitInitConfirmPresented: Binding<Bool> {
+        Binding(get: { gitInit.flow.phase.preview != nil }, set: { if !$0 { gitInit.cancelPreview() } })
     }
 
     /// 루트 `~` 는 서버가 준 절대 경로로 보여준다.
@@ -92,7 +117,7 @@ private struct PickerDirectoryList: View {
     }
 
     var body: some View {
-        DirectoryListContent(model: model, path: path, banner: newFolderError) { entry in
+        DirectoryListContent(model: model, path: path, banner: newFolderError ?? gitInitError, notice: gitInitNotice) { entry in
             NavigationLink(value: FileBrowserModel.Directory(path: entry.path)) {
                 FileRow(entry: entry)
             }
@@ -120,7 +145,25 @@ private struct PickerDirectoryList: View {
                 .disabled(directory.listing == nil || isCreating)
                 .accessibilityLabel("새 폴더")
                 .accessibilityIdentifier("directoryPicker.newFolder")
+                if canInitRepo {
+                    Button {
+                        Task { await gitInit.preview(cwd: displayPath) }
+                    } label: {
+                        Image(systemName: "arrow.triangle.branch")
+                    }
+                    .disabled(gitInit.flow.phase.isBusy || isCreating)
+                    .accessibilityLabel("저장소 초기화")
+                    .accessibilityIdentifier("directoryPicker.gitInit")
+                }
             }
+        }
+        .confirmationDialog(
+            "git 저장소를 만들까요?", isPresented: gitInitConfirmPresented, titleVisibility: .visible, presenting: gitInit.flow.phase.preview
+        ) { _ in
+            Button("초기화") { Task { await initRepository() } }
+            Button("취소", role: .cancel) { gitInit.cancelPreview() }
+        } message: { preview in
+            Text(GitInitFlow.confirmMessage(preview))
         }
         .alert("새 폴더", isPresented: $showsNewFolder) {
             TextField("이름", text: $newFolderName)
@@ -140,5 +183,11 @@ private struct PickerDirectoryList: View {
         let error = await model.createDirectory(named: newFolderName, in: path)
         newFolderError = error
         if error == nil { newFolderName = "" }
+    }
+
+    /// 확인 뒤 실제 초기화. 끝나면 목록을 다시 읽어 `isGitRepo` 와 git 배지를 갱신한다(버튼은 사라진다).
+    private func initRepository() async {
+        await gitInit.confirm(cwd: displayPath)
+        if case .done = gitInit.flow.phase { await model.load(path) }
     }
 }

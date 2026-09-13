@@ -125,6 +125,24 @@ final class NewTeamFormStateTests: XCTestCase {
         XCTAssertEqual(form.members.count, 2, "선택 해제해도 팀원은 남는다")
     }
 
+    func testNotRepoBlocksSubmit() {
+        let form = readyForm()
+        let preview = GitInitResponse(initialized: false, branch: "main", commit: nil, files: 3, bytes: 10, createdGitignore: true)
+        XCTAssertTrue(form.canSubmit())
+        for phase in [GitInitFlow.Phase.notRepo, .previewing, .confirming(preview), .initializing] {
+            XCTAssertFalse(form.canSubmit(gitPhase: phase), "\(phase)")
+            XCTAssertEqual(form.blockingReason(gitPhase: phase), "git 저장소가 아닙니다. 먼저 저장소를 초기화하세요.")
+        }
+        for phase in [GitInitFlow.Phase.idle, .checking, .done(preview), .failed("x")] {
+            XCTAssertTrue(form.canSubmit(gitPhase: phase), "\(phase)")
+        }
+        XCTAssertFalse(form.canSubmit(gitPhase: .done(preview), isSubmitting: true))
+
+        var noDirectory = form
+        noDirectory.directory.setCustomPath("")
+        XCTAssertEqual(noDirectory.blockingReason(gitPhase: .notRepo), "프로젝트 디렉토리를 고르세요. git 저장소여야 합니다.", "디렉토리가 없으면 그 이유가 먼저")
+    }
+
     func testUpsertKeepsSingleLeadAndFirstMemberBecomesLead() {
         var form = NewTeamFormState()
         let first = member("지연")

@@ -114,6 +114,22 @@ extension ErrorMessages {
 }
 
 extension ErrorMessages {
+    /// `POST /git/init` 409: 이미 저장소이거나 상위 디렉토리가 저장소다(중첩 저장소는 만들지 않는다).
+    static let gitInitConflict = String(localized: "이미 git 저장소입니다.")
+
+    /// 저장소 초기화 오류 → 문구. 409 는 고정 문구, 400 은 서버 메시지 그대로, 403 은 홈 밖 경로, 그 외는 공통 매핑.
+    static func gitInitMessage(for error: any Error) -> String {
+        guard case .server(let code, let serverMessage, let status) = error as? APIError else {
+            return message(for: error)
+        }
+        if status == 409 || code == .conflict { return gitInitConflict }
+        if status == 400 { return serverMessage }
+        if status == 403 { return pathForbidden }
+        return message(for: error)
+    }
+}
+
+extension ErrorMessages {
     static let teamLeadRequired = String(localized: "팀장을 정확히 한 명 지정하세요.")
     static let teamMemberConflict = String(localized: "같은 이름이나 핸들의 팀원이 이미 있습니다. 이름을 바꾸세요.")
     static let teamNotGitRepo = String(localized: "git 저장소가 아닙니다. 저장소 루트 디렉토리를 고르세요.")

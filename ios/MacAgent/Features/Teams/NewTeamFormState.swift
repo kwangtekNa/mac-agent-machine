@@ -38,10 +38,12 @@ struct NewTeamFormState: Equatable, Sendable {
     }
 
     /// 제출 못 하는 이유 한 줄(버튼 아래 캡션). nil 이면 제출할 수 있다.
-    func blockingReason(availableAgents: Set<AgentKind> = MemberDraft.allAgents) -> String? {
+    /// `gitPhase` 는 선택한 디렉토리의 저장소 확인 상태(`GitInitModel`). 저장소가 아니면(초기화 진행 중 포함) 막는다.
+    func blockingReason(availableAgents: Set<AgentKind> = MemberDraft.allAgents, gitPhase: GitInitFlow.Phase = .idle) -> String? {
         if trimmedName.isEmpty { return String(localized: "팀 이름을 입력하세요.") }
         if trimmedName.count > Self.nameMaxLength { return String(localized: "팀 이름은 \(Self.nameMaxLength)자 이하로 입력하세요.") }
         if directory.selectedPath.isEmpty { return String(localized: "프로젝트 디렉토리를 고르세요. git 저장소여야 합니다.") }
+        if gitPhase.needsInit { return String(localized: "git 저장소가 아닙니다. 먼저 저장소를 초기화하세요.") }
         if members.isEmpty { return String(localized: "팀원을 한 명 이상 추가하세요.") }
         if leadCount != 1 { return String(localized: "팀장을 정확히 한 명 지정하세요.") }
         let errors = memberErrors(availableAgents: availableAgents)
@@ -52,9 +54,11 @@ struct NewTeamFormState: Equatable, Sendable {
         return nil
     }
 
-    /// 이름 1~60, 디렉토리, 팀원 1명 이상, 팀장 정확히 1명, 팀원 검증(중복 이름 포함) 통과.
-    func canSubmit(availableAgents: Set<AgentKind> = MemberDraft.allAgents, isSubmitting: Bool = false) -> Bool {
-        !isSubmitting && blockingReason(availableAgents: availableAgents) == nil
+    /// 이름 1~60, 디렉토리(git 저장소), 팀원 1명 이상, 팀장 정확히 1명, 팀원 검증(중복 이름 포함) 통과.
+    func canSubmit(
+        availableAgents: Set<AgentKind> = MemberDraft.allAgents, gitPhase: GitInitFlow.Phase = .idle, isSubmitting: Bool = false
+    ) -> Bool {
+        !isSubmitting && blockingReason(availableAgents: availableAgents, gitPhase: gitPhase) == nil
     }
 
     /// `POST /teams` 본문. 팀원은 전부 본문에 담으므로 `templateId` 는 보내지 않는다(서버가 템플릿 팀원을 다시 깔지 않게).

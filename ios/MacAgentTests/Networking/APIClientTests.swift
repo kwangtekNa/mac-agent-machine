@@ -220,6 +220,49 @@ final class APIClientTests: XCTestCase {
         }
     }
 
+    // MARK: - 2026-09-13 추가분 (git init)
+
+    func testInitRepositoryBodyAndDecodes201() async throws {
+        try stub(status: 201, fixture: "rest/git-init.json")
+        let result = try await client.initRepository(cwd: "~/work/new-app")
+        XCTAssertTrue(result.initialized)
+        XCTAssertEqual(result.branch, "main")
+        XCTAssertEqual(result.commit, "9f1c2b3a4d5e6f708192a3b4c5d6e7f8091a2b3c")
+        XCTAssertEqual(result.files, 12)
+        XCTAssertEqual(result.bytes, 48213)
+        XCTAssertTrue(result.createdGitignore)
+        let request = try XCTUnwrap(lastRequest)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:7777/api/v1/git/init")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? NSDictionary)
+        XCTAssertEqual(body, ["cwd": "~/work/new-app"] as NSDictionary, "실제 초기화는 dryRun 키를 생략한다")
+    }
+
+    func testInitRepositoryDryRunBodyAndDecodes200() async throws {
+        try stub(status: 200, fixture: "rest/git-init-dry-run.json")
+        let result = try await client.initRepository(cwd: "/Users/alice/work/new-app", dryRun: true)
+        XCTAssertFalse(result.initialized)
+        XCTAssertNil(result.commit)
+        XCTAssertEqual(result.files, 12)
+        let request = try XCTUnwrap(lastRequest)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? NSDictionary)
+        XCTAssertEqual(body, ["cwd": "/Users/alice/work/new-app", "dryRun": true] as NSDictionary)
+    }
+
+    func testInitRepository409MapsToConflict() async throws {
+        try stub(status: 409, body: Data(#"{"error":{"code":"conflict","message":"이미 git 저장소입니다: /Users/alice/work/app"}}"#.utf8))
+        do {
+            _ = try await client.initRepository(cwd: "/Users/alice/work/app")
+            XCTFail("throw 를 기대")
+        } catch APIError.server(let code, _, let status) {
+            XCTAssertEqual(code, .conflict)
+            XCTAssertEqual(status, 409)
+        } catch {
+            XCTFail("예상 밖 오류: \(error)")
+        }
+    }
+
     func testUsageDecodesFixture() async throws {
         try stub(status: 200, fixture: "rest/usage.json")
         let usage = try await client.usage()
