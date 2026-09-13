@@ -1,0 +1,27 @@
+{
+  "project": "mac-agent-machine",
+  "phase": "8-document-viewer",
+  "steps": [
+    {
+      "step": 0,
+      "name": "fs-download-render-server",
+      "status": "pending"
+    },
+    {
+      "step": 1,
+      "name": "ios-document-viewer",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 2,
+      "name": "verify-and-install",
+      "status": "pending",
+      "depends_on": [
+        1
+      ]
+    }
+  ]
+}
