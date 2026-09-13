@@ -13,8 +13,14 @@ final class TeamsStore {
     /// 첫 `refresh()` 가 끝났는지. 빈 팀 섹션 문구와 첫 로딩을 구분한다.
     private(set) var hasLoaded = false
     private(set) var errorMessage: String?
+    /// `GET /models?agent=` 결과(에이전트별). `models(for:)` 가 `modelsCacheDuration` 동안 캐시한다.
+    private(set) var modelsByAgent: [AgentKind: [ModelOption]] = [:]
+
+    /// 세션 정보 시트(`TimelineModel`)와 같은 캐시 시간.
+    static let modelsCacheDuration: TimeInterval = TimelineModel.modelsCacheDuration
 
     @ObservationIgnored private let client: APIClient
+    @ObservationIgnored private var modelsLoadedAt: [AgentKind: Date] = [:]
 
     init(client: APIClient) {
         self.client = client
@@ -96,6 +102,25 @@ final class TeamsStore {
     @discardableResult
     func resetMember(teamId: String, memberId: String) async throws -> Team {
         replace(try await client.resetMember(teamId: teamId, memberId: memberId))
+    }
+
+    // MARK: - 모델 목록 (팀원 편집기·팀원 시트)
+
+    /// `GET /models?agent=`. `force` 가 아니면 `modelsCacheDuration` 안에는 캐시를 돌려준다.
+    /// 실패는 조용히(이전 캐시가 있으면 그것, 없으면 빈 배열. `errorMessage` 는 건드리지 않는다) — 피커가 비어 있어도 팀원 편집은 되어야 한다.
+    func models(for agent: AgentKind, force: Bool = false, now: Date = .now) async -> [ModelOption] {
+        if !force, let loadedAt = modelsLoadedAt[agent], now.timeIntervalSince(loadedAt) < Self.modelsCacheDuration,
+           let cached = modelsByAgent[agent] {
+            return cached
+        }
+        do {
+            let models = try await client.models(agent: agent)
+            modelsByAgent[agent] = models
+            modelsLoadedAt[agent] = now
+            return models
+        } catch {
+            return modelsByAgent[agent] ?? []
+        }
     }
 
     // MARK: - 템플릿

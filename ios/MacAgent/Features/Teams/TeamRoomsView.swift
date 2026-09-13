@@ -214,7 +214,43 @@ struct RoomRowView: View {
     }
 }
 
-/// 팀원 상태 목록(방 화면의 팀원 시트, iPad 디테일 열): 칩 + 상태 점·라벨 + 브랜치. 세션이 있는 팀원만 탭할 수 있다.
+/// 팀원 상태 행(순수 표시): 칩 + 팀장 배지 + 브랜치, 오른쪽에 상태 점·라벨(세션이 없으면 "세션 없음") + 선택적 chevron.
+struct TeamMemberStatusRow: View {
+    let member: TeamMember
+    let state: TeamMemberState
+    var showsChevron = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    MemberChip(member: member)
+                    if member.isLead { LeadBadge() }
+                }
+                Text(member.branch)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 4) {
+                MemberStatusDot(state: state)
+                Text(member.sessionId == nil ? String(localized: "세션 없음") : state.label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+/// 팀원 상태 목록(iPad 디테일 열): 세션이 있는 팀원만 탭할 수 있다(타임라인 선택).
 struct TeamMemberStatusList: View {
     let members: [TeamMember]
     let state: (TeamMember) -> TeamMemberState
@@ -229,32 +265,7 @@ struct TeamMemberStatusList: View {
                     Button {
                         onOpen(member)
                     } label: {
-                        HStack(alignment: .top, spacing: 10) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(spacing: 6) {
-                                    MemberChip(member: member)
-                                    if member.isLead { LeadBadge() }
-                                }
-                                Text(member.branch)
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            Spacer(minLength: 0)
-                            HStack(spacing: 4) {
-                                MemberStatusDot(state: memberState)
-                                Text(member.sessionId == nil ? String(localized: "세션 없음") : memberState.label)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if member.sessionId != nil {
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .contentShape(Rectangle())
+                        TeamMemberStatusRow(member: member, state: memberState, showsChevron: member.sessionId != nil)
                     }
                     .buttonStyle(.plain)
                     .disabled(member.sessionId == nil)

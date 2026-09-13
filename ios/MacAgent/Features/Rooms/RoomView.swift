@@ -364,12 +364,14 @@ struct RoomStatusLine: View {
     }
 }
 
-/// 팀원 목록 시트(상태·브랜치). 세션이 있는 팀원을 탭하면 시트를 닫고 타임라인을 연다.
+/// 팀원 목록 시트(상태·브랜치). 행을 탭하면 `MemberControlSheet`(권한·모델·사고 수준), 행을 밀거나 시트 안 "타임라인 열기" 로
+/// 시트를 닫고 그 세션의 타임라인을 연다. 변경 뒤에는 `RoomModel.reloadMembers()` 로 팀원 목록을 서버 값으로 다시 읽는다.
 private struct RoomMembersSheet: View {
     let model: RoomModel
     let sessions: [Session]
     let onOpen: (String) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var controlMember: TeamMember?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -380,13 +382,49 @@ private struct RoomMembersSheet: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            TeamMemberStatusList(members: model.members, state: state(of:)) { member in
-                guard let sessionId = member.sessionId else { return }
-                onOpen(sessionId)
-                dismiss()
+            List {
+                Section {
+                    ForEach(model.members) { member in
+                        let memberState = state(of: member)
+                        Button {
+                            controlMember = member
+                        } label: {
+                            TeamMemberStatusRow(member: member, state: memberState, showsChevron: true)
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing) {
+                            if let sessionId = member.sessionId {
+                                Button("타임라인", systemImage: "list.bullet.rectangle") { open(sessionId) }
+                                    .tint(.blue)
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(member.name), \(member.roleLabel), \(memberState.label), 브랜치 \(member.branch)")
+                        .accessibilityIdentifier("room.member.\(member.id)")
+                    }
+                } footer: {
+                    Text("팀원을 탭하면 권한·모델·사고 수준을 바꿀 수 있습니다. 행을 밀면 타임라인이 열립니다.")
+                }
             }
+            .listStyle(.insetGrouped)
         }
         .presentationDetents([.medium, .large])
+        .sheet(item: $controlMember) { member in
+            MemberControlSheet(
+                teamId: model.teamId,
+                member: member,
+                state: state(of: member),
+                onChanged: { await model.reloadMembers() },
+                onOpenTimeline: { open($0) }
+            )
+        }
+    }
+
+    /// 타임라인 열기: 시트를 닫고 부모(`RoomScreen`)가 `onDismiss` 에서 push 한다.
+    private func open(_ sessionId: String) {
+        onOpen(sessionId)
+        controlMember = nil
+        dismiss()
     }
 
     /// 방 이벤트의 상태가 있으면 그것, 없으면 세션 목록 조인.

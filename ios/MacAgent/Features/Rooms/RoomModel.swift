@@ -138,6 +138,18 @@ final class RoomModel {
         connectSocket()
     }
 
+    /// `GET /teams/:id` 로 팀원 목록을 다시 읽는다(팀원 시트에서 권한·모델·사고 수준을 바꾸거나 기억을 초기화한 뒤).
+    /// 실패는 조용히 이전 값을 둔다(배너 없음). 상태는 `memberStates` 가 계속 우선한다.
+    func reloadMembers() async {
+        do {
+            let detail = try await client.team(id: teamId)
+            members = detail.team.members
+        } catch {
+            if Task.isCancelled { return }
+            logger.debug("팀원 재조회 실패")
+        }
+    }
+
     /// 소켓 종료(백그라운드 전환, 화면 이탈).
     func stop() {
         pumpTask?.cancel()

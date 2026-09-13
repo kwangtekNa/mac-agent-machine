@@ -27,8 +27,8 @@ struct MemberDraft: Identifiable, Equatable, Sendable {
 
     static let nameMaxLength = 40
     static let handleMaxLength = 32
-    /// 팀원 편집기의 모드. `full-auto` 는 없다(자율 팀원의 무승인 명령 실행은 위험).
-    static let selectableModes: [SessionMode] = [.ask, .autoEdit, .plan]
+    /// 팀원 편집기·팀원 시트의 모드. `full-auto` 는 `modeChangeNeedsConfirmation` 이 true 라 확인 다이얼로그 뒤에만 적용된다(ADR-015).
+    static let selectableModes: [SessionMode] = [.ask, .autoEdit, .plan, .fullAuto]
     static let allAgents: Set<AgentKind> = [.claude, .codex]
 
     var id = UUID()
@@ -77,6 +77,19 @@ struct MemberDraft: Identifiable, Equatable, Sendable {
         if emoji.count != 1 { errors.append(.emojiNotSingleCharacter) }
         if !availableAgents.contains(agent) { errors.append(.agentUnavailable) }
         return errors
+    }
+
+    /// 모드 변경에 확인 다이얼로그가 필요한가: `full-auto` 로 올리는 경우만(ADR-015). 같은 값이거나 내려오는 변경은 아니다.
+    static func modeChangeNeedsConfirmation(from current: SessionMode, to next: SessionMode) -> Bool {
+        next == .fullAuto && current != .fullAuto
+    }
+
+    /// 에이전트를 바꾸면 모델·사고 수준은 그 에이전트 목록의 값이 아니므로 비운다(기본값). 같은 에이전트면 그대로.
+    mutating func changeAgent(to next: AgentKind) {
+        guard next != agent else { return }
+        agent = next
+        model = nil
+        effort = nil
     }
 
     // MARK: - 만들기

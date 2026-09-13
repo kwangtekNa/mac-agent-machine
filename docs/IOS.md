@@ -181,13 +181,13 @@ iPad(regular): `NavigationSplitView` 3열. 사이드바 = 프로젝트·세션, 
 - **`+` 는 메뉴**: "새 세션"(기존 시트) / "새 팀". 라벨과 식별자(`home.add`, `home.newSession`)는 유지한다(UI 테스트가 누른다).
 - **팀원 세션의 팀 배지**: 세션 행 캡션과 타임라인 부제 앞에 `🧑‍💻 지연 · backend`(`TeamsStore.badge`, `Session.team` 조인).
 - **새 팀 시트**(`NewTeamSheet`): 템플릿(있을 때) → 이름 → 디렉토리(새 세션과 같은 `DirectoryFormSection`, git 저장소여야 한다) → 팀원 → 고급 설정(연쇄 상한 · 동시 실행) → "팀 만들기". 첫 팀원은 자동으로 팀장, 행을 밀어 팀장 변경·삭제. 제출 규칙은 `NewTeamFormState`(이름 1~60, 디렉토리, 팀원 1명 이상, 팀장 정확히 1명, 팀원 검증 통과) 이고 막히는 이유를 버튼 아래 캡션으로 보여준다. 만든 뒤 방 목록으로 push(iPad 는 사이드바 선택).
-- **팀원 편집기**(`MemberEditorView`): 역할 피커 = 서버 프리셋("기본 프리셋", `GET /team-roles`) + 앱 로컬 프리셋("내 프리셋", `RolePresetStore` UserDefaults). 이름(`@멘션`에 쓰인다. `@`·공백 금지, 팀 안에서 유일) · 이모지 한 글자 · 에이전트(Claude/Codex, `/me` 로 사용 가능 여부) · 모드 `ask / auto-edit / plan`(**`full-auto` 없음**) · 지시문 · 팀장 토글. 커스텀 역할은 "프리셋으로 저장". 기존 팀원 편집은 `PATCH` 가 받는 필드만(역할·에이전트·팀장 고정), 지시문·모델을 바꾸면 "다음 세션부터 적용됩니다(기억 초기화로 바로 적용)" 캡션.
+- **팀원 편집기**(`MemberEditorView`): 역할 피커 = 서버 프리셋("기본 프리셋", `GET /team-roles`) + 앱 로컬 프리셋("내 프리셋", `RolePresetStore` UserDefaults). 이름(`@멘션`에 쓰인다. `@`·공백 금지, 팀 안에서 유일) · 이모지 한 글자 · 에이전트(Claude/Codex, `/me` 로 사용 가능 여부) · 모드 `ask / auto-edit / plan / full-auto`(`full-auto` 는 7절과 같은 확인 다이얼로그 뒤에만, 10.8) · 모델 · 사고 수준(10.8) · 지시문 · 팀장 토글. 커스텀 역할은 "프리셋으로 저장". 기존 팀원 편집은 `PATCH` 가 받는 필드만(역할·에이전트·팀장 고정), 지시문·모델을 바꾸면 "다음 세션부터 적용됩니다(기억 초기화로 바로 적용)" 캡션.
 - **팀 설정**(`TeamSettingsView`): 이름·설정 저장, 팀원 편집·기억 초기화·제거·추가, 작업 전부 중단, 팀 삭제. 삭제·제거가 409(커밋되지 않은 worktree 변경)면 "worktree 남기고 삭제" 알림으로 `keepWorktrees=true`(팀원은 `keepWorktree=true`) 재시도.
 
 ### 10.2 방 목록과 방 화면
 
 - **방 목록**(`TeamRoomsView`): `#전체` 먼저(마지막 메시지 상대 시간), DM 은 팀원 순서(`MemberChip` + 상태 점 + 팀장 캡션). 상태는 세션 목록의 팀원 세션 status 매핑(`MemberStatus`), 없으면 서버 `member.state`. 툴바: 작업 전부 중단(확인 대화상자), 팀 설정(compact 는 push, iPad 는 시트).
-- **방 화면**(`RoomView` → `RoomScreen`): 타임라인과 같은 골격(바닥 앵커, 위로 올라가 있으면 "새 메시지" 칩, `safeAreaInset` 에 승인 배너 + 상태 줄 + 컴포저, 백그라운드에서 소켓 닫고 복귀 시 `since` 재접속). 제목은 `#전체` 또는 팀원 칩 + 팀 이름. 툴바 팀원 시트(상태·브랜치, 탭하면 그 세션의 타임라인).
+- **방 화면**(`RoomView` → `RoomScreen`): 타임라인과 같은 골격(바닥 앵커, 위로 올라가 있으면 "새 메시지" 칩, `safeAreaInset` 에 승인 배너 + 상태 줄 + 컴포저, 백그라운드에서 소켓 닫고 복귀 시 `since` 재접속). 제목은 `#전체` 또는 팀원 칩 + 팀 이름. 툴바 팀원 시트(상태·브랜치, 탭하면 `MemberControlSheet`(10.8), 행을 밀면 그 세션의 타임라인).
 - **작업 중 말풍선**: 목록 끝에 "지연이 작업 중…"(`ProgressView`) / "민수가 대기 중…"(시계). 답변이 오고 `room.status` 로 상태가 바뀌면 사라진다. **상태 줄**: 컴포저 위 "지연 작업 중 · 민수 대기 중" + **"중단"**(팀 전체 `room.interrupt`). 아무도 일하지 않으면 없다.
 - **컴포저**: 그룹방에서 텍스트 끝의 `@토큰` 에 이름·핸들이 맞는 팀원을 제안 칩으로(탭 → `@이름 `), 멘션이 없으면 **팀장 캡션** "팀장 민수에게 전달됩니다", 모르는 `@토큰` 은 "모르는 팀원 @xxx 는 무시됩니다"(우선, 입력 중인 끝 토큰은 제외). DM 은 캡션도 제안도 없다(서버가 멘션을 무시한다). 정지 버튼은 없고, 소켓이 닫혀 있어도 REST 로 보낸다.
 - **길게 눌러 답장**: 에이전트 메시지 컨텍스트 메뉴 "@이름에게 답장"(컴포저 끝에 `@이름 ` 삽입) · 복사.
@@ -238,6 +238,16 @@ UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로.
 - **확인 문구 규칙**: 초기화는 항상 `dryRun` 미리보기 → `confirmationDialog`("git 저장소를 만들까요?") → 실제 초기화 순서다(기존 파일 전부가 첫 커밋에 담기는 되돌리기 어려운 동작이라 확인 없이 초기화하지 않는다). 본문은 `GitInitFlow.confirmMessage`: 파일이 있으면 "파일 12개 · 47 KB를 첫 커밋에 담습니다.", 없으면 "빈 저장소를 만듭니다.", 기본 `.gitignore` 를 만들 때만 "기본 .gitignore 를 만듭니다." 를 덧붙인다. 버튼은 "초기화" / "취소". 취소는 "저장소 아님" 상태로 돌아간다.
 - **오류**: 409(이미 저장소·상위가 저장소)는 "이미 git 저장소입니다." 를 보인 뒤 다시 확인해 저장소면 조용히 통과, 400 은 서버 문구 그대로, 403 은 홈 밖 경로 문구, 그 외는 공통 매핑. 경로가 바뀐 뒤 늦게 온 응답은 버린다.
 - **UI 테스트** `MacAgentUITests/GitInitUITests.swift`(`MAM_UI_TEST_SERVER` 없으면 `XCTSkip`): (1) 새 팀 → 찾아보기 → 새 폴더 `ui-git-<ts>` → 피커 초기화 → 확인("빈 저장소") → 안내 → 이 폴더 선택 → 팀장 1명 → 팀 만들기 → `rooms.group`. 정리는 REST 팀 삭제(409 면 `keepWorktrees=true`) + 폴더 삭제. (2) 직접 입력에 새 빈 폴더(`MAM_UI_TEST_REPO` 의 부모에 만든다) → `newTeam.gitInit` → 초기화 → "git 저장소 (main)" 로 바뀌고 버튼이 사라진다.
+
+### 10.8 팀원 권한·모델·사고 수준 (2026-09-13, Phase `6-member-controls`)
+
+팀원을 만들 때와 그 뒤 언제든 권한(모드)·모델·사고 수준을 바꾼다. 진입점은 팀원 편집기(생성·팀 설정)와 방의 팀원 시트. 프로토콜 변경 없음(`PATCH /teams/:id/members/:memberId`, `GET /models?agent=`).
+
+- **모드**: `MemberDraft.selectableModes = ask / auto-edit / plan / full-auto`. `full-auto` 를 고르면 어디서든(생성·편집·시트) `ModeMenu` 와 같은 `confirmationDialog`("에이전트가 확인 없이 명령을 실행하고 파일을 수정합니다") 뒤에만 적용되고, 취소하면 이전 값이 남는다(`MemberDraft.modeChangeNeedsConfirmation(from:to:)`, ADR-015).
+- **모델·사고 수준 피커**: 9.3 의 `SessionInfoState` 규칙 그대로(`ModelPickerRow`·`EffortPickerRow`): 목록은 `TeamsStore.models(for:)`(`GET /models?agent=`, 에이전트별 5분 캐시, 실패는 조용히 빈 배열), 목록에 없는 현재 값은 "현재: <id>", 사고 수준은 선택 모델의 `efforts` 가 있을 때만, "기본" 은 nil. 편집기에서 에이전트를 바꾸면 모델·사고 수준을 비운다.
+- **적용 시점 캡션**: `model`·`prompt` 는 "다음 세션부터 적용됩니다(기억 초기화로 바로 적용)"(`MemberControlState.nextSessionCaption`), `mode`·`effort` 는 즉시.
+- **팀원 시트**(`MemberControlSheet(teamId:member:)`): 헤더 `MemberChip` + 상태 점, 섹션 권한 · 모델 · 사고 수준 · 브랜치(읽기 전용), 버튼 "타임라인 열기" · "기억 초기화"(확인). 변경은 즉시 `TeamsStore.patchMember`(낙관적 갱신 없음, 응답 `Team` 으로 교체) → 성공 시 `RoomModel.reloadMembers()`(`GET /teams/:id`), 실패는 시트 안 빨간 캡션(`ErrorMessages.teamMessage`). 상태는 `MemberControlState`(순수).
+- 식별자: `room.member.<memberId>`(팀원 시트 행), `memberControl.mode` · `memberControl.model` · `memberControl.effort`, `memberEditor.model` · `memberEditor.effort`.
 
 ## 11. 범위 밖 (Phase 1)
 

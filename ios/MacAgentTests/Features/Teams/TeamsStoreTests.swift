@@ -196,6 +196,65 @@ final class TeamsStoreTests: XCTestCase {
         XCTAssertTrue(store.teams.isEmpty)
     }
 
+    // MARK: - models(for:)
+
+    /// `GET /models?agent=` 를 쿼리까지 보고 응답한다.
+    private func installModels() {
+        let requests = self.requests
+        StubURLProtocol.handler = { request in
+            requests.withValue { $0.append(request) }
+            guard request.url?.path() == "/api/v1/models" else { throw URLError(.unsupportedURL) }
+            switch request.url?.query() {
+            case "agent=claude": return StubURLProtocol.response(request, status: 200, body: try FixtureLoader.data("rest/models-claude.json"))
+            case "agent=codex": return StubURLProtocol.response(request, status: 200, body: try FixtureLoader.data("rest/models-codex.json"))
+            default: throw URLError(.unsupportedURL)
+            }
+        }
+    }
+
+    func testModelsForAgentCachesPerAgentForFiveMinutes() async throws {
+        installModels()
+        let now = Date()
+
+        let claude = await store.models(for: .claude, now: now)
+        XCTAssertEqual(claude.map(\.id), ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"])
+        XCTAssertEqual(store.modelsByAgent[.claude]?.count, 3)
+        XCTAssertEqual(requests.value.count, 1)
+
+        let again = await store.models(for: .claude, now: now.addingTimeInterval(TeamsStore.modelsCacheDuration - 1))
+        XCTAssertEqual(again.count, 3)
+        XCTAssertEqual(requests.value.count, 1, "5분 안에는 다시 요청하지 않는다")
+
+        let codex = await store.models(for: .codex, now: now)
+        XCTAssertEqual(codex.map(\.id), ["gpt-5-codex", "gpt-5"])
+        XCTAssertEqual(requests.value.map { $0.url?.query() }, ["agent=claude", "agent=codex"], "에이전트별로 따로 읽고 캐시한다")
+        XCTAssertEqual(store.modelsByAgent[.codex]?.count, 2)
+        XCTAssertEqual(store.modelsByAgent[.claude]?.count, 3)
+
+        _ = await store.models(for: .claude, now: now.addingTimeInterval(TeamsStore.modelsCacheDuration + 1))
+        XCTAssertEqual(requests.value.count, 3, "5분이 지나면 다시 읽는다")
+        _ = await store.models(for: .claude, force: true, now: now)
+        XCTAssertEqual(requests.value.count, 4, "force 는 캐시를 무시한다")
+        XCTAssertNil(store.errorMessage)
+    }
+
+    func testModelsForAgentFailureIsSilentEmptyAndRetried() async throws {
+        StubURLProtocol.handler = { _ in throw URLError(.cannotConnectToHost) }
+        let empty = await store.models(for: .claude)
+        XCTAssertEqual(empty, [])
+        XCTAssertNil(store.errorMessage, "실패는 조용히")
+        XCTAssertNil(store.modelsByAgent[.claude])
+
+        installModels()
+        let loaded = await store.models(for: .claude)
+        XCTAssertEqual(loaded.count, 3, "실패는 캐시하지 않으므로 다음 호출이 다시 읽는다")
+
+        StubURLProtocol.handler = { _ in throw URLError(.cannotConnectToHost) }
+        let stale = await store.models(for: .claude, now: Date().addingTimeInterval(TeamsStore.modelsCacheDuration + 1))
+        XCTAssertEqual(stale.count, 3, "만료 뒤 재조회가 실패하면 이전 캐시를 돌려준다")
+        XCTAssertNil(store.errorMessage)
+    }
+
     // MARK: - join
 
     func testTeamForSessionAndBadge() async throws {

@@ -30,7 +30,7 @@ final class MemberDraftValidationTests: XCTestCase {
         XCTAssertEqual(draft.name, "")
         XCTAssertFalse(draft.isLead)
         XCTAssertNil(draft.localPresetId)
-        XCTAssertFalse(MemberDraft.selectableModes.contains(.fullAuto), "full-auto 는 팀원 편집기에 없다")
+        XCTAssertTrue(MemberDraft.selectableModes.contains(.fullAuto), "full-auto 는 확인 다이얼로그를 거쳐 고를 수 있다(ADR-015)")
     }
 
     func testFromLocalPresetIsCustomRole() {
@@ -163,6 +163,66 @@ final class MemberDraftValidationTests: XCTestCase {
         model.model = "gpt-5"
         XCTAssertEqual(model.patchRequest(from: original)?.model, "gpt-5")
         XCTAssertTrue(model.appliesNextSession(from: original))
+    }
+
+    func testSelectableModesIncludeFullAutoAndOnlyFullAutoNeedsConfirmation() {
+        XCTAssertEqual(MemberDraft.selectableModes, [.ask, .autoEdit, .plan, .fullAuto])
+        XCTAssertTrue(MemberDraft.modeChangeNeedsConfirmation(from: .ask, to: .fullAuto))
+        XCTAssertTrue(MemberDraft.modeChangeNeedsConfirmation(from: .autoEdit, to: .fullAuto))
+        XCTAssertTrue(MemberDraft.modeChangeNeedsConfirmation(from: .plan, to: .fullAuto))
+        XCTAssertFalse(MemberDraft.modeChangeNeedsConfirmation(from: .fullAuto, to: .fullAuto), "같은 값은 변경이 아니다")
+        XCTAssertFalse(MemberDraft.modeChangeNeedsConfirmation(from: .fullAuto, to: .ask), "full-auto 에서 내려오는 건 확인 없음")
+        XCTAssertFalse(MemberDraft.modeChangeNeedsConfirmation(from: .ask, to: .autoEdit))
+        XCTAssertFalse(MemberDraft.modeChangeNeedsConfirmation(from: .ask, to: .plan))
+    }
+
+    func testChangingAgentResetsModelAndEffort() {
+        var draft = valid()
+        draft.model = "claude-opus-5"
+        draft.effort = "high"
+
+        draft.changeAgent(to: .claude)
+        XCTAssertEqual(draft.model, "claude-opus-5", "같은 에이전트면 그대로")
+        XCTAssertEqual(draft.effort, "high")
+
+        draft.changeAgent(to: .codex)
+        XCTAssertEqual(draft.agent, .codex)
+        XCTAssertNil(draft.model, "에이전트가 바뀌면 그 에이전트의 모델이 아니므로 비운다")
+        XCTAssertNil(draft.effort)
+    }
+
+    func testMemberInputTemplateAndPatchCarryModelAndEffort() throws {
+        var draft = valid()
+        XCTAssertNil(draft.memberInput().model)
+        XCTAssertNil(draft.memberInput().effort)
+
+        draft.model = "claude-sonnet-5"
+        draft.effort = "low"
+        let input = draft.memberInput()
+        XCTAssertEqual(input.model, "claude-sonnet-5")
+        XCTAssertEqual(input.effort, "low")
+        XCTAssertEqual(draft.templateMember(index: 0).model, "claude-sonnet-5")
+        XCTAssertEqual(draft.templateMember(index: 0).effort, "low")
+
+        let team = try JSONCoding.decoder.decode(Team.self, from: FixtureLoader.data("rest/team.json"))
+        let original = MemberDraft.from(member: team.members[0])
+        XCTAssertEqual(original.model, "claude-opus-5")
+        XCTAssertEqual(original.effort, "high")
+
+        var effort = original
+        effort.effort = "max"
+        let effortRequest = try XCTUnwrap(effort.patchRequest(from: original))
+        XCTAssertEqual(effortRequest, PatchMemberRequest(effort: "max"), "바뀐 필드만")
+        XCTAssertFalse(effort.appliesNextSession(from: original), "effort 는 즉시 적용")
+
+        var mode = original
+        mode.mode = .fullAuto
+        XCTAssertEqual(mode.patchRequest(from: original), PatchMemberRequest(mode: .fullAuto))
+
+        var model = original
+        model.model = "claude-sonnet-5"
+        XCTAssertEqual(model.patchRequest(from: original), PatchMemberRequest(model: "claude-sonnet-5"))
+        XCTAssertTrue(model.appliesNextSession(from: original), "model 은 다음 세션부터")
     }
 
     func testDefaultDraftPrefersDeveloperPresetThenFallback() {

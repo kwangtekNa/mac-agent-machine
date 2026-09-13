@@ -350,6 +350,34 @@ final class RoomModelTests: XCTestCase {
         XCTAssertEqual(factory.transports.last?.connectRequests.first?.url?.query(), "since=0")
     }
 
+    func testReloadMembersReplacesMembersFromTeamDetail() async throws {
+        install([])
+        let model = makeModel()
+        defer { model.stop() }
+        XCTAssertTrue(model.members.isEmpty)
+
+        install([("GET", "/api/v1/teams/\(teamId)", 200, try json("rest/team-detail.json") { json in
+            var team = json["team"] as! [String: Any]
+            var members = team["members"] as! [[String: Any]]
+            members[0]["mode"] = "full-auto"
+            members[0]["effort"] = "max"
+            team["members"] = members
+            json["team"] = team
+        })])
+        await model.reloadMembers()
+
+        XCTAssertEqual(requests.value.map { $0.url?.path() ?? "" }, ["/api/v1/teams/\(teamId)"], "GET /teams/:id 한 번")
+        XCTAssertEqual(model.members.map(\.name), ["민수", "지연"])
+        XCTAssertEqual(model.members[0].mode, .fullAuto, "서버 값으로 교체된다")
+        XCTAssertEqual(model.members[0].effort, "max")
+        XCTAssertNil(model.fatalError)
+
+        install([])
+        await model.reloadMembers()
+        XCTAssertEqual(model.members.count, 2, "실패하면 이전 값을 둔다")
+        XCTAssertNil(model.fatalError, "재조회 실패는 배너를 띄우지 않는다")
+    }
+
     // MARK: - send
 
     func testSendOverOpenSocketUsesRoomSendAndNoOptimisticEntry() async throws {
