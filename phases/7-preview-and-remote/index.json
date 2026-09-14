@@ -80,11 +80,29 @@
     {
       "step": 3,
       "name": "verify-and-install",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         1,
         2
-      ]
+      ],
+      "started_at": "2026-09-14T09:44:24+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "a6b3288c-e535-4771-9357-5977357538de",
+          "cost_usd": 9.1104795,
+          "duration_s": 1531.0,
+          "num_turns": 85,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 9.11048,
+      "duration_s": 1531.0,
+      "retries": 0,
+      "session_id": "a6b3288c-e535-4771-9357-5977357538de",
+      "summary": "미리보기 검증·설치 완료: dev-smoke 에 net/ports 단계 추가(git init 이 22라 **23단계**로 번호 부여 — 임시 리스너 등장/127.0.0.1/pid 확인 → gateway 7777 제외 → 종료 후 사라짐, 상한 10초 폴링) + 이 단계가 잡은 실제 버그 수정(agent-host 의 CHILD_PATH 에 /usr/sbin 이 없어 `spawn lsof ENOENT` → GET /net/ports 가 늘 빈 목록이었음; `resolveLsofBin()` 고정 후보 /usr/sbin/lsof→/usr/bin/lsof→PATH + 테스트 2개) + fake script `serve <포트>`(답변 마지막 줄에 `[http://localhost:<포트>/](…)` 마크다운 링크, 서버는 안 띄움, 테스트 4개) + `ios/MacAgentUITests/PreviewUITests.swift`(새 세션 → serve 3456 → 승인 허용 → `app.links[\"http://localhost:3456/\"]` 탭 → SFSafariViewController(`OpenInSafariButton`+\"닫기\") → 닫기 → `timeline.preview` → \"열린 포트\"(행 `preview.port.*` 또는 `preview.empty`) → \"완료\"; 카드가 .combine 이어도 마크다운 링크는 Link 요소로 남는 것이 설계 근거, \"직접 입력\"은 목록이 길면 화면 밖이라 단위 테스트에 맡김) + 문서(IOS.md 10.9 흐름·식별자 표, README UI 테스트 5개·dev-smoke 23단계). 검증: npm ci/typecheck/npm test(808 passed), dev-smoke 23단계, install-dev-gateway.sh --dry-run | plutil -lint - OK(launchctl 미실행), --keep 서버로 MacAgentUITests 전체 통과(389s, exit 0) 후 서버 종료·agent-host 잔여 없음·7777 리스너 없음, bash scripts/test.sh OK. 설치: iPhone(530EAE6A…) 빌드·install·launch 모두 성공(잠금 문제 없음).",
+      "completed_at": "2026-09-14T10:09:55+0900"
     }
   ],
   "created_at": "2026-09-14T09:10:50+0900"
