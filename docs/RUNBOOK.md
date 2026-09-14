@@ -141,6 +141,9 @@ Codex 는 `POST /api/v1/auth/codex/login` 이 `{ url, instructions: "링크를 �
 
    스크립트는 `node`·`codex`·`claude` 의 절대 경로를 로그인 셸에서 찾아 `~/Library/LaunchAgents/dev.mam.dev-gateway.plist` 를 만들고(`MAM_DEV_BIND=tailscale`, `MAM_DEV_PORT=7777`, `KeepAlive`), `launchctl bootstrap gui/<uid>` 로 등록한 뒤 `http://<tailnet ip>:7777/healthz` 를 확인하고 앱에 넣을 주소를 출력한다. 포트를 바꾸려면 `--port 8777`. 손으로 띄운 gateway 나 `dev-smoke.sh --keep` 가 같은 포트를 잡고 있으면 설치하지 않고 멈춘다(먼저 끄면 된다). 제거는 `--uninstall`, 설치하지 않고 plist 만 보려면 `--dry-run`.
 3. **폰: Tailscale 연결.** App Store 의 Tailscale 앱을 설치해 같은 계정으로 로그인하고 연결(VPN)을 켠다.
+   > 앱 Info.plist 는 `NSAllowsArbitraryLoads: true` 만 둔다. `NSAllowsLocalNetworking` 을 같이 두면 iOS 가 전자를 무시해
+   > tailnet(100.64.0.0/10) 평문 HTTP 가 ATS 에 막힌다(`NSURLErrorDomain -1022`). 이 조합은 2026-09-14 에 실기기·시뮬레이터로 확인했다.
+
 4. **폰: 앱 서버 주소.** MacAgent 앱 첫 화면에 `http://<tailnet ip>:7777` 을 입력한다. 로그인 화면은 없다.
 
 문제 해결:

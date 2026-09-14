@@ -60,9 +60,12 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        # 개발 서버(http://127.0.0.1:7777)만 허용. 프로덕션은 HTTPS(tailscale cert)이므로 NSAllowsArbitraryLoads 는 켜지 않는다.
+        # 개발 서버(http://127.0.0.1:7777, 사설 IP)와 tailnet(http://100.64.0.0/10) 을 허용한다.
+        # ATS 는 tailnet CGNAT 대역을 공인 주소로 보아 평문 HTTP 를 막는데(-1022), 예외를 IP 대역으로 지정할 방법이 없어
+        # NSAllowsArbitraryLoads 로 연다. tailnet 자체가 WireGuard 로 암호화된 사설 오버레이이고(ADR-001),
+        # 정식 설치(LaunchDaemon + tailscale cert)는 여전히 HTTPS 다. 앱은 사설·tailnet 주소에만 http 를 허용한다(ServerConfigStore).
         NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
         # 실기기에서 같은 Wi-Fi/핫스팟의 Mac(사설 IP)에 붙으려면 iOS 로컬 네트워크 권한이 필요하다. 이 키가 없으면 요청이 조용히 실패한다.
         NSLocalNetworkUsageDescription: 같은 네트워크에 있는 Mac 서버에 연결하려면 로컬 네트워크 접근이 필요합니다.
         ITSAppUsesNonExemptEncryption: false
