@@ -158,6 +158,41 @@ describe("defaultScript: full-auto 는 승인을 요청하지 않는다", () => 
   });
 });
 
+/** 2026-09-14(Phase 7): 앱의 미리보기 링크 가로채기(IOS.md 12절)를 폰에서 눌러 볼 수 있게 답변에 localhost 링크를 넣는다. */
+describe("defaultScript: serve <포트>", () => {
+  it("답변 마지막 줄에 http://localhost:<포트>/ 마크다운 링크를 넣는다", async () => {
+    const cwd = await tmp();
+    const [events] = await runTurns(cwd, ["serve 3456"]);
+    const text = finalText(events!);
+    expect(text.startsWith("안녕하세요. 요청하신 명령을 실행하겠습니다.")).toBe(true);
+    expect(text).toContain("[http://localhost:3456/](http://localhost:3456/)");
+    expect(text.trimEnd().endsWith("[http://localhost:3456/](http://localhost:3456/)")).toBe(true);
+    // 델타를 이어 붙인 결과와 최종 텍스트가 같다.
+    const deltas = events!.flatMap((e) => (e.type === "item.delta" ? [e.delta] : [])).join("");
+    expect(deltas).toBe(text);
+  });
+
+  it("실제로 포트를 열지는 않는다(파일도 만들지 않는다)", async () => {
+    const cwd = await tmp();
+    const [events] = await runTurns(cwd, ["serve 3456"]);
+    expect(fileChanges(events!)).toHaveLength(0);
+    await expect(fetch("http://127.0.0.1:3456/", { signal: AbortSignal.timeout(1000) })).rejects.toThrow();
+  });
+
+  it("포트가 없거나 범위 밖이면 링크를 넣지 않는다", async () => {
+    const cwd = await tmp();
+    const [a, b, c] = await runTurns(cwd, ["serve", "serve 0", "serve 70000"]);
+    for (const events of [a!, b!, c!]) expect(finalText(events)).not.toContain("http://localhost");
+  });
+
+  it("ask 와 같이 오면 멘션 뒤에 링크가 온다", async () => {
+    const cwd = await tmp();
+    const [events] = await runTurns(cwd, ["ask @minsu serve 8080"]);
+    const text = finalText(events!);
+    expect(text.indexOf("@minsu 확인 부탁해요.")).toBeLessThan(text.indexOf("http://localhost:8080/"));
+  });
+});
+
 describe("defaultScript: ask @<핸들>", () => {
   it("답변에 '@<핸들> 확인 부탁해요.' 를 넣는다", async () => {
     const cwd = await tmp();

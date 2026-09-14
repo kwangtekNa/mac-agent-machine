@@ -1,7 +1,20 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 
 /** `lsof` 가 이 시간 안에 끝나지 않으면 SIGKILL 하고 빈 목록으로 본다. */
 export const LSOF_TIMEOUT_MS = 5_000;
+
+/** `lsof` 실행 파일 후보(순서대로 본다). macOS 는 `/usr/sbin`, 대부분의 리눅스는 `/usr/bin`. */
+export const LSOF_CANDIDATES = ["/usr/sbin/lsof", "/usr/bin/lsof"] as const;
+
+/**
+ * 쓸 `lsof` 경로. agent-host 는 gateway 가 준 PATH(`CHILD_PATH`: homebrew·/usr/local/bin·/usr/bin·/bin)로 돌기 때문에
+ * macOS 의 `/usr/sbin/lsof` 를 PATH 로 찾지 못한다(spawn ENOENT). 절대 경로를 먼저 보고 없으면 PATH 조회에 맡긴다.
+ * 후보는 고정 목록이라 사용자 입력이 섞이지 않는다(CRITICAL 4).
+ */
+export function resolveLsofBin(exists: (path: string) => boolean = existsSync): string {
+  return LSOF_CANDIDATES.find(exists) ?? "lsof";
+}
 
 export interface ListeningPort {
   port: number;
@@ -70,7 +83,7 @@ export function parseLsofListen(output: string): ListeningPort[] {
  */
 function runLsof(timeoutMs: number, onWarn: (message: string) => void): Promise<string | null> {
   return new Promise((resolve) => {
-    const child = spawn("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"], {
+    const child = spawn(resolveLsofBin(), ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"], {
       stdio: ["ignore", "pipe", "ignore"],
       timeout: timeoutMs,
       killSignal: "SIGKILL",

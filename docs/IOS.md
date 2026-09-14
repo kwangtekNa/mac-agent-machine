@@ -254,6 +254,22 @@ UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로.
 - **팀원 시트**(`MemberControlSheet(teamId:member:)`): 헤더 `MemberChip` + 상태 점, 섹션 권한 · 모델 · 사고 수준 · 브랜치(읽기 전용), 버튼 "타임라인 열기" · "기억 초기화"(확인). 변경은 즉시 `TeamsStore.patchMember`(낙관적 갱신 없음, 응답 `Team` 으로 교체) → 성공 시 `RoomModel.reloadMembers()`(`GET /teams/:id`), 실패는 시트 안 빨간 캡션(`ErrorMessages.teamMessage`). 상태는 `MemberControlState`(순수).
 - 식별자: `room.member.<memberId>`(팀원 시트 행), `memberControl.mode` · `memberControl.model` · `memberControl.effort`, `memberEditor.model` · `memberEditor.effort`.
 
+### 10.9 미리보기(localhost 링크·열린 포트) (2026-09-14, Phase `7-preview-and-remote`)
+
+12절의 미리보기를 폰에서 실제로 눌러 보는 UI 테스트 `MacAgentUITests/PreviewUITests.swift`(`MAM_UI_TEST_SERVER` 가 없으면 `XCTSkip`). 새 세션(Claude, `~/.mam`) → 컴포저에 `serve 3456`(Fake 어댑터가 답변 마지막 줄에 `[http://localhost:3456/](http://localhost:3456/)` 를 넣는다. 서버는 띄우지 않는다) → 승인 배너 "허용" → **답변 카드의 링크 탭** → 앱 안 브라우저(`SFSafariViewController`) → "닫기" → 툴바 **`timeline.preview`** → 시트의 **"열린 포트"** 섹션 → "완료".
+
+- 카드는 접근성상 한 요소로 합쳐지지만(`ItemCard` 의 `.combine`) 마크다운 링크는 `Link` 요소로 남아 `app.links["http://localhost:3456/"]` 로 누를 수 있다.
+- 앱 안 브라우저가 떴는지는 `SFSafariViewController` 만 갖는 `OpenInSafariButton` 과 닫기 버튼("닫기"/"완료")으로 확인한다. 링크가 실제로 열리는지(3456 에 서버가 있는지)는 보지 않는다.
+- "열린 포트" 섹션은 서버 사용자가 띄운 포트가 있으면 행(`preview.port.<port>`), 없으면 빈 문구(`preview.empty`)다. 둘 중 하나면 통과한다(`bash scripts/dev-smoke.sh --keep` 는 23단계의 임시 리스너를 닫고 유지되므로 목록은 머신마다 다르다).
+- 시트의 "직접 입력"·"최근" 은 포트 목록이 길면 화면 밖이라(List 지연 생성) UI 테스트가 아니라 `PreviewPortsSheetStateTests` 가 규칙을 검증한다.
+
+| 식별자 | 위치 |
+|---|---|
+| `timeline.preview` · `room.preview` | 세션 타임라인 · 방 툴바의 "미리보기"(`safari` 아이콘) |
+| `preview.port.<port>` · `preview.empty` | 미리보기 시트 "열린 포트" 의 행 · 빈 문구 |
+| `preview.custom` · `preview.open` | 시트 "직접 입력" 의 포트 필드 · "열기" |
+| `preview.recent.<port>` | 시트 "최근" 의 행 |
+
 ## 11. 범위 밖 (Phase 1)
 
 - 파일 편집·업로드, 터미널, 푸시 알림(APNs, Phase 3), 여러 서버 동시 관리(서버 1개만 저장), 세션 검색, 위젯·Live Activity, iPad 멀티윈도우.

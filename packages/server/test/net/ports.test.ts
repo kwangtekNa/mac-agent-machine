@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createServer, type AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
-import { listListeningPorts, parseLsofListen } from "../../src/net/ports.js";
+import { LSOF_CANDIDATES, listListeningPorts, parseLsofListen, resolveLsofBin } from "../../src/net/ports.js";
 
 /** `lsof` 가 없는 환경(리눅스 최소 이미지 등)에서는 프로세스 목록 테스트를 건너뛴다. */
 async function hasLsof(): Promise<boolean> {
@@ -74,6 +74,22 @@ describe("parseLsofListen", () => {
       "n*:22",
     );
     expect(parseLsofListen(out)).toEqual([{ port: 22, pid: 7, process: "ok", address: "*" }]);
+  });
+});
+
+/**
+ * agent-host 는 gateway 가 준 PATH(`CHILD_PATH` = homebrew·/usr/local/bin·/usr/bin·/bin)로 돌기 때문에
+ * macOS 의 `/usr/sbin/lsof` 를 PATH 로 찾지 못한다. 절대 경로를 먼저 본다.
+ */
+describe("resolveLsofBin", () => {
+  it("존재하는 절대 경로를 먼저 쓴다", () => {
+    expect(resolveLsofBin((p) => p === "/usr/sbin/lsof")).toBe("/usr/sbin/lsof");
+    expect(resolveLsofBin((p) => p === "/usr/bin/lsof")).toBe("/usr/bin/lsof");
+    expect(resolveLsofBin(() => true)).toBe(LSOF_CANDIDATES[0]);
+  });
+
+  it("후보가 하나도 없으면 PATH 조회에 맡긴다", () => {
+    expect(resolveLsofBin(() => false)).toBe("lsof");
   });
 });
 

@@ -41,6 +41,16 @@ const ASSISTANT_CHUNKS = ["안녕하세요. ", "요청하신 명령을 ", "실�
 const WRITE_FILE_RE = /write file ([A-Za-z0-9._-]+)(?=\s|$)/;
 /** `ask @<핸들>`: 답변에 `@<핸들> 확인 부탁해요.` 를 붙인다(팀 연쇄 검증용). */
 const ASK_RE = /ask @([A-Za-z0-9][A-Za-z0-9-]*)/;
+/** `serve <포트>`: 답변 마지막 줄에 `http://localhost:<포트>/` 마크다운 링크를 넣는다. 서버는 띄우지 않는다. */
+const SERVE_RE = /serve (\d{1,5})(?=\s|$)/;
+
+/** `serve <포트>` 의 포트(1~65535). 없거나 범위 밖이면 undefined. */
+function servePort(text: string): number | undefined {
+  const raw = SERVE_RE.exec(text)?.[1];
+  if (raw === undefined) return undefined;
+  const port = Number(raw);
+  return port >= 1 && port <= 65535 ? port : undefined;
+}
 
 /**
  * 기본 스크립트: user_message → assistant_message(델타 3개) → tool_call(bash "echo hi")
@@ -48,13 +58,18 @@ const ASK_RE = /ask @([A-Za-z0-9][A-Za-z0-9-]*)/;
  * 텍스트에 "fail" 이 있으면 error 아이템과 복구 불가 error 이벤트를 낸다.
  * 2026-09-12: "write file <이름>" 이 있으면 `ctx.cwd/<이름>` 에 한 줄을 쓰고 file_change(add|modify) 를 낸다.
  * "ask @<핸들>" 이 있으면 답변 끝에 `@<핸들> 확인 부탁해요.` 를 넣는다.
+ * 2026-09-14: "serve <포트>" 가 있으면 답변 마지막 줄에 `http://localhost:<포트>/` 마크다운 링크를 넣는다
+ * (앱의 미리보기 링크 가로채기 검증용. 실제로 서버를 띄우지는 않는다).
  */
 export const defaultScript: FakeScript = async (ctx) => {
   const { input, turnId } = ctx;
   const startedAt = Date.parse(ctx.now());
   const writeName = WRITE_FILE_RE.exec(input.text)?.[1];
   const askHandle = ASK_RE.exec(input.text)?.[1];
-  const chunks = askHandle === undefined ? ASSISTANT_CHUNKS : [...ASSISTANT_CHUNKS, ` @${askHandle} 확인 부탁해요.`];
+  const port = servePort(input.text);
+  const chunks = [...ASSISTANT_CHUNKS];
+  if (askHandle !== undefined) chunks.push(` @${askHandle} 확인 부탁해요.`);
+  if (port !== undefined) chunks.push(`\n\n[http://localhost:${port}/](http://localhost:${port}/)`);
   const userAt = ctx.now();
   ctx.emit({
     type: "item.started",

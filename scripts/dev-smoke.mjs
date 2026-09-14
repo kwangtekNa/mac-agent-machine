@@ -5,9 +5,11 @@
 // 15~21단계는 2026-09-12 추가분(PROTOCOL.md 6절: 팀 생성 → 방 WS → 멘션 디스패치 → 변경 카드 → DM → 팀원 제어 → 머지 → 삭제).
 // 19단계는 2026-09-13 추가분(PROTOCOL.md 6.2 PATCH members: mode full-auto 는 승인 없는 턴, effort·model 반영).
 // 22단계는 2026-09-13 추가분(PROTOCOL.md 1절 POST /git/init: dryRun → 초기화 → 그 디렉토리로 팀 생성 → 삭제 → 다시 409).
+// 23단계는 2026-09-14 추가분(PROTOCOL.md 1절 GET /net/ports: 임시 리스너 등장 → gateway 포트 제외 → 종료 후 사라짐).
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
@@ -281,6 +283,7 @@ async function main() {
 
     uiTestRepo = await teamSteps(cwd);
     await gitInitSteps(cwd);
+    await netPortsStep();
   } finally {
     if (!KEEP) await rm(cwd, { recursive: true }).catch(() => {});
   }
@@ -600,6 +603,51 @@ async function gitInitSteps(cwd) {
   assert.equal(again.status, 409, `init(again) status ${again.status}: ${JSON.stringify(again.json)}`);
   assert.equal(again.json.error.code, "conflict", `init(again) error.code ${again.json.error.code}`);
   note(`22. git/init dryRun(files=${dry.json.files}, bytes=${dry.json.bytes}, .git 없음) → init ${init.json.commit.slice(0, 7)} (main, ls-files=${tracked.join(",")}) → team ${created.json.id} 201 → delete 200 → again 409 OK`);
+}
+
+/** `GET /net/ports` 를 최대 10초 동안 폴링해 조건을 만족하는 목록을 돌려준다(lsof 가 새 리스너를 보기까지 잠깐 걸릴 수 있다). */
+async function waitForPorts(predicate, description) {
+  let last = [];
+  for (let i = 0; i < 20; i += 1) {
+    const res = await api("GET", "/api/v1/net/ports");
+    assert.equal(res.status, 200, `net/ports status ${res.status}: ${JSON.stringify(res.json)}`);
+    assert.ok(Array.isArray(res.json.ports), `net/ports.ports 가 배열이 아님: ${JSON.stringify(res.json)}`);
+    last = res.json.ports;
+    if (predicate(last)) return last;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`${description} 을(를) 10초 안에 확인하지 못함: ${JSON.stringify(last)}`);
+}
+
+/**
+ * 23단계: PROTOCOL.md 1절 `GET /net/ports`(2026-09-14 추가). `node:net` 으로 `127.0.0.1:0` 에 임시 서버를 띄우고
+ * 목록에 그 포트가 `address 127.0.0.1` 로(이 프로세스 pid 로) 잡히는지, gateway 포트(기본 7777)는 빠지는지 본다.
+ * 서버를 닫으면 목록에서도 사라져야 한다. 앱의 미리보기 시트(IOS.md 12절)가 이 목록을 그린다.
+ */
+async function netPortsStep() {
+  step = "23. GET /api/v1/net/ports: 임시 리스너 등장 → gateway 포트 제외 → 종료 후 사라짐";
+  const server = createServer(() => {});
+  let closed = false;
+  try {
+    const tempPort = await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => resolve(server.address().port));
+    });
+
+    const listed = await waitForPorts((ports) => ports.some((p) => p.port === tempPort), `임시 포트 ${tempPort}`);
+    const mine = listed.find((p) => p.port === tempPort);
+    assert.equal(mine.address, "127.0.0.1", `임시 포트의 address ${mine.address} !== 127.0.0.1`);
+    assert.equal(mine.pid, process.pid, `임시 포트의 pid ${mine.pid} !== ${process.pid}`);
+    assert.equal(typeof mine.process, "string", `임시 포트의 process ${mine.process}`);
+    assert.ok(!listed.some((p) => p.port === PORT), `gateway 포트 ${PORT} 가 목록에 있음: ${JSON.stringify(listed)}`);
+
+    await new Promise((resolve) => server.close(() => resolve()));
+    closed = true;
+    await waitForPorts((ports) => !ports.some((p) => p.port === tempPort), `임시 포트 ${tempPort} 가 사라지는 것`);
+    note(`23. net/ports: 임시 리스너 ${tempPort}(${mine.process}, 127.0.0.1) 등장 → gateway ${PORT} 제외 → 종료 후 사라짐 OK`);
+  } finally {
+    if (!closed) server.close();
+  }
 }
 
 async function closeAll() {
