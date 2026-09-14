@@ -5,7 +5,25 @@
     {
       "step": 0,
       "name": "net-ports-server",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-14T09:10:50+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "50141995-4f2d-4913-baaa-765467fbac88",
+          "cost_usd": 5.227954999999999,
+          "duration_s": 639.1,
+          "num_turns": 46,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 5.227955,
+      "duration_s": 639.1,
+      "retries": 0,
+      "session_id": "50141995-4f2d-4913-baaa-765467fbac88",
+      "summary": "GET /net/ports 서버 API 추가: docs/PROTOCOL.md 1절 + fixtures/rest/net-ports.json + NetPort/NetPortsResponse zod(rest.ts, index.ts) + src/net/ports.ts(parseLsofListen 순수 함수, listListeningPorts 는 고정 인자 spawn(\"lsof\", [\"-nP\",\"-iTCP\",\"-sTCP:LISTEN\",\"-F\",\"pcn\"]), 5초 타임아웃, 실패 시 빈 배열 + onWarn) + routes/net.ts(gatewayPorts: MAM_DEV_PORT/MAM_DEV_BIND 단서 있으면 그 포트/7777 제외, 없으면 빈 배열) app.ts 등록; 테스트 test/net/ports.test.ts 9개 + rest.test.ts 2개 + fixtures.test.ts ADDED_2026_09_13 2→3 + iOS 테이블 JSONValue 임시 등록·파일 수 71→72. npm ci/typecheck/npm test(802 passed)/bash scripts/test.sh 전부 통과.",
+      "completed_at": "2026-09-14T09:21:29+0900"
     },
     {
       "step": 1,
@@ -32,5 +50,6 @@
         2
       ]
     }
-  ]
+  ],
+  "created_at": "2026-09-14T09:10:50+0900"
 }
