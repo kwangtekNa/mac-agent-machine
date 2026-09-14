@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { RoomMessage, RoomServerEvent } from "@mam/protocol";
 import { describe, expect, it } from "vitest";
-import { buildTurnText, formatMessageLine, type FormatInput } from "../../src/teams/format.js";
+import { buildTurnText, formatMessageLine, isContextRelevant, type FormatInput } from "../../src/teams/format.js";
 import { DM_MINSU, GROUP_ROOM, JIYEON, MINSU, makeTeamRecord } from "../helpers/team-record.js";
 
 const team = makeTeamRecord();
@@ -94,6 +94,40 @@ describe("formatMessageLine", () => {
   });
 });
 
+describe("isContextRelevant", () => {
+  const approvalCard = (memberId: string): RoomMessage => {
+    const fixture = fixtureMessage("room.message.approval");
+    return { ...fixture, author: { kind: "agent", memberId }, approval: { ...fixture.approval!, memberId } };
+  };
+  const changesCard = (memberId: string): RoomMessage => {
+    const fixture = fixtureMessage("room.message.changes");
+    return { ...fixture, author: { kind: "agent", memberId }, changes: { ...fixture.changes!, memberId } };
+  };
+
+  it("keeps only the member's own approval and change cards, and every conversation but their own text", () => {
+    const cases: [string, RoomMessage, boolean][] = [
+      ["내 승인 카드", approvalCard(MINSU), true],
+      ["남의 승인 카드", approvalCard(JIYEON), false],
+      ["내 변경 카드", changesCard(MINSU), true],
+      ["남의 변경 카드", changesCard(JIYEON), false],
+      ["내 text", msg({ text: "제가 한 말", author: { kind: "agent", memberId: MINSU } }), false],
+      ["남의 text", msg({ text: "동료 말", author: { kind: "agent", memberId: JIYEON } }), true],
+      ["사용자 text", msg({ text: "사용자 말" }), true],
+      ["시스템", msg({ text: "지연이 합류했습니다", author: { kind: "system" }, kind: "system" }), true],
+    ];
+    for (const [label, message, expected] of cases) {
+      expect(`${label}=${isContextRelevant(message, MINSU)}`).toBe(`${label}=${expected}`);
+    }
+  });
+
+  it("is independent of the room: the same rules apply in a DM", () => {
+    const mine = { ...approvalCard(MINSU), roomId: DM_MINSU };
+    const theirs = { ...approvalCard(JIYEON), roomId: DM_MINSU };
+    expect(isContextRelevant(mine, MINSU)).toBe(true);
+    expect(isContextRelevant(theirs, MINSU)).toBe(false);
+  });
+});
+
 describe("buildTurnText", () => {
   it("puts context lines first, the trigger last and a group footer", () => {
     const c1 = msg({ text: "안녕" });
@@ -168,6 +202,60 @@ describe("buildTurnText", () => {
     expect(text).not.toContain("제가 한 말");
     expect(text).toContain("[#전체] 시스템: 민수의 변경 준비됨: 2개 파일");
     expect(text).toContain("[#전체] @지연(개발자): 동료 말");
+  });
+
+  it("drops other members' approval and change cards while keeping the conversation", () => {
+    const approvalFixture = fixtureMessage("room.message.approval");
+    const changesFixture = fixtureMessage("room.message.changes");
+    // 실제 팀에서 관측된 모양: 남의 카드가 맥락의 대부분(승인 12 + 변경 8)이고 대화는 2건뿐이다.
+    const cards: RoomMessage[] = [
+      ...Array.from({ length: 12 }, (_, i) => ({
+        ...approvalFixture,
+        id: `msg_approval${i}`,
+        text: `npx eslint src ${i} 2>&1 | tail -30`,
+        author: { kind: "agent", memberId: JIYEON } as const,
+        approval: { ...approvalFixture.approval!, memberId: JIYEON },
+      })),
+      ...Array.from({ length: 8 }, (_, i) => ({
+        ...changesFixture,
+        id: `msg_changes${i}`,
+        author: { kind: "agent", memberId: JIYEON } as const,
+        changes: { ...changesFixture.changes!, memberId: JIYEON },
+      })),
+    ];
+    const talk = [msg({ text: "배포 전에 확인 부탁해요" }), msg({ text: "네 보고 있습니다", author: { kind: "agent", memberId: JIYEON } })];
+    const trigger = msg({ text: "@민수 정리해줘", mentions: [MINSU] });
+    const { text, omitted } = build({ context: [...cards, ...talk], trigger });
+    expect(omitted).toBe(0); // 필터로 뺀 것은 세지 않는다
+    expect(text).not.toContain("승인 요청");
+    expect(text).not.toContain("변경 준비됨");
+    expect(text).not.toContain("eslint");
+    expect(text.split("\n").filter((l) => l.includes("시스템:"))).toEqual([]);
+    expect(text).toBe(
+      [
+        "[#전체] 사용자: 배포 전에 확인 부탁해요",
+        "[#전체] @지연(개발자): 네 보고 있습니다",
+        "[#전체] 사용자: @민수 정리해줘",
+        "",
+        "Reply for room #전체. Address teammates with @name only when they must act.",
+      ].join("\n"),
+    );
+  });
+
+  it("always renders the trigger last even when the filter would drop it", () => {
+    const fixture = fixtureMessage("room.message.approval");
+    const foreign: RoomMessage = { ...fixture, author: { kind: "agent", memberId: JIYEON }, approval: { ...fixture.approval!, memberId: JIYEON } };
+    const { text, omitted } = build({ context: [msg({ text: "앞" }), foreign], trigger: foreign });
+    expect(omitted).toBe(0);
+    expect(text.split("\n").filter((l) => l.includes("지연의 승인 요청"))).toHaveLength(1);
+    expect(text).toBe(
+      [
+        "[#전체] 사용자: 앞",
+        "[#전체] 시스템: 지연의 승인 요청 'npm test 실행' — 대기 중",
+        "",
+        "Reply for room #전체. Address teammates with @name only when they must act.",
+      ].join("\n"),
+    );
   });
 
   it("puts the conflict note first", () => {

@@ -406,6 +406,36 @@ describe("TeamManager dispatch", () => {
     c.unsubscribe();
   });
 
+  it("keeps another member's approval card out of the next member's turn input but keeps their reply", async () => {
+    // 맥락 절약(PROTOCOL 6.4, 2026-09-14): 승인 카드는 방에는 남지만 다른 팀원의 턴 입력에서는 빠진다.
+    const { teams, claude, manager, create } = await setup();
+    const team = await create();
+    const group = groupRoom(team);
+    const jiyeon = member(team, "지연");
+    const c = await collectRoom(teams, team.id, group.id);
+    await teams.postUserMessage(team.id, group.id, { text: "@지연 approve" });
+    await waitUntil(() => c.events.some((e) => e.type === "room.message" && e.message.kind === "approval"));
+    const card = (c.events.find((e) => e.type === "room.message" && e.message.kind === "approval") as { message: RoomMessage }).message;
+    expect(card.approval!.memberId).toBe(jiyeon.id);
+    await manager.respondApproval(jiyeon.sessionId!, card.approval!.approval.approvalId, "allow");
+    await waitUntil(quiet(teams, team.id));
+
+    // 카드는 방에 그대로 남는다(사람이 봐야 한다)
+    const messages = (await teams.roomDetail(team.id, group.id)).messages;
+    expect(messages.filter((m) => m.kind === "approval")).toHaveLength(1);
+
+    // 팀장(민수)이 도는 다음 턴의 입력에는 지연의 승인 카드 줄이 없고 지연의 대화는 있다
+    await teams.postUserMessage(team.id, group.id, { text: "status" });
+    await waitUntil(quiet(teams, team.id));
+    const turn = claude.sessions[0]!.turns[0]!.text;
+    expect(turn).not.toContain("승인 요청");
+    expect(turn).not.toContain("npm test 실행");
+    expect(turn).toContain("[#전체] 사용자: @지연 approve");
+    expect(turn).toContain("[#전체] @지연(개발자): 완료했습니다: [#전체] 사용자: 지연 approve");
+    expect(turn).toContain("[#전체] 사용자: status");
+    c.unsubscribe();
+  });
+
   it("commits worktree changes after the turn, posts a ready ChangeSet and marks the previous one stale", async () => {
     const { teams, repo, dataDir, create } = await setup();
     const team = await create();

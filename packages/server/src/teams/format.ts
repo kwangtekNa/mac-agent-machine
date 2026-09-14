@@ -102,6 +102,24 @@ export function formatMessageLine(message: RoomMessage, members: MemberRef[], ro
   }
 }
 
+/**
+ * 이 팀원의 턴 입력에 넣을 메시지인가(PROTOCOL 6.4 "턴 입력", 2026-09-14). `memberId` 는 턴을 도는 팀원.
+ * 승인·변경 카드는 **자기 것만** 남긴다. 남의 카드는 방 화면에는 그대로 있지만 맥락에서는 뺀다(제목이 bash 명령 원문이라
+ * 남의 것은 길기만 하고 쓸모가 없다). 자기 `text` 는 세션이 이미 기억하므로 뺀다. 나머지(남의 대화·사용자·시스템)는 넣는다.
+ */
+export function isContextRelevant(message: RoomMessage, memberId: string): boolean {
+  switch (message.kind) {
+    case "approval":
+      return message.approval?.memberId === memberId;
+    case "changes":
+      return message.changes?.memberId === memberId;
+    case "text":
+      return !(message.author.kind === "agent" && message.author.memberId === memberId);
+    case "system":
+      return true;
+  }
+}
+
 function footer(trigger: RoomMessage, rooms: RoomRef[]): string {
   const room = rooms.find((r) => r.id === trigger.roomId);
   if (room?.kind === "dm") return "Reply in this DM.";
@@ -110,14 +128,12 @@ function footer(trigger: RoomMessage, rooms: RoomRef[]): string {
 
 /**
  * 맥락(오래된 것부터 버림, `maxMessages`/`maxChars`) + 트리거(항상 마지막, 한 번만) + 꼬리말.
- * 팀원 자신의 `text` 메시지는 세션이 이미 기억하므로 맥락에서 뺀다(승인·변경 카드는 남긴다).
+ * 맥락은 `isContextRelevant` 로 먼저 거른다(자기 `text` 와 남의 승인·변경 카드를 뺀다). 트리거는 필터와 무관하게 항상 마지막에 들어간다.
  * 넘쳐서 버린 개수가 `omitted` 이고, 있으면 `(이전 메시지 N개 생략)` 한 줄을 맥락 앞에 둔다.
  */
 export function buildTurnText(input: FormatInput): { text: string; omitted: number } {
   const { member, members, rooms, trigger, maxMessages, maxChars } = input;
-  const candidates = input.context.filter(
-    (m) => m.id !== trigger.id && !(m.kind === "text" && m.author.kind === "agent" && m.author.memberId === member.id),
-  );
+  const candidates = input.context.filter((m) => m.id !== trigger.id && isContextRelevant(m, member.id));
   const triggerLine = formatMessageLine(trigger, members, rooms);
 
   const kept: string[] = [];
@@ -129,7 +145,7 @@ export function buildTurnText(input: FormatInput): { text: string; omitted: numb
     used += 1 + line.length;
     kept.unshift(line);
   }
-  const omitted = i + 1;
+  const omitted = i + 1; // 상한 때문에 버린 개수만 센다(필터로 뺀 것은 애초에 그 팀원의 대화가 아니다)
 
   const parts: string[] = [];
   if (input.conflictNote !== undefined && input.conflictNote !== "") parts.push(input.conflictNote, "");
