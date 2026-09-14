@@ -54,10 +54,28 @@
     {
       "step": 2,
       "name": "dev-gateway-launchagent",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-14T09:34:30+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "ab303c0c-8b33-4822-9cf8-f8a595f81133",
+          "cost_usd": 4.017444500000001,
+          "duration_s": 593.6,
+          "num_turns": 42,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 4.017445,
+      "duration_s": 593.6,
+      "retries": 0,
+      "session_id": "ab303c0c-8b33-4822-9cf8-f8a595f81133",
+      "summary": "개발 gateway LaunchAgent 설치 스크립트 추가: scripts/install-dev-gateway.sh(--dry-run/--uninstall/--status/--port, dist·Tailscale 전제 확인, node·codex·claude 절대경로 해석(zsh -ic, 5초 워치독), Label dev.mam.dev-gateway plist 생성(ProgramArguments 절대경로 배열 + MAM_DEV_BIND=tailscale·MAM_DEV_PORT·MAM_*_BIN·HOME·PATH, RunAtLoad, KeepAlive{SuccessfulExit:false}, ThrottleInterval 10, ~/.mam/dev-gateway.log), bootout→bootstrap→kickstart→healthz 5초→주소 출력, 포트 선점 시 lsof 안내 후 중단; 안내는 stderr·stdout 은 plist만) + scripts/test-install-dev-gateway.sh(13검사: plutil -lint -, MAM_DEV_BIND=tailscale·gateway·--dev·cli.js 경로, 0.0.0.0//bin/sh/-c 없음, --port 반영, bash -x 에 launchctl 미실행, 알 수 없는 옵션 exit 2) + scripts/test.sh 에 한 줄 등록; 문서 docs/RUNBOOK.md 8절(원격 접속 4단계·문제 해결 표·보안 노트), README 자동 시작 한 줄, ARCHITECTURE 4절 표에 plist·로그 행. 이 세션에서는 launchctl 을 실행하지 않았고(7777 리스너 없음, plist 미생성) 정식 LaunchDaemon 설치 경로는 무변경. npm ci/typecheck/npm test(802 passed), AC 커맨드 전부, bash scripts/test.sh(TS+iOS) 통과.",
+      "completed_at": "2026-09-14T09:44:24+0900"
     },
     {
       "step": 3,
