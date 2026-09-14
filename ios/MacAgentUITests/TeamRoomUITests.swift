@@ -3,7 +3,8 @@ import XCTest
 /// IOS.md 10절(Phase `4-teams-ios`)의 UI 테스트. `MAM_UI_TEST_SERVER` 와 `MAM_UI_TEST_REPO`(`bash scripts/dev-smoke.sh --keep` 이
 /// 마지막에 출력하는 git 저장소) 가 없으면 건너뛴다(다른 두 UI 테스트와 같은 규칙).
 /// 홈 `+` → 새 팀(이름 `ui-<timestamp>`, 직접 입력 = 저장소, 팀장 민수 Claude + 개발자 지연 Codex) → 방 목록(#전체 + DM 2개) → #전체
-/// → `@지` 제안 칩 → `write file ui.txt` 보내기 → 배너 "허용" → 답변 + 작업 요약("도구") → 작업 요약 탭 → 팀원 타임라인 "초 ·" → 뒤로
+/// → 팀원 시트에서 지연의 모델·사고 수준(low)·권한(full-auto, 확인 다이얼로그) 변경(10.8)
+/// → `@지` 제안 칩 → `write file ui.txt` 보내기 → (full-auto 라 승인 배너 없음, 뜨면 "허용") → 답변 + 작업 요약("도구") → 작업 요약 탭 → 팀원 타임라인 완료 행 → 뒤로
 /// → 변경 준비됨 카드 "main에 병합" → 확인 → "병합됨". PROTOCOL.md 6절 흐름(생성 → 멘션 → 승인 → 답변 → 변경 → 머지)을 그대로 누른다.
 /// 끝나면 REST(`URLSession`)로 `DELETE /api/v1/teams/<id>?keepWorktrees=true`(팀 id 는 `GET /teams?cwd=`). 실패해도 결과에는 영향 없음.
 /// 같은 저장소에 두 번 돌리면 `ui.txt` 가 이미 main 에 있어 변경 카드가 안 올라온다. 서버를 다시 띄워 새 저장소로 돌린다.
@@ -87,6 +88,11 @@ final class TeamRoomUITests: XCTestCase {
         // 4. 컴포저에 "@지" → 제안 칩(지연) 탭 → "write file ui.txt" → 보내기.
         let input = app.descendants(matching: .any).matching(identifier: "room.composer.input").firstMatch
         XCTAssertTrue(input.waitForExistence(timeout: 30), "방 화면이 열리지 않았습니다\n\(tree(app))")
+
+        // 4-1. 팀원 시트 → 지연 행 → 모델·사고 수준(low)·권한(full-auto, 확인 다이얼로그) (IOS.md 10.8).
+        setMemberControls(app, memberName: "지연", shots: shots)
+        XCTAssertTrue(input.waitForExistence(timeout: 10), "팀원 시트를 닫고 방 화면으로 돌아오지 않았습니다\n\(tree(app))")
+
         input.tap()
         input.typeText("@지")
         let chip = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'room.mention.'")).firstMatch
@@ -101,19 +107,29 @@ final class TeamRoomUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 5) { send.isEnabled }, "보내기 버튼이 비활성입니다")
         send.tap()
 
-        // 5. 승인 배너 "허용"(Fake 기본 스크립트가 echo hi 승인을 요청한다) → 답변 + 작업 요약 → 팀원 타임라인 → 뒤로.
+        // 5. 답변 + 작업 요약 → 팀원 타임라인 → 뒤로. 지연이 full-auto 라 Fake 도 승인을 요청하지 않지만(ADR-015),
+        //    배너가 뜨면(모드가 반영되기 전 등) 허용을 눌러 계속한다.
         let allow = app.buttons.matching(NSPredicate(format: "identifier == 'approval.option.allow' OR label == '허용'")).firstMatch
-        XCTAssertTrue(allow.waitForExistence(timeout: 60), "승인 배너의 허용 버튼이 없습니다\n\(tree(app))")
-        capture(app, shots, "4-approval-banner")
-        allow.tap()
         let work = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH 'room.workSummary.' AND label CONTAINS '도구'")
         ).firstMatch
+        let approvalDeadline = Date().addingTimeInterval(60)
+        while Date() < approvalDeadline {
+            if work.exists { break }
+            if allow.exists {
+                capture(app, shots, "4-approval-banner")
+                allow.tap()
+                break
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        }
         XCTAssertTrue(waitScrolling(app, for: work, timeout: 60), "작업 요약 카드가 없습니다\n\(tree(app))")
         capture(app, shots, "5-reply-and-work")
         work.tap()
-        let summary = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "초 ·")).firstMatch
-        XCTAssertTrue(summary.waitForExistence(timeout: 30), "팀원 타임라인에 완료 행(turn_summary)이 없습니다\n\(tree(app))")
+        // 완료 행(turn_summary)은 `<시간> · <토큰> 토큰 · <비용>`. full-auto 턴은 1초 안에 끝나 시간이 "0ms" 로 찍히므로
+        // "토큰" 으로 찾는다. 화면 밖이면 스크롤하며 찾는다.
+        let summary = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "토큰")).firstMatch
+        XCTAssertTrue(waitScrolling(app, for: summary, timeout: 60), "팀원 타임라인에 완료 행(turn_summary)이 없습니다\n\(tree(app))")
         capture(app, shots, "6-member-timeline")
         let back = app.navigationBars.firstMatch.buttons.element(boundBy: 0)
         XCTAssertTrue(back.waitForExistence(timeout: 5), "뒤로 버튼이 없습니다")
@@ -140,6 +156,69 @@ final class TeamRoomUITests: XCTestCase {
     }
 
     // MARK: - 단계 헬퍼
+
+    /// 방 툴바 `room.members` → `room.member.<id>` 탭 → `MemberControlSheet`(IOS.md 10.8): 모델 → 사고 수준 low → 권한 full-auto.
+    /// 새 팀원은 `model` 이 null 이라 사고 수준 목록(선택 모델의 `efforts`)이 비어 있다. 모델을 먼저 고르면 `memberControl.effort` 가 나온다.
+    /// `full-auto` 는 확인 다이얼로그("full-auto로 전환") 뒤에만 적용된다(ADR-015). 값 확정은 서버 응답이라 표시가 바뀔 때까지 기다린다.
+    private func setMemberControls(_ app: XCUIApplication, memberName: String, shots: String) {
+        let membersButton = app.buttons["room.members"]
+        XCTAssertTrue(membersButton.waitForExistence(timeout: 10), "팀원 툴바 버튼이 없습니다\n\(tree(app))")
+        membersButton.tap()
+        let row = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH 'room.member.' AND label CONTAINS %@", memberName)
+        ).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "팀원 행(\(memberName))이 없습니다\n\(tree(app))")
+        row.tap()
+
+        let modelPicker = app.descendants(matching: .any).matching(identifier: "memberControl.model").firstMatch
+        XCTAssertTrue(modelPicker.waitForExistence(timeout: 30), "모델 피커가 없습니다(GET /models)\n\(tree(app))")
+        if !pickerText(modelPicker).contains("Fake 1") {
+            selectPickerOption(app, picker: modelPicker, option: "Fake 1")
+            XCTAssertTrue(waitUntil(timeout: 20) { pickerText(modelPicker).contains("Fake 1") }, "모델이 바뀌지 않았습니다: \(pickerText(modelPicker))")
+        }
+
+        let effortPicker = app.descendants(matching: .any).matching(identifier: "memberControl.effort").firstMatch
+        XCTAssertTrue(effortPicker.waitForExistence(timeout: 20), "사고 수준 피커가 없습니다\n\(tree(app))")
+        selectPickerOption(app, picker: effortPicker, option: "low")
+        XCTAssertTrue(waitUntil(timeout: 20) { pickerText(effortPicker).contains("low") }, "사고 수준이 low 로 바뀌지 않았습니다: \(pickerText(effortPicker))")
+
+        let modePicker = app.descendants(matching: .any).matching(identifier: "memberControl.mode").firstMatch
+        XCTAssertTrue(modePicker.waitForExistence(timeout: 10), "권한 피커가 없습니다\n\(tree(app))")
+        selectPickerOption(app, picker: modePicker, option: "full-auto")
+        let confirm = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "full-auto로 전환")).firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10), "full-auto 확인 다이얼로그가 없습니다\n\(tree(app))")
+        confirm.tap()
+        // 권한 피커는 항목이 `Label`(아이콘+글자)이라 선택값이 피커 라벨이 아니라 옆 텍스트로 그려질 수 있다. 둘 다 본다.
+        let modeValue = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "full-auto")).firstMatch
+        XCTAssertTrue(
+            waitUntil(timeout: 20) { pickerText(modePicker).contains("full-auto") || modeValue.exists },
+            "권한이 full-auto 로 바뀌지 않았습니다: \(pickerText(modePicker))\n\(tree(app))"
+        )
+        capture(app, shots, "3-member-control")
+
+        let done = app.buttons["완료"].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "팀원 시트의 '완료' 가 없습니다\n\(tree(app))")
+        done.tap()
+        let close = app.buttons["닫기"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 10), "팀원 목록 시트의 '닫기' 가 없습니다\n\(tree(app))")
+        close.tap()
+    }
+
+    /// Form 피커(메뉴 스타일)를 열고 라벨이 일치하는 항목을 누른다. 피커 자신은 identifier 로 걸러낸다.
+    private func selectPickerOption(_ app: XCUIApplication, picker: XCUIElement, option: String) {
+        picker.tap()
+        let item = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@ AND identifier != %@", option, picker.identifier)
+        ).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 10), "피커 항목 '\(option)' 이 없습니다\n\(tree(app))")
+        item.tap()
+    }
+
+    /// 메뉴 피커의 현재 값은 라벨("모델, Fake 1") 또는 value 에 들어온다. 둘을 합쳐서 본다.
+    private func pickerText(_ element: XCUIElement) -> String {
+        let value = (element.value as? String) ?? ""
+        return "\(element.label) \(value)"
+    }
 
     /// "팀원 추가" → 편집기: 역할 프리셋(메뉴 피커) · 이름 · 에이전트(세그먼트, `agent` 는 라벨 "Claude Code"/"Codex") · 팀장 토글 → 완료.
     private func addMember(_ app: XCUIApplication, name: String, agent: String, rolePreset: String, lead: Bool) {

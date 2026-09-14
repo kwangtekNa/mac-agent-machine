@@ -90,6 +90,7 @@
 ## ADR-015 세션 모드는 4종 프리셋
 
 - 결정: `ask`, `auto-edit`, `full-auto`, `plan`. 매핑은 `docs/PROTOCOL.md` 4절. `full-auto`는 앱에서 별도 확인 후에만 설정 가능하며 서버는 기본값을 `ask`로 강제한다.
+- 보완(2026-09-13 확정, Phase `6-member-controls`): **`full-auto` 는 모든 도구 승인 없음.** Claude 는 `permissionMode: "bypassPermissions"`(프로세스는 항상 `allowDangerouslySkipPermissions: true` 로 띄운다 — SDK 가 bypass 에 이 플래그를 요구하며, 플래그는 허용만 하고 켜지는 않는다) + `canUseTool` 이 `full-auto` 면 승인 아이템 없이 즉시 allow, Codex 는 `approvalPolicy: never` + 그래도 오는 승인 요청을 자동 승인(`user_input` 질문은 예외로 사용자에게 올린다). Fake 어댑터도 같은 규칙이다. 실제 SDK/app-server 로 `echo pong` 한 턴을 돌려 승인 0건·도구 1회 이상을 확인했다. 팀원도 같은 모드 집합을 쓰며 전환 확인 다이얼로그는 앱(팀원 편집기·방의 팀원 시트)이 담당한다(`docs/IOS.md` 10.8).
 
 ## ADR-016 사용량·컨텍스트는 어댑터가 관측한 값을 누적, 구독 한도는 관측/조회 혼합
 

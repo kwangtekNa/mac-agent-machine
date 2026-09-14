@@ -181,7 +181,9 @@ export class FakeSession implements AgentSession {
       turnNumber: this.turns.length,
       model: this.model,
       effort: this.effort,
-      autoApprove: this.config.autoApprove,
+      // full-auto 는 실제 어댑터와 같이 승인 없이 도구를 실행한다(ADR-015). 턴마다 현재 모드를 읽으므로
+      // setMode 는 다음 턴부터 반영된다.
+      autoApprove: this.config.autoApprove || this.mode === "full-auto",
       signal,
       now: () => this.config.now().toISOString(),
       emit,

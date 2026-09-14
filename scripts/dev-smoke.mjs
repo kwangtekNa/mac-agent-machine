@@ -2,8 +2,9 @@
 // 개발 모드 gateway(scripts/dev-smoke.sh 가 기동)에 대해 REST → WS → 승인 응답 → 완료를 검증한다.
 // docs/PROTOCOL.md 2절의 WS 이벤트 순서를 그대로 따라간다. 실패하면 단계와 받은 이벤트를 출력하고 exit 1.
 // 11~14단계는 2026-09-10 추가분(PROTOCOL.md: /fs/mkdir, Session.usage + session.usage, /usage, /models, PATCH model).
-// 15~20단계는 2026-09-12 추가분(PROTOCOL.md 6절: 팀 생성 → 방 WS → 멘션 디스패치 → 변경 카드 → DM → 머지 → 삭제).
-// 21단계는 2026-09-13 추가분(PROTOCOL.md 1절 POST /git/init: dryRun → 초기화 → 그 디렉토리로 팀 생성 → 삭제 → 다시 409).
+// 15~21단계는 2026-09-12 추가분(PROTOCOL.md 6절: 팀 생성 → 방 WS → 멘션 디스패치 → 변경 카드 → DM → 팀원 제어 → 머지 → 삭제).
+// 19단계는 2026-09-13 추가분(PROTOCOL.md 6.2 PATCH members: mode full-auto 는 승인 없는 턴, effort·model 반영).
+// 22단계는 2026-09-13 추가분(PROTOCOL.md 1절 POST /git/init: dryRun → 초기화 → 그 디렉토리로 팀 생성 → 삭제 → 다시 409).
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
@@ -342,7 +343,7 @@ const isAgentText = (memberId) => (e) =>
   e.type === "room.message" && e.message.kind === "text" && e.message.author.kind === "agent" && e.message.author.memberId === memberId;
 const isIdleStatusAfter = (seq) => (e) => e.type === "room.status" && e.seq > seq && e.members.every((m) => m.state === "idle");
 
-/** 15~20단계: PROTOCOL.md 6절 종단 검증. 실패해도 팀은 best-effort 로 지운다(worktree 가 더러우면 keepWorktrees). 만든 git 저장소 경로를 돌려준다. */
+/** 15~21단계: PROTOCOL.md 6절 종단 검증. 실패해도 팀은 best-effort 로 지운다(worktree 가 더러우면 keepWorktrees). 만든 git 저장소 경로를 돌려준다. */
 async function teamSteps(cwd) {
   let team = null;
   let deleted = false;
@@ -456,7 +457,42 @@ async function teamSteps(cwd) {
     assertMonotonicSeq(groupWs.events);
     note(`18. DM: 지연 reply(seq ${dmReply.seq}) mentions @minsu, group messages ${groupMessagesBefore} → ${groupAfter.json.messages.length} (연쇄 없음) OK`);
 
-    step = "19. POST changes/:id/merge → merged, git log --merges 1개, show --stat 에 smoke.txt; POST stop";
+    step = "19. PATCH members/:id { mode: full-auto } → 승인 없는 턴, { effort }, { model } 반영";
+    // PROTOCOL.md 6.2: mode·effort 는 즉시, model 은 다음 세션부터(응답 Team 에는 바로 보인다). ADR-015: full-auto 는 승인 없음.
+    const toFullAuto = await api("PATCH", `/api/v1/teams/${team.id}/members/${jiyeon.id}`, { mode: "full-auto" });
+    assert.equal(toFullAuto.status, 200, `PATCH mode status ${toFullAuto.status}: ${JSON.stringify(toFullAuto.json)}`);
+    assert.equal(toFullAuto.json.members.find((m) => m.id === jiyeon.id).mode, "full-auto", "members[].mode 가 full-auto 가 아님");
+    dmWs.send({ type: "room.send", text: "full-auto ping" });
+    const fullAutoUser = await dmWs.waitFor(
+      (e) => e.type === "room.message" && e.message.author.kind === "user" && e.message.text === "full-auto ping",
+      5000,
+      "room.message(dm user, full-auto)",
+    );
+    const fullAutoReply = await dmWs.waitFor(
+      (e) => isAgentText(jiyeon.id)(e) && e.seq > fullAutoUser.seq,
+      30_000,
+      "room.message(dm agent, full-auto)",
+    );
+    const approvalCards = dmWs.events.filter(
+      (e) => e.type === "room.message" && e.message.kind === "approval" && e.seq > fullAutoUser.seq && e.seq <= fullAutoReply.seq,
+    );
+    assert.equal(approvalCards.length, 0, `full-auto 턴에 승인 카드가 ${approvalCards.length}개 올라옴`);
+    assert.ok(fullAutoReply.message.work.toolCalls >= 1, `full-auto 턴의 toolCalls ${fullAutoReply.message.work.toolCalls}`);
+    await dmWs.waitFor(isIdleStatusAfter(fullAutoReply.seq), 5000, "room.status(dm idle, full-auto)");
+    const toLowEffort = await api("PATCH", `/api/v1/teams/${team.id}/members/${jiyeon.id}`, { effort: "low" });
+    assert.equal(toLowEffort.status, 200, `PATCH effort status ${toLowEffort.status}: ${JSON.stringify(toLowEffort.json)}`);
+    assert.equal(toLowEffort.json.members.find((m) => m.id === jiyeon.id).effort, "low", "members[].effort 가 low 가 아님");
+    // fake-mini 는 effort 를 지원하지 않으므로 서버가 effort 를 지운다(manager.setModelEffort).
+    const toMini = await api("PATCH", `/api/v1/teams/${team.id}/members/${jiyeon.id}`, { model: "fake-mini" });
+    assert.equal(toMini.status, 200, `PATCH model status ${toMini.status}: ${JSON.stringify(toMini.json)}`);
+    const afterModel = toMini.json.members.find((m) => m.id === jiyeon.id);
+    assert.equal(afterModel.model, "fake-mini", `members[].model ${afterModel.model}`);
+    assert.equal(afterModel.effort, null, `members[].effort ${afterModel.effort} (fake-mini 는 effort 미지원)`);
+    assert.equal(afterModel.mode, "full-auto", "model 변경이 mode 를 되돌림");
+    assertMonotonicSeq(dmWs.events);
+    note(`19. PATCH mode=full-auto → 승인 카드 0건, toolCalls=${fullAutoReply.message.work.toolCalls}; effort=low; model=fake-mini(effort 해제) OK`);
+
+    step = "20. POST changes/:id/merge → merged, git log --merges 1개, show --stat 에 smoke.txt; POST stop";
     const merged = await api("POST", `/api/v1/teams/${team.id}/changes/${changeId}/merge`);
     assert.equal(merged.status, 200, `merge status ${merged.status}: ${JSON.stringify(merged.json)}`);
     assert.equal(merged.json.change.status, "merged", `change.status ${merged.json.change.status}`);
@@ -473,9 +509,9 @@ async function teamSteps(cwd) {
     assert.equal(stopped.status, 200, `stop status ${stopped.status}`);
     assert.deepEqual(stopped.json, { running: [], queued: [] }, `stop 결과 ${JSON.stringify(stopped.json)}`);
     assertMonotonicSeq(groupWs.events);
-    note(`19. merge ${merged.json.mergeCommit.slice(0, 7)} (${mergesLog[0]}) + stop OK`);
+    note(`20. merge ${merged.json.mergeCommit.slice(0, 7)} (${mergesLog[0]}) + stop OK`);
 
-    step = "20. DELETE /api/v1/teams/:id → worktree 없음, 목록에 없음, 세션 closed + team";
+    step = "21. DELETE /api/v1/teams/:id → worktree 없음, 목록에 없음, 세션 closed + team";
     const del = await api("DELETE", `/api/v1/teams/${team.id}`);
     assert.equal(del.status, 200, `delete status ${del.status}: ${JSON.stringify(del.json)}`);
     deleted = true;
@@ -496,7 +532,7 @@ async function teamSteps(cwd) {
     }
     await groupWs.close();
     await dmWs.close();
-    note(`20. team deleted, worktrees gone, ${team.members.length} member sessions closed with team OK`);
+    note(`21. team deleted, worktrees gone, ${team.members.length} member sessions closed with team OK`);
   } finally {
     if (team && !deleted) {
       const res = await api("DELETE", `/api/v1/teams/${team.id}`).catch(() => null);
@@ -507,12 +543,12 @@ async function teamSteps(cwd) {
 }
 
 /**
- * 21단계: PROTOCOL.md 1절 `POST /git/init`(2026-09-13 추가). `<cwd>/fresh` 에 파일 2개 + `node_modules/x.js` 를 두고
+ * 22단계: PROTOCOL.md 1절 `POST /git/init`(2026-09-13 추가). `<cwd>/fresh` 에 파일 2개 + `node_modules/x.js` 를 두고
  * dryRun(200, 아무것도 안 바꿈) → 초기화(201, `.gitignore` + `main` 첫 커밋, `node_modules` 제외) → 같은 디렉토리로 `POST /teams`(201)
  * → `DELETE /teams/:id`(200) → 다시 `POST /git/init` 은 409. 팀은 실패해도 best-effort 로 지운다. `fresh` 는 cwd 와 함께 정리된다.
  */
 async function gitInitSteps(cwd) {
-  step = "21. POST /api/v1/git/init dryRun → 초기화 → POST /teams → DELETE → 다시 409";
+  step = "22. POST /api/v1/git/init dryRun → 초기화 → POST /teams → DELETE → 다시 409";
   const fresh = path.join(cwd, "fresh");
   await mkdir(path.join(fresh, "node_modules"), { recursive: true });
   await writeFile(path.join(fresh, "index.js"), "console.log('fresh');\n");
@@ -563,7 +599,7 @@ async function gitInitSteps(cwd) {
   const again = await api("POST", "/api/v1/git/init", { cwd: fresh });
   assert.equal(again.status, 409, `init(again) status ${again.status}: ${JSON.stringify(again.json)}`);
   assert.equal(again.json.error.code, "conflict", `init(again) error.code ${again.json.error.code}`);
-  note(`21. git/init dryRun(files=${dry.json.files}, bytes=${dry.json.bytes}, .git 없음) → init ${init.json.commit.slice(0, 7)} (main, ls-files=${tracked.join(",")}) → team ${created.json.id} 201 → delete 200 → again 409 OK`);
+  note(`22. git/init dryRun(files=${dry.json.files}, bytes=${dry.json.bytes}, .git 없음) → init ${init.json.commit.slice(0, 7)} (main, ls-files=${tracked.join(",")}) → team ${created.json.id} 201 → delete 200 → again 409 OK`);
 }
 
 async function closeAll() {

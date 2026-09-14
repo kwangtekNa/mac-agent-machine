@@ -213,7 +213,7 @@ iPad(regular): `NavigationSplitView` 3열. 사이드바 = 프로젝트·세션, 
 
 ### 10.6 접근성 식별자
 
-UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로. `MAM_UI_TEST_SERVER` 와 `MAM_UI_TEST_REPO`(`bash scripts/dev-smoke.sh --keep` 이 출력하는 git 저장소) 가 없으면 `XCTSkip`. 흐름은 새 팀 → `#전체` → `@지` 제안 칩 → `write file ui.txt` → 배너 허용 → 작업 요약 → 팀원 타임라인 → "main에 병합" → "병합됨" 이고, 끝에 REST 로 팀을 지운다(`keepWorktrees=true`).
+UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로. `MAM_UI_TEST_SERVER` 와 `MAM_UI_TEST_REPO`(`bash scripts/dev-smoke.sh --keep` 이 출력하는 git 저장소) 가 없으면 `XCTSkip`. 흐름은 새 팀 → `#전체` → 팀원 시트(모델 → 사고 수준 `low` → 권한 `full-auto` 확인, 10.8) → `@지` 제안 칩 → `write file ui.txt` → (full-auto 라 승인 카드 없음, 뜨면 허용) → 작업 요약 → 팀원 타임라인 → "main에 병합" → "병합됨" 이고, 끝에 REST 로 팀을 지운다(`keepWorktrees=true`).
 
 | 식별자 | 위치 |
 |---|---|
@@ -228,6 +228,10 @@ UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로.
 | `room.merge.<changeId>` · `room.dismiss.<changeId>` | 변경 준비됨 카드의 "<base>에 병합" · "거절" |
 | `newTeam.gitInit` · `newTeam.gitReady` | 새 팀 시트 디렉토리 아래의 "저장소 초기화" · 초기화 뒤 "git 저장소 (main)" 행 (10.7) |
 | `directoryPicker.gitInit` | 디렉토리 피커 툴바의 "저장소 초기화"(현재 폴더가 저장소가 아닐 때만) (10.7) |
+| `room.members` · `room.member.<memberId>` | 방 툴바의 팀원 시트 · 그 안의 팀원 행(탭 → `MemberControlSheet`) (10.8) |
+| `memberControl.mode` · `memberControl.model` · `memberControl.effort` | 팀원 시트의 권한 · 모델 · 사고 수준 피커 (10.8) |
+| `memberControl.openTimeline` · `memberControl.reset` | 팀원 시트의 "타임라인 열기" · "기억 초기화" (10.8) |
+| `memberEditor.model` · `memberEditor.effort` | 팀원 편집기의 모델 · 사고 수준 피커 (10.8) |
 
 ### 10.7 저장소 초기화 (2026-09-13, Phase `5-git-init`)
 

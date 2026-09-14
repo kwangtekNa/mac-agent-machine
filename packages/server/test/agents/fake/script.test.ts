@@ -91,6 +91,73 @@ describe("defaultScript: write file <이름>", () => {
   });
 });
 
+/**
+ * 실제 어댑터와 같은 규칙(ADR-015, Phase 6 step 0): `full-auto` 세션은 승인을 요청하지 않는다.
+ * `autoApprove` 옵션은 그대로 두고 모드만으로 판단한다.
+ */
+describe("defaultScript: full-auto 는 승인을 요청하지 않는다", () => {
+  /** autoApprove 없이 한 턴을 돌리고 `stop` 이 true 가 될 때까지 이벤트를 모은다(승인 대기 중에도 멈출 수 있게). */
+  async function turnUntil(
+    session: { sendTurn: (i: { text: string }) => Promise<void>; events: AsyncIterable<AgentEvent> },
+    iter: AsyncIterator<AgentEvent>,
+    stop: (e: AgentEvent) => boolean,
+  ): Promise<AgentEvent[]> {
+    await session.sendTurn({ text: "hello" });
+    const events: AgentEvent[] = [];
+    for (;;) {
+      const r = await iter.next();
+      if (r.done) break;
+      events.push(r.value);
+      if (stop(r.value)) break;
+    }
+    return events;
+  }
+
+  const isApprovalItem = (e: AgentEvent): boolean =>
+    (e.type === "item.started" || e.type === "item.completed") && e.item.kind === "approval";
+  const isIdle = (e: AgentEvent): boolean => e.type === "status" && e.status === "idle";
+
+  it("mode full-auto 로 시작한 세션은 승인 아이템 없이 tool_call 을 끝낸다", async () => {
+    const cwd = await tmp();
+    const adapter = new FakeAdapter();
+    const s = await adapter.start({ cwd, mode: "full-auto" });
+    const events = await turnUntil(s, s.events[Symbol.asyncIterator](), isIdle);
+    expect(events.some(isApprovalItem)).toBe(false);
+    expect(events.some((e) => e.type === "item.completed" && e.item.kind === "tool_call")).toBe(true);
+    expect(events.some((e) => e.type === "turn.completed")).toBe(true);
+    await s.close();
+  });
+
+  it("ask 모드는 그대로 승인을 요청한다", async () => {
+    const cwd = await tmp();
+    const adapter = new FakeAdapter();
+    const s = await adapter.start({ cwd, mode: "ask" });
+    const events = await turnUntil(s, s.events[Symbol.asyncIterator](), isApprovalItem);
+    expect(events.some(isApprovalItem)).toBe(true);
+    await s.close();
+  });
+
+  it("setMode('full-auto') 는 다음 턴부터 승인을 없앤다", async () => {
+    const cwd = await tmp();
+    const adapter = new FakeAdapter();
+    const s = await adapter.start({ cwd, mode: "ask" });
+    const iter = s.events[Symbol.asyncIterator]();
+    const first = await turnUntil(s, iter, isApprovalItem);
+    const approval = first.find((e) => e.type === "item.started" && e.item.kind === "approval");
+    expect(approval).toBeDefined();
+    if (approval?.type !== "item.started" || approval.item.kind !== "approval") throw new Error("approval 아이템 없음");
+    await s.respondApproval(approval.item.payload.approvalId, "allow");
+    for (;;) {
+      const r = await iter.next(); // 첫 턴이 끝날 때까지 흘려보낸다
+      if (r.done || isIdle(r.value)) break;
+    }
+    await s.setMode("full-auto");
+    const second = await turnUntil(s, iter, isIdle);
+    expect(second.some(isApprovalItem)).toBe(false);
+    await s.close();
+  });
+});
+
 describe("defaultScript: ask @<핸들>", () => {
   it("답변에 '@<핸들> 확인 부탁해요.' 를 넣는다", async () => {
     const cwd = await tmp();

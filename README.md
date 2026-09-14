@@ -35,7 +35,7 @@ Mac 한 대를 여러 사용자의 에이전트 코딩 서버로 만드는 프�
 
 ```bash
 npm ci
-bash scripts/dev-smoke.sh --keep   # 빌드 → Fake 어댑터로 gateway 기동(:7777) → REST/WS 검증(세션 1~14 + 팀 15~20 + git init 21단계) → 서버 유지
+bash scripts/dev-smoke.sh --keep   # 빌드 → Fake 어댑터로 gateway 기동(:7777) → REST/WS 검증(세션 1~14 + 팀 15~21 + git init 22단계) → 서버 유지
 ```
 
 `--keep`으로 띄운 서버는 Phase 1(iOS)과 Phase 2(웹) 개발 백엔드로 그대로 쓸 수 있다(`http://127.0.0.1:7777`). Ctrl-C로 종료한다.

@@ -295,7 +295,9 @@ Approval:
 
 Codex의 `approvalPolicy`는 v2 `AskForApproval`(`untrusted | on-request | never | granular`), `sandbox`는 `SandboxMode`(`read-only | workspace-write | danger-full-access`)다. `thread/start`와 `turn/start` 양쪽에 같은 값을 넣는다.
 
-`full-auto`는 앱에서 별도 확인 후에만 설정할 수 있다.
+Claude 어댑터는 `permissionMode`와 무관하게 SDK 옵션 `allowDangerouslySkipPermissions: true`로 프로세스를 띄운다. SDK가 `bypassPermissions`(와 런타임 `setPermissionMode("bypassPermissions")`)에 이 플래그를 요구하기 때문이며, 플래그는 bypass를 **허용**만 하고 켜지는 않는다. 실제 bypass 여부는 세션 `mode`가 정한다.
+
+`full-auto`는 앱에서 별도 확인 후에만 설정할 수 있고, 설정되면 **모든 도구를 승인 없이 실행한다**(어댑터가 승인 요청을 만들지 않는다. Codex의 사용자 입력 요청(`user_input`)만 예외로 그대로 올라온다). 2026-09-13 실제 어댑터로 확인, ADR-015.
 
 ## 5. 어댑터 매핑 요약
 
