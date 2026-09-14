@@ -28,10 +28,28 @@
     {
       "step": 1,
       "name": "ios-document-viewer",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-14T10:26:53+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "5e33986e-efe6-4727-91f9-388b227c8f18",
+          "cost_usd": 6.4943815,
+          "duration_s": 781.6,
+          "num_turns": 54,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 6.494382,
+      "duration_s": 781.6,
+      "retries": 0,
+      "session_id": "5e33986e-efe6-4727-91f9-388b227c8f18",
+      "summary": "iOS 문서 뷰어 — FsRenderResponse/DocumentRenderKind 모델, APIClient.renderDocument(120s)·downloadFile(진행률·취소·오류 봉투), FileViewerLogic 문서 API(documentKind 13종+hwp/hwpx, 100 MiB 상한, Caches/mam-docs sha256 캐시 경로, 501 안내 문구), FileViewerView Phase 확장(downloading/document/rendered/tooLarge/converterMissing, size: Int? init 추가·호출부 갱신, 닫을 때 캐시 삭제), 신규 QuickLookView.swift·HTMLDocumentView.swift(JS 비활성·링크 차단·color-scheme 주입·warnings 배너), fs-render fixture를 실제 타입으로 전환. 테스트 15개 신규(FileViewerLogic 5, APIClient 4, DocumentViewTests 5, fixture 1 전환) — xcodebuild test 및 bash scripts/test.sh 전체 게이트 통과.",
+      "completed_at": "2026-09-14T10:39:55+0900"
     },
     {
       "step": 2,
