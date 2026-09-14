@@ -1,4 +1,6 @@
+import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
+import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import {
@@ -6,6 +8,7 @@ import {
   GitInitResponseSchema,
   MeResponseSchema,
   ModelsResponseSchema,
+  NetPortsResponseSchema,
   ProjectsResponseSchema,
   SessionDetailResponseSchema,
   SessionsResponseSchema,
@@ -15,6 +18,7 @@ import {
 } from "@mam/protocol";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/agent-host/app.js";
+import { DEV_GATEWAY_PORT, gatewayPorts } from "../../src/agent-host/routes/net.js";
 import { limitStatus, toAgentUsage } from "../../src/agent-host/routes/usage.js";
 import type { AgentAdapter } from "../../src/agents/types.js";
 import { H, USER, makeFixture, until, type Fixture } from "./helpers.js";
@@ -353,5 +357,49 @@ describe("POST /git/init (2026-09-13)", () => {
     expect(team.cwd).toBe(join(fx.workspaceRoot, "lib"));
     expect(team.baseBranch).toBe("main");
     expect(team.members[0]?.branch).toBe("mam/libteam/minsu");
+  });
+});
+
+describe("GET /net/ports (2026-09-13)", () => {
+  /** `lsof` 가 없는 환경에서는 목록 내용을 확인할 수 없다. */
+  async function hasLsof(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const child = spawn("lsof", ["-v"], { stdio: "ignore" });
+      child.on("error", () => resolve(false));
+      child.on("close", () => resolve(true));
+    });
+  }
+
+  it("200 + 스키마 통과. 테스트가 띄운 임시 포트는 담고 앱 자신의 포트(gateway 포트로 지정)는 뺀다", async () => {
+    const tmp = createServer();
+    await new Promise<void>((resolve) => tmp.listen(0, "127.0.0.1", resolve));
+    const tmpPort = (tmp.address() as AddressInfo).port;
+    // 앱을 실제 TCP 포트에 띄우고 그 포트를 개발 모드 gateway 포트로 세워 제외 규칙을 확인한다.
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const appPort = (app.server.address() as AddressInfo).port;
+    const previous = process.env.MAM_DEV_PORT;
+    process.env.MAM_DEV_PORT = String(appPort);
+    try {
+      const res = await get("/api/v1/net/ports");
+      expect(res.statusCode).toBe(200);
+      const { ports } = NetPortsResponseSchema.parse(res.json());
+      expect(ports.map((p) => p.port)).not.toContain(appPort);
+      expect(ports.map((p) => p.port)).toEqual([...ports.map((p) => p.port)].sort((a, b) => a - b));
+      if (await hasLsof()) {
+        expect(ports.find((p) => p.port === tmpPort)).toMatchObject({ pid: process.pid, address: "127.0.0.1" });
+      }
+    } finally {
+      if (previous === undefined) delete process.env.MAM_DEV_PORT;
+      else process.env.MAM_DEV_PORT = previous;
+      await new Promise<void>((resolve) => tmp.close(() => resolve()));
+    }
+  });
+
+  it("gatewayPorts: 개발 모드 단서가 있으면 그 포트(기본 7777)를, 없으면 아무것도 빼지 않는다", () => {
+    expect(gatewayPorts({})).toEqual([]);
+    expect(gatewayPorts({ MAM_DEV_PORT: "7778" })).toEqual([7778]);
+    expect(gatewayPorts({ MAM_DEV_BIND: "tailscale" })).toEqual([DEV_GATEWAY_PORT]);
+    expect(gatewayPorts({ MAM_DEV_PORT: "nope" })).toEqual([DEV_GATEWAY_PORT]);
+    expect(gatewayPorts({ MAM_DEV_PORT: "70000" })).toEqual([DEV_GATEWAY_PORT]);
   });
 });

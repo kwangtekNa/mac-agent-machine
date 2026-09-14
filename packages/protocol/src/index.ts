@@ -74,6 +74,8 @@ import type {
   ModelOptionSchema,
   ModelsQuerySchema,
   ModelsResponseSchema,
+  NetPortSchema,
+  NetPortsResponseSchema,
   OkResponseSchema,
   ProjectSchema,
   ProjectsResponseSchema,
@@ -242,6 +244,8 @@ export type UsageResponse = z.infer<typeof UsageResponseSchema>;
 export type ModelOption = z.infer<typeof ModelOptionSchema>;
 export type ModelsResponse = z.infer<typeof ModelsResponseSchema>;
 export type ModelsQuery = z.infer<typeof ModelsQuerySchema>;
+export type NetPort = z.infer<typeof NetPortSchema>;
+export type NetPortsResponse = z.infer<typeof NetPortsResponseSchema>;
 
 // ws: server → client
 export type ServerEvent = z.infer<typeof ServerEventSchema>;

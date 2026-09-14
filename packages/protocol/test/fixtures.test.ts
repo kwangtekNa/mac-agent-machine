@@ -18,6 +18,7 @@ import {
   MeResponseSchema,
   MergeResultSchema,
   ModelsResponseSchema,
+  NetPortsResponseSchema,
   PostRoomMessageResponseSchema,
   ProjectsResponseSchema,
   RoomClientMessageSchema,
@@ -51,9 +52,10 @@ const REST: Record<string, ZodType> = {
   "fs-mkdir": FsMkdirResponseSchema,
   "git-status": GitStatusResponseSchema,
   "git-diff": GitDiffResponseSchema,
-  // 2026-09-13 추가분(git init)
+  // 2026-09-13 추가분(git init, net ports)
   "git-init": GitInitResponseSchema,
   "git-init-dry-run": GitInitResponseSchema,
+  "net-ports": NetPortsResponseSchema,
   error: ErrorResponseSchema,
   "login-start": LoginStartResponseSchema,
   "login-status": LoginStatusResponseSchema,
@@ -158,8 +160,8 @@ const ADDED_2026_09_12 = [
   "room-client/ping",
 ];
 
-/** 2026-09-13 추가분(git init) 2개. iOS `ProtocolFixturesTests.ADDED_2026_09_13` 과 같은 집합. */
-const ADDED_2026_09_13 = ["rest/git-init", "rest/git-init-dry-run"];
+/** 2026-09-13 추가분(git init, net ports) 3개. iOS `ProtocolFixturesTests.ADDED_2026_09_13` 과 같은 집합. */
+const ADDED_2026_09_13 = ["rest/git-init", "rest/git-init-dry-run", "rest/net-ports"];
 
 /** 2026-09-10 추가분(사용량·모델·mkdir). 라운드트립 테스트가 최소한 이 파일들을 반드시 포함해야 한다. */
 const ADDED_2026_09_10 = [
@@ -264,8 +266,8 @@ describe("fixtures ↔ 매핑 테이블 (누락 방지)", () => {
     const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
     for (const added of ADDED_2026_09_12) expect(keys.has(added), added).toBe(true);
   });
-  it("2026-09-13 추가분 2개가 전부 매핑표에 있다", () => {
-    expect(ADDED_2026_09_13).toHaveLength(2);
+  it("2026-09-13 추가분 3개가 전부 매핑표에 있다", () => {
+    expect(ADDED_2026_09_13).toHaveLength(3);
     const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
     for (const added of ADDED_2026_09_13) expect(keys.has(added), added).toBe(true);
   });
@@ -354,6 +356,14 @@ describe("rest fixtures", () => {
     });
     expect(init.files).toBeGreaterThan(0);
     expect(init.bytes).toBeGreaterThan(0);
+  });
+
+  it("net-ports 는 port 오름차순이고 `*` 와 loopback 바인딩을 섞어 담는다", () => {
+    const { ports } = NetPortsResponseSchema.parse(loadFixture("rest", "net-ports"));
+    expect(ports.map((p) => p.port)).toEqual([3000, 5173, 8080]);
+    expect(new Set(ports.map((p) => p.address))).toEqual(new Set(["*", "127.0.0.1"]));
+    expect(new Set(ports.map((p) => p.port)).size).toBe(ports.length);
+    for (const port of ports) expect(port.pid).toBeGreaterThan(0);
   });
 
   it("usage 는 claude(live:false) 와 codex(live:true) 를 담고 status ok/warning 을 섞는다", () => {

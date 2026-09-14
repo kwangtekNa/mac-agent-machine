@@ -10,6 +10,7 @@ import { registerFsRoutes } from "./routes/fs.js";
 import { registerGitRoutes } from "./routes/git.js";
 import { registerMeRoutes } from "./routes/me.js";
 import { registerModelsRoutes } from "./routes/models.js";
+import { registerNetRoutes } from "./routes/net.js";
 import { registerUsageRoutes } from "./routes/usage.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerSessionsRoutes } from "./routes/sessions.js";
@@ -85,6 +86,7 @@ export function buildApp(ctx: AgentHostContext, opts: { ws?: WsOptions } = {}): 
       registerAuthRoutes(api, host);
       registerUsageRoutes(api, host);
       registerModelsRoutes(api, host);
+      registerNetRoutes(api, host);
       registerWsRoutes(api, host, opts.ws);
       registerTeamRolesRoutes(api, host);
       registerTeamsRoutes(api, host);

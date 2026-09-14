@@ -199,6 +199,33 @@ WS 없이도 응답할 수 있는 REST 경로. 본문은 WS `approval.respond`�
 
 `efforts`가 빈 배열이면 그 모델은 effort 조절을 지원하지 않는다. `description`, `defaultEffort`는 모르면 `null`.
 
+### `GET /net/ports` (2026-09-13 추가)
+
+이 agent-host 를 실행하는 **사용자 소유 프로세스**가 TCP 로 LISTEN 중인 포트 목록. 앱이 "미리보기"에서 Mac 주소로 열어 볼 포트를 고르는 데 쓴다.
+
+```json
+{
+  "ports": [
+    { "port": 3000, "pid": 4821, "process": "node", "address": "*" },
+    { "port": 5173, "pid": 4899, "process": "node", "address": "127.0.0.1" },
+    { "port": 8080, "pid": 5120, "process": "python3", "address": "*" }
+  ]
+}
+```
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `port` | int 1~65535 | LISTEN 중인 TCP 포트 |
+| `pid` | int | 그 포트를 연 프로세스 ID |
+| `process` | string | 프로세스 이름(`lsof` 의 command) |
+| `address` | string | 바인딩 주소. `*`(모든 인터페이스), `0.0.0.0`, `127.0.0.1`, `::1` 등 |
+
+- 목록은 `lsof -nP -iTCP -sTCP:LISTEN` 을 그 사용자 권한으로 돌려 얻는다. `lsof` 는 자기 프로세스만 보여 주므로 다른 사용자의 포트는 들어오지 않는다.
+- gateway 자신의 포트(개발 모드 기본 7777, `MAM_DEV_PORT`)와 agent-host 의 유닉스 소켓은 제외한다(유닉스 소켓은 애초에 TCP 목록에 없다).
+- 같은 포트가 IPv4·IPv6 로 두 번 나오면 한 항목으로 합치고 `address` 는 `*` 를 우선한다. 정렬은 `port` 오름차순.
+- `lsof` 가 없거나 실패·타임아웃(5초)이면 500 이 아니라 `{ "ports": [] }` 를 주고 서버가 경고 로그를 남긴다.
+- 보안: 이 목록은 폰이 **Mac 주소로 그 포트를 직접 열어 보려는** 용도이며 서버는 프록시하거나 터널링하지 않는다. `address` 가 `127.0.0.1`/`::1` 인 서버는 loopback 에만 바인딩돼 있어 폰에서 열리지 않을 수 있고, 앱은 그 사실을 `address` 로 구분한다.
+
 ### 로그인 플로우
 
 - `POST /auth/:agent/login` → `{ "flowId": "flw_...", "url": "https://...", "instructions": "브라우저에서 열고 코드를 붙여넣으세요", "needsCode": true }`

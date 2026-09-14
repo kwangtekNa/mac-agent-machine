@@ -1,0 +1,7 @@
+{
+  "ports": [
+    { "port": 3000, "pid": 4821, "process": "node", "address": "*" },
+    { "port": 5173, "pid": 4899, "process": "node", "address": "127.0.0.1" },
+    { "port": 8080, "pid": 5120, "process": "python3", "address": "*" }
+  ]
+}

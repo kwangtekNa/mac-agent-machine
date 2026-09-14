@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import MacAgent
 
-/// 계약 테스트: `packages/protocol/fixtures/` 의 71개 JSON 을 Swift Codable 로 전수 디코딩한다.
+/// 계약 테스트: `packages/protocol/fixtures/` 의 72개 JSON 을 Swift Codable 로 전수 디코딩한다.
 /// TS 쪽 `packages/protocol/test/fixtures.test.ts` 의 매핑표와 대칭이다.
 /// 팀·방(2026-09-12 추가) fixture 는 `Team`/`Room`/`RoomEvent`/`RoomClientMessage` 로 디코드한다. 방 이벤트는 세션 WS 와 별도 enum 이다.
 final class ProtocolFixturesTests: XCTestCase {
@@ -58,6 +58,8 @@ final class ProtocolFixturesTests: XCTestCase {
         // 2026-09-13 추가분(git init) rest 2개
         t["rest/git-init.json"] = decode(GitInitResponse.self)
         t["rest/git-init-dry-run.json"] = decode(GitInitResponse.self)
+        // 2026-09-13 추가분(net ports) rest 1개. iOS step 1 이 실제 타입(NetPortsResponse)으로 바꾼다.
+        t["rest/net-ports.json"] = decode(JSONValue.self)
         // room-ws/ 10개: 전부 RoomEvent (세션 ServerEvent 와 별도 enum)
         for name in roomWsExpectations.keys {
             t["room-ws/\(name).json"] = decode(RoomEvent.self)
@@ -69,10 +71,11 @@ final class ProtocolFixturesTests: XCTestCase {
         return t
     }
 
-    /// TS 쪽 fixtures.test.ts 의 ADDED_2026_09_13 과 같은 집합(git init rest 2개).
+    /// TS 쪽 fixtures.test.ts 의 ADDED_2026_09_13 과 같은 집합(git init 2개 + net ports 1개).
     private static let ADDED_2026_09_13: Set<String> = [
         "rest/git-init.json",
         "rest/git-init-dry-run.json",
+        "rest/net-ports.json",
     ]
 
     /// TS 쪽 fixtures.test.ts 의 ADDED_2026_09_12 와 같은 집합(rest 10 + room-ws 10 + room-client 3).
@@ -167,7 +170,7 @@ final class ProtocolFixturesTests: XCTestCase {
         let files = try FixtureLoader.allJSONPaths()
         let keys = Self.table().keys.sorted()
         XCTAssertEqual(files, keys, "fixtures/ 의 파일 목록과 매핑표가 다르다")
-        XCTAssertEqual(files.count, 71)
+        XCTAssertEqual(files.count, 72)
         // TS 쪽 fixtures.test.ts 의 ADDED_2026_09_10 과 같은 집합
         for added in [
             "rest/usage.json", "rest/usage-empty.json", "rest/models-claude.json", "rest/models-codex.json",
@@ -180,8 +183,8 @@ final class ProtocolFixturesTests: XCTestCase {
         for added in Self.ADDED_2026_09_12 {
             XCTAssertTrue(keys.contains(added), "\(added) 이 매핑표에 없다")
         }
-        // TS 쪽 fixtures.test.ts 의 ADDED_2026_09_13 과 같은 집합(git init 2개)
-        XCTAssertEqual(Self.ADDED_2026_09_13.count, 2)
+        // TS 쪽 fixtures.test.ts 의 ADDED_2026_09_13 과 같은 집합(git init 2개 + net ports 1개)
+        XCTAssertEqual(Self.ADDED_2026_09_13.count, 3)
         for added in Self.ADDED_2026_09_13 {
             XCTAssertTrue(keys.contains(added), "\(added) 이 매핑표에 없다")
         }

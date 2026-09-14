@@ -178,6 +178,22 @@ export const ModelsQuerySchema = z.object({
   agent: AgentKindSchema,
 });
 
+/**
+ * `GET /net/ports` 항목(2026-09-13 추가). agent-host 사용자가 TCP 로 LISTEN 중인 포트 하나.
+ * `address` 는 바인딩 주소(`*`, `0.0.0.0`, `127.0.0.1`, `::1`). 폰이 Mac 주소로 직접 열어 보는 용도이며 서버는 프록시하지 않는다.
+ */
+export const NetPortSchema = z.object({
+  port: z.int().min(1).max(65535),
+  pid: z.int().min(0),
+  process: z.string().min(1),
+  address: z.string().min(1),
+});
+
+/** `GET /net/ports` 응답. `port` 오름차순이고, `lsof` 를 쓸 수 없으면 빈 배열이다(500 이 아니다). */
+export const NetPortsResponseSchema = z.object({
+  ports: z.array(NetPortSchema),
+});
+
 export const LoginStartResponseSchema = z.object({
   flowId: FlowIdSchema,
   url: z.string().min(1),
