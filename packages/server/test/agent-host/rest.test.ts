@@ -1,10 +1,12 @@
-import { spawn } from "node:child_process";
-import { access } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import type { FastifyInstance } from "fastify";
 import {
   FsMkdirResponseSchema,
+  FsRenderResponseSchema,
   GitInitResponseSchema,
   MeResponseSchema,
   ModelsResponseSchema,
@@ -401,5 +403,83 @@ describe("GET /net/ports (2026-09-13)", () => {
     expect(gatewayPorts({ MAM_DEV_BIND: "tailscale" })).toEqual([DEV_GATEWAY_PORT]);
     expect(gatewayPorts({ MAM_DEV_PORT: "nope" })).toEqual([DEV_GATEWAY_PORT]);
     expect(gatewayPorts({ MAM_DEV_PORT: "70000" })).toEqual([DEV_GATEWAY_PORT]);
+  });
+});
+
+describe("GET /fs/download and /fs/render (2026-09-13)", () => {
+  const execFileAsync = promisify(execFile);
+  const PDF = Buffer.from("%PDF-1.7\n1 0 obj\n", "binary");
+
+  /** `zip` CLI 로 최소 HWPX 를 만든다. 셸을 거치지 않고 인자 배열만 쓴다. */
+  async function makeHwpx(target: string): Promise<void> {
+    const src = `${target}-src`;
+    const files: Record<string, string> = {
+      mimetype: "application/hwp+zip",
+      "Contents/header.xml":
+        '<?xml version="1.0" encoding="UTF-8"?><hh:head xmlns:hh="h"><hh:refList><hh:styles>' +
+        '<hh:style id="0" name="바탕글"/></hh:styles></hh:refList></hh:head>',
+      "Contents/section0.xml":
+        '<?xml version="1.0" encoding="UTF-8"?><hs:sec xmlns:hs="s" xmlns:hp="p">' +
+        '<hp:p paraPrIDRef="0" styleIDRef="0"><hp:run charPrIDRef="0"><hp:t>한글 본문</hp:t></hp:run></hp:p></hs:sec>',
+    };
+    for (const [rel, content] of Object.entries(files)) {
+      const file = join(src, rel);
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, content);
+    }
+    await execFileAsync("zip", ["-q", "-r", "-X", target, ...Object.keys(files)], { cwd: src });
+  }
+
+  it("download streams the raw bytes with type, length and RFC 5987 disposition", async () => {
+    await writeFile(join(fx.app, "보고서.pdf"), PDF);
+    const res = await get(`/api/v1/fs/download?path=${encodeURIComponent(fx.app + "/보고서.pdf")}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/pdf");
+    expect(res.headers["content-length"]).toBe(String(PDF.length));
+    expect(res.headers["content-disposition"]).toBe(
+      `inline; filename*=UTF-8''${encodeURIComponent("보고서.pdf")}`,
+    );
+    expect(res.rawPayload).toEqual(PDF);
+  });
+
+  it("download maps 403/404/400 like the other file routes", async () => {
+    expect((await get("/api/v1/fs/download?path=/etc/hosts")).statusCode).toBe(403);
+    expect((await get(`/api/v1/fs/download?path=${encodeURIComponent("~/work/nope.pdf")}`)).statusCode).toBe(404);
+    const dir = await get(`/api/v1/fs/download?path=${encodeURIComponent(fx.app)}`);
+    expect(dir.statusCode).toBe(400);
+    expect(dir.json().error.code).toBe("invalid_request");
+    expect((await get("/api/v1/fs/download")).statusCode).toBe(400);
+  });
+
+  it("render converts hwpx to self-contained html", async () => {
+    const doc = join(fx.app, "문서.hwpx");
+    await makeHwpx(doc);
+    const res = await get(`/api/v1/fs/render?path=${encodeURIComponent(doc)}`);
+    expect(res.statusCode).toBe(200);
+    const body = FsRenderResponseSchema.parse(res.json());
+    expect(body).toMatchObject({ path: doc, kind: "hwpx" });
+    expect(body.html).toContain("한글 본문");
+    expect(body.html).not.toContain("<script");
+  });
+
+  it("render rejects other extensions with 400", async () => {
+    const res = await get(`/api/v1/fs/render?path=${encodeURIComponent(fx.app + "/index.ts")}`);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("invalid_request");
+  });
+
+  it("render answers 501 agent_unavailable when the hwp converter is missing", async () => {
+    await writeFile(join(fx.app, "old.hwp"), Buffer.from([0xd0, 0xcf, 0x11, 0xe0]));
+    const previous = process.env.MAM_HWP5HTML_BIN;
+    process.env.MAM_HWP5HTML_BIN = join(fx.home, "no-such-hwp5html");
+    try {
+      const res = await get(`/api/v1/fs/render?path=${encodeURIComponent(fx.app + "/old.hwp")}`);
+      expect(res.statusCode).toBe(501);
+      expect(res.json().error.code).toBe("agent_unavailable");
+      expect(res.json().error.message).toContain("pyhwp");
+    } finally {
+      if (previous === undefined) delete process.env.MAM_HWP5HTML_BIN;
+      else process.env.MAM_HWP5HTML_BIN = previous;
+    }
   });
 });

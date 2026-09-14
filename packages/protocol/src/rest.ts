@@ -84,6 +84,19 @@ export const FsReadResponseSchema = z.object({
   language: z.string().min(1),
 });
 
+export const FsRenderKindSchema = z.enum(["hwp", "hwpx"]);
+
+/**
+ * `GET /fs/render` 응답(2026-09-13 추가). iOS 가 못 여는 한글 문서를 서버가 HTML 로 바꾼 결과다.
+ * `html` 은 자체 완결(외부 리소스·스크립트 없음, 이미지는 data URI)이며 `warnings` 는 변환하지 못한 부분이다.
+ */
+export const FsRenderResponseSchema = z.object({
+  path: z.string().min(1),
+  kind: FsRenderKindSchema,
+  html: z.string(),
+  warnings: z.array(z.string()),
+});
+
 export const GitStatusEntrySchema = z.object({
   path: z.string().min(1),
   index: z.string().length(1),

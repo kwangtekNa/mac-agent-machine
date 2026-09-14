@@ -10,6 +10,7 @@ import {
   FsListResponseSchema,
   FsMkdirResponseSchema,
   FsReadResponseSchema,
+  FsRenderResponseSchema,
   GitDiffResponseSchema,
   GitInitResponseSchema,
   GitStatusResponseSchema,
@@ -50,6 +51,7 @@ const REST: Record<string, ZodType> = {
   "fs-read-text": FsReadResponseSchema,
   "fs-read-image": FsReadResponseSchema,
   "fs-mkdir": FsMkdirResponseSchema,
+  "fs-render": FsRenderResponseSchema,
   "git-status": GitStatusResponseSchema,
   "git-diff": GitDiffResponseSchema,
   // 2026-09-13 추가분(git init, net ports)
@@ -160,8 +162,8 @@ const ADDED_2026_09_12 = [
   "room-client/ping",
 ];
 
-/** 2026-09-13 추가분(git init, net ports) 3개. iOS `ProtocolFixturesTests.ADDED_2026_09_13` 과 같은 집합. */
-const ADDED_2026_09_13 = ["rest/git-init", "rest/git-init-dry-run", "rest/net-ports"];
+/** 2026-09-13 추가분(git init, net ports, 문서 변환) 4개. iOS `ProtocolFixturesTests.ADDED_2026_09_13` 과 같은 집합. */
+const ADDED_2026_09_13 = ["rest/git-init", "rest/git-init-dry-run", "rest/net-ports", "rest/fs-render"];
 
 /** 2026-09-10 추가분(사용량·모델·mkdir). 라운드트립 테스트가 최소한 이 파일들을 반드시 포함해야 한다. */
 const ADDED_2026_09_10 = [
@@ -266,8 +268,8 @@ describe("fixtures ↔ 매핑 테이블 (누락 방지)", () => {
     const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
     for (const added of ADDED_2026_09_12) expect(keys.has(added), added).toBe(true);
   });
-  it("2026-09-13 추가분 3개가 전부 매핑표에 있다", () => {
-    expect(ADDED_2026_09_13).toHaveLength(3);
+  it("2026-09-13 추가분 4개가 전부 매핑표에 있다", () => {
+    expect(ADDED_2026_09_13).toHaveLength(4);
     const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
     for (const added of ADDED_2026_09_13) expect(keys.has(added), added).toBe(true);
   });

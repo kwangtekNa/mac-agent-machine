@@ -1,0 +1,6 @@
+{
+  "path": "/Users/alice/work/app/분기보고서.hwpx",
+  "kind": "hwpx",
+  "html": "<article class=\"hwpx\"><style>.hwpx{font-size:16px;line-height:1.7;}.hwpx img{max-width:100%;height:auto;}</style><h2 style=\"text-align:center\">3분기 보고서</h2><p>매출이 <b>12%</b> 늘었습니다.</p><table><tr><td>지역</td><td>매출</td></tr><tr><td>서울</td><td>120</td></tr></table></article>",
+  "warnings": ["변환하지 않은 요소: 수식"]
+}

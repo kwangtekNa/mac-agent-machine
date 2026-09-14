@@ -128,6 +128,45 @@ WS 없이도 응답할 수 있는 REST 경로. 본문은 WS `approval.respond`�
 - 텍스트는 1 MiB까지 반환하고 넘으면 `truncated: true`로 앞부분만. 바이너리는 이미지(`png|jpg|jpeg|gif|webp|heic|svg`) 5 MiB까지 `encoding: "base64"`, 그 외 바이너리는 415.
 - `language`는 확장자 기반 소문자 식별자(`typescript`, `swift`, `python`, `markdown`, `json`, `shell`, `plaintext` 등).
 
+### `GET /fs/download?path=<file>` (2026-09-13 추가)
+
+홈 안 일반 파일의 **원본 바이트**를 스트리밍한다. 폰이 PDF·Office 문서를 QuickLook 으로 여는 데 쓴다. **응답이 JSON 이 아니다.**
+
+| 헤더 | 값 |
+|---|---|
+| `Content-Type` | 확장자로 정한다: `pdf` → `application/pdf`, `docx` → `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `xlsx` → `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `pptx` → `application/vnd.openxmlformats-officedocument.presentationml.presentation`, `doc` → `application/msword`, `xls` → `application/vnd.ms-excel`, `ppt` → `application/vnd.ms-powerpoint`, `rtf` → `application/rtf`, `hwp` → `application/x-hwp`, `hwpx` → `application/hwp+zip`, 그 외 `application/octet-stream` |
+| `Content-Length` | 파일 크기(바이트) |
+| `Content-Disposition` | `inline; filename*=UTF-8''<퍼센트 인코딩한 이름>` (RFC 5987. 한글 파일명도 그대로 전달된다) |
+
+- 오류는 다른 엔드포인트와 같은 JSON 봉투다: 홈 밖 403 `forbidden`, 없음 404 `not_found`, 디렉토리·일반 파일 아님 400 `invalid_request`, **100 MiB 초과 415 `unsupported_media`**(문구 "파일이 100 MiB 를 넘어 미리 볼 수 없습니다", `GET /fs/read` 의 415 와 같은 매핑).
+- 프로토콜 헤더 규칙(`X-MAM-Protocol`, gateway 가 붙이는 `X-MAM-User`)은 다른 요청과 동일하다.
+
+### `GET /fs/render?path=<file>` (2026-09-13 추가)
+
+iOS 가 열지 못하는 한글 문서(`.hwp`, `.hwpx`)를 **서버가 HTML 로 변환**해 준다.
+
+```json
+{
+  "path": "/Users/alice/work/app/분기보고서.hwpx",
+  "kind": "hwpx",
+  "html": "<article class=\"hwpx\"><style>…</style><h2>3분기 보고서</h2><p>매출이 <b>12%</b> 늘었습니다.</p></article>",
+  "warnings": ["변환하지 않은 요소: 수식"]
+}
+```
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `path` | string | 해석된 절대 경로 |
+| `kind` | `"hwp" \| "hwpx"` | 확장자로 정한 변환 경로 |
+| `html` | string | **자체 완결** HTML. 외부 리소스와 스크립트가 없고 이미지는 data URI, CSS 는 인라인 `<style>` 이다. 클라이언트는 `WKWebView` 에 그대로 넣는다 |
+| `warnings` | string[] | 변환하지 못한 부분(수식·차트 등)과 크기 때문에 뺀 내용. 없으면 빈 배열 |
+
+- HWPX(zip + OWPML XML)는 서버가 직접 변환한다. 문단·줄바꿈·표·이미지·기본 서식(굵게·기울임·밑줄·제목 크기 근사)까지이며 완벽한 레이아웃은 목표가 아니다.
+- HWP(5.x 바이너리)는 Mac 에 설치된 pyhwp 의 `hwp5html` 로 변환한다. 없으면 **501** `agent_unavailable` 과 문구 "한글(HWP) 변환기가 없습니다. Mac 에서 `python3 -m pip install --user pyhwp` 를 실행하세요."(로그인 미지원 501 과 같은 규칙).
+- 결과 HTML 이 8 MiB 를 넘으면 이미지를 빼고 `warnings` 에 적는다.
+- 오류: 확장자가 `.hwp`/`.hwpx` 가 아니거나 디렉토리면 400 `invalid_request`, 홈 밖 403, 없음 404, 100 MiB 초과 415 `unsupported_media`, 변환 실패 500 `internal`(변환기 stderr 첫 줄은 서버 로그에만 남기고 응답에는 넣지 않는다).
+- `GET /fs/list` 항목은 바뀌지 않는다. 앱이 확장자로 어느 엔드포인트를 쓸지 판단한다.
+
 ### `GET /git/status?cwd=<dir>`
 
 ```json

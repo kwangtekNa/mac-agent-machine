@@ -60,6 +60,8 @@ import type {
   FsMkdirRequestSchema,
   FsMkdirResponseSchema,
   FsReadResponseSchema,
+  FsRenderKindSchema,
+  FsRenderResponseSchema,
   GitDiffResponseSchema,
   GitInitRequestSchema,
   GitInitResponseSchema,
@@ -225,6 +227,8 @@ export type GitStatusCode = z.infer<typeof GitStatusCodeSchema>;
 export type FsEntry = z.infer<typeof FsEntrySchema>;
 export type FsListResponse = z.infer<typeof FsListResponseSchema>;
 export type FsReadResponse = z.infer<typeof FsReadResponseSchema>;
+export type FsRenderKind = z.infer<typeof FsRenderKindSchema>;
+export type FsRenderResponse = z.infer<typeof FsRenderResponseSchema>;
 export type GitStatusEntry = z.infer<typeof GitStatusEntrySchema>;
 export type GitStatusResponse = z.infer<typeof GitStatusResponseSchema>;
 export type GitDiffResponse = z.infer<typeof GitDiffResponseSchema>;
