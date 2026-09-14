@@ -100,6 +100,16 @@ struct GitStatusEntry: Codable, Hashable, Sendable {
     var worktree: String
 }
 
+/// `GET /fs/render`(2026-09-13 추가). 한글(HWP/HWPX) 문서를 서버가 자체 완결 HTML 로 바꾼 결과.
+/// `html` 은 외부 리소스·스크립트가 없고 이미지는 data URI 다. 앱은 `WKWebView` 에 그대로 넣는다.
+struct FsRenderResponse: Codable, Hashable, Sendable {
+    var path: String
+    var kind: DocumentRenderKind
+    var html: String
+    /// 변환하지 못한 부분(수식·차트)과 크기 때문에 뺀 내용. 없으면 빈 배열.
+    var warnings: [String]
+}
+
 /// `GET /git/status`
 struct GitStatusResponse: Codable, Hashable, Sendable {
     var isRepo: Bool

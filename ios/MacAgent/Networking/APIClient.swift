@@ -20,6 +20,8 @@ struct APIClient: Sendable {
     static let apiPrefix = "/api/v1"
     static let defaultTimeout: TimeInterval = 30
     static let fileReadTimeout: TimeInterval = 60
+    /// 문서 변환·원본 내려받기(`/fs/render`, `/fs/download`). 서버가 외부 변환기를 돌리거나 100 MiB 까지 흘려보낸다.
+    static let documentTimeout: TimeInterval = 120
 
     let baseURL: URL
     private let session: URLSession
@@ -86,6 +88,62 @@ struct APIClient: Sendable {
             query: [URLQueryItem(name: "path", value: path)],
             timeout: Self.fileReadTimeout
         )
+    }
+
+    /// `GET /fs/render` 한글(HWP/HWPX) 문서를 서버가 HTML 로 바꿔 준다. 변환기가 없으면 501 `agent_unavailable`,
+    /// 100 MiB 초과는 415, 다른 확장자는 400.
+    func renderDocument(path: String) async throws -> FsRenderResponse {
+        try await get(
+            FsRenderResponse.self, "/fs/render",
+            query: [URLQueryItem(name: "path", value: path)],
+            timeout: Self.documentTimeout
+        )
+    }
+
+    /// `GET /fs/download` 원본 바이트를 `destination` 에 내려받는다(응답이 JSON 이 아니다).
+    /// 진행률은 0…1 이고 끝나면 반드시 1.0 이 한 번 간다. 2xx 가 아니면 본문을 오류 봉투로 읽어 `APIError.server` 로 던진다.
+    /// Task 를 취소하면 전송도 취소된다.
+    @discardableResult
+    func downloadFile(
+        path: String,
+        to destination: URL,
+        progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws -> URL {
+        let request = try makeRequest(
+            method: "GET", path: "/fs/download",
+            query: [URLQueryItem(name: "path", value: path)],
+            timeout: Self.documentTimeout
+        )
+        let downloaded: URL
+        let response: URLResponse
+        do {
+            (downloaded, response) = try await session.download(for: request, delegate: DownloadProgress(report: progress))
+        } catch {
+            throw APIError.transport(error)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            try? FileManager.default.removeItem(at: downloaded)
+            throw APIError.transport(URLError(.badServerResponse))
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let body = (try? Data(contentsOf: downloaded)) ?? Data()
+            try? FileManager.default.removeItem(at: downloaded)
+            throw Self.serverError(status: http.statusCode, body: body)
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: downloaded, to: destination)
+        } catch {
+            try? FileManager.default.removeItem(at: downloaded)
+            throw APIError.transport(error)
+        }
+        progress(1)
+        return destination
     }
 
     /// `POST /fs/mkdir` → 201. 홈 밖은 403, 이미 있으면 409 `conflict`, 잘못된 이름은 400.
@@ -347,4 +405,24 @@ struct APIClient: Sendable {
             throw APIError.decoding(error)
         }
     }
+}
+
+/// `downloadFile` 진행률. URLSession 이 세션 큐에서 호출하므로 콜백은 @Sendable 이다.
+private final class DownloadProgress: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let report: @Sendable (Double) -> Void
+
+    init(report: @escaping @Sendable (Double) -> Void) {
+        self.report = report
+    }
+
+    func urlSession(
+        _ session: URLSession, downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64
+    ) {
+        // Content-Length 가 없으면(-1) 비율을 알 수 없다. 완료 시 1.0 은 downloadFile 이 직접 보낸다.
+        guard totalBytesExpectedToWrite > 0 else { return }
+        report(min(max(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite), 0), 1))
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
 }

@@ -90,6 +90,12 @@ enum GitStatusCode: String, LenientRawEnum {
     case unknown
 }
 
+/// `GET /fs/render` 의 변환 경로(2026-09-13 추가). 서버가 확장자로 정한다.
+enum DocumentRenderKind: String, LenientRawEnum {
+    case hwp, hwpx
+    case unknown
+}
+
 enum LoginFlowStatus: String, LenientRawEnum {
     case pending, done, error
     case unknown

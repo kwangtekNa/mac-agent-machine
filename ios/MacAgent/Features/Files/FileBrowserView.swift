@@ -26,7 +26,8 @@ struct FileBrowserView: View {
                             rootPath: model.rootPath,
                             path: entry.path,
                             isGitRepo: model.isGitRepo,
-                            gitStatus: entry.gitStatus
+                            gitStatus: entry.gitStatus,
+                            size: entry.size
                         )
                     }
                     .toolbar {
@@ -71,7 +72,8 @@ private struct EmbeddedDirectoryBrowser: View {
                     rootPath: model.rootPath,
                     path: entry.path,
                     isGitRepo: model.isGitRepo,
-                    gitStatus: entry.gitStatus
+                    gitStatus: entry.gitStatus,
+                    size: entry.size
                 )
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {

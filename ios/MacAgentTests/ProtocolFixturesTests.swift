@@ -60,8 +60,8 @@ final class ProtocolFixturesTests: XCTestCase {
         t["rest/git-init-dry-run.json"] = decode(GitInitResponse.self)
         // 2026-09-13 추가분(net ports) rest 1개
         t["rest/net-ports.json"] = decode(NetPortsResponse.self)
-        // 2026-09-13 추가분(문서 변환) rest 1개. iOS step 1 이 FsRenderResponse 로 바꾼다.
-        t["rest/fs-render.json"] = decode(JSONValue.self)
+        // 2026-09-13 추가분(문서 변환) rest 1개
+        t["rest/fs-render.json"] = decode(FsRenderResponse.self)
         // room-ws/ 10개: 전부 RoomEvent (세션 ServerEvent 와 별도 enum)
         for name in roomWsExpectations.keys {
             t["room-ws/\(name).json"] = decode(RoomEvent.self)

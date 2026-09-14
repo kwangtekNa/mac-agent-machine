@@ -599,4 +599,106 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/team-templates/tpl_1")
         XCTAssertNil(lastRequest?.httpBody)
     }
+
+    // MARK: - 문서 내려받기·변환 (PROTOCOL.md `GET /fs/download`·`GET /fs/render`, 2026-09-13)
+
+    func testRenderDocumentDecodesFixtureAndUsesLongTimeout() async throws {
+        try stub(status: 200, fixture: "rest/fs-render.json")
+        let rendered = try await client.renderDocument(path: "/Users/alice/work/app/분기보고서.hwpx")
+        let request = try XCTUnwrap(lastRequest)
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url?.path(), "/api/v1/fs/render")
+        let items = try XCTUnwrap(URLComponents(url: XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(items, [URLQueryItem(name: "path", value: "/Users/alice/work/app/분기보고서.hwpx")])
+        XCTAssertEqual(request.timeoutInterval, 120, "변환은 오래 걸린다")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-MAM-Protocol"), "1")
+        XCTAssertEqual(rendered.kind, .hwpx)
+        XCTAssertEqual(rendered.warnings, ["변환하지 않은 요소: 수식"])
+        XCTAssertTrue(rendered.html.contains("<article class=\"hwpx\">"))
+    }
+
+    func testRenderDocument501MapsToAgentUnavailable() async throws {
+        try stub(status: 501, body: Data(#"{"error":{"code":"agent_unavailable","message":"한글(HWP) 변환기가 없습니다."}}"#.utf8))
+        do {
+            _ = try await client.renderDocument(path: "/Users/alice/work/app/회의록.hwp")
+            XCTFail("throw 를 기대")
+        } catch APIError.server(let code, let message, let status) {
+            XCTAssertEqual(code, .agentUnavailable)
+            XCTAssertEqual(status, 501)
+            XCTAssertEqual(message, "한글(HWP) 변환기가 없습니다.")
+        } catch {
+            XCTFail("예상 밖 오류: \(error)")
+        }
+    }
+
+    func testDownloadFileWritesBytesAndReportsProgress() async throws {
+        let payload = Data((0..<300_000).map { UInt8($0 % 251) })
+        let recorded = self.recorded
+        StubURLProtocol.handler = { request in
+            recorded.withValue { $0.append(request) }
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                headerFields: [
+                    "Content-Type": "application/pdf",
+                    "Content-Length": String(payload.count),
+                    "Content-Disposition": "inline; filename*=UTF-8''%EB%B3%B4%EA%B3%A0%EC%84%9C.pdf",
+                ]
+            )!
+            return (response, payload)
+        }
+
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let destination = directory.appending(path: "보고서.pdf")
+        let progress = Locked<[Double]>([])
+        let url = try await client.downloadFile(path: "/Users/alice/work/app/보고서.pdf", to: destination) { value in
+            progress.withValue { $0.append(value) }
+        }
+
+        XCTAssertEqual(url, destination)
+        XCTAssertEqual(try Data(contentsOf: destination), payload, "원본 바이트를 그대로 쓴다")
+        let request = try XCTUnwrap(lastRequest)
+        XCTAssertEqual(request.url?.path(), "/api/v1/fs/download")
+        let items = try XCTUnwrap(URLComponents(url: XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(items, [URLQueryItem(name: "path", value: "/Users/alice/work/app/보고서.pdf")])
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-MAM-Protocol"), "1")
+        XCTAssertNil(request.value(forHTTPHeaderField: "X-MAM-User"), "신원 헤더는 보내지 않는다(CRITICAL 1)")
+        XCTAssertEqual(progress.value.last, 1.0, "끝나면 1.0")
+        XCTAssertTrue(progress.value.allSatisfy { (0.0...1.0).contains($0) }, "\(progress.value)")
+    }
+
+    func testDownloadFileOverwritesAndMapsErrorEnvelope() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let destination = directory.appending(path: "보고서.pdf")
+
+        try stub(status: 200, body: Data("old".utf8))
+        _ = try await client.downloadFile(path: "/Users/alice/보고서.pdf", to: destination)
+        try stub(status: 200, body: Data("new".utf8))
+        _ = try await client.downloadFile(path: "/Users/alice/보고서.pdf", to: destination)
+        XCTAssertEqual(try Data(contentsOf: destination), Data("new".utf8), "같은 자리에 다시 받으면 덮어쓴다")
+
+        try stub(status: 415, body: Data(#"{"error":{"code":"unsupported_media","message":"파일이 100 MiB 를 넘어 미리 볼 수 없습니다"}}"#.utf8))
+        do {
+            _ = try await client.downloadFile(path: "/Users/alice/큰파일.pdf", to: destination)
+            XCTFail("throw 를 기대")
+        } catch APIError.server(let code, let message, let status) {
+            XCTAssertEqual(status, 415)
+            XCTAssertEqual(code, .unknown, "unsupported_media 는 ErrorCode 에 없는 값이라 lenient 하게 unknown")
+            XCTAssertEqual(message, "파일이 100 MiB 를 넘어 미리 볼 수 없습니다")
+        } catch {
+            XCTFail("예상 밖 오류: \(error)")
+        }
+
+        try stub(status: 404, body: Data(#"{"error":{"code":"not_found","message":"경로가 없습니다"}}"#.utf8))
+        do {
+            _ = try await client.downloadFile(path: "/Users/alice/없음.pdf", to: destination)
+            XCTFail("throw 를 기대")
+        } catch APIError.server(let code, _, let status) {
+            XCTAssertEqual(code, .notFound)
+            XCTAssertEqual(status, 404)
+        } catch {
+            XCTFail("예상 밖 오류: \(error)")
+        }
+    }
 }

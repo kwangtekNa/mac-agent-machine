@@ -65,4 +65,66 @@ final class FileViewerLogicTests: XCTestCase {
         XCTAssertFalse(FileViewerLogic.canRenderMarkdown(size: 204_801, language: "markdown"), "200 KiB 초과는 원본만")
         XCTAssertFalse(FileViewerLogic.canRenderMarkdown(size: 10, language: "swift"))
     }
+
+    // MARK: - 문서 뷰어(2026-09-13, PROTOCOL.md `GET /fs/download`·`GET /fs/render`)
+
+    func testDocumentKindByExtension() {
+        XCTAssertEqual(FileViewerLogic.documentKind(forFileName: "보고서.pdf"), .quickLook)
+        XCTAssertEqual(FileViewerLogic.documentKind(forFileName: "계약서.DOCX"), .quickLook, "대소문자를 가리지 않는다")
+        for ext in ["doc", "docx", "xls", "xlsx", "ppt", "pptx", "rtf", "rtfd", "pages", "numbers", "key", "epub"] {
+            XCTAssertEqual(FileViewerLogic.documentKind(forFileName: "a.\(ext)"), .quickLook, ext)
+        }
+        XCTAssertEqual(FileViewerLogic.documentKind(forFileName: "회의록.hwp"), .hwp)
+        XCTAssertEqual(FileViewerLogic.documentKind(forFileName: "회의록.HWPX"), .hwpx)
+
+        XCTAssertNil(FileViewerLogic.documentKind(forFileName: "README.md"), "마크다운은 기존 뷰어")
+        XCTAssertNil(FileViewerLogic.documentKind(forFileName: "data.csv"), "csv 는 기존 텍스트 뷰어")
+        XCTAssertNil(FileViewerLogic.documentKind(forFileName: "notes.txt"))
+        XCTAssertNil(FileViewerLogic.documentKind(forFileName: "photo.png"))
+        XCTAssertNil(FileViewerLogic.documentKind(forFileName: "Makefile"), "점 없는 이름")
+        XCTAssertNil(FileViewerLogic.documentKind(forFileName: ""))
+    }
+
+    func testDocumentSizeLimit() {
+        XCTAssertEqual(FileViewerLogic.documentLimitBytes, 104_857_600)
+        XCTAssertFalse(FileViewerLogic.exceedsDocumentLimit(size: nil), "크기를 모르면 서버(415)가 판단한다")
+        XCTAssertFalse(FileViewerLogic.exceedsDocumentLimit(size: 0))
+        XCTAssertFalse(FileViewerLogic.exceedsDocumentLimit(size: 104_857_600))
+        XCTAssertTrue(FileViewerLogic.exceedsDocumentLimit(size: 104_857_601))
+        XCTAssertTrue(FileViewerLogic.documentTooLargeMessage.contains("100 MiB 를 넘어 미리 볼 수 없습니다"))
+    }
+
+    func testCacheURLIsDeterministicAndKeepsFileName() throws {
+        let path = "/Users/alice/work/app/분기 보고서.pdf"
+        let url = FileViewerLogic.cacheURL(for: path, fileName: "분기 보고서.pdf")
+        XCTAssertEqual(url, FileViewerLogic.cacheURL(for: path, fileName: "분기 보고서.pdf"), "같은 경로는 늘 같은 자리")
+        XCTAssertEqual(url.lastPathComponent, "분기 보고서.pdf", "QuickLook 이 확장자로 형식을 정하므로 이름을 바꾸지 않는다")
+
+        let other = FileViewerLogic.cacheURL(for: "/Users/alice/other/분기 보고서.pdf", fileName: "분기 보고서.pdf")
+        XCTAssertNotEqual(url, other)
+        XCTAssertNotEqual(url.deletingLastPathComponent(), other.deletingLastPathComponent(), "경로마다 폴더를 나눈다")
+
+        let caches = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+        XCTAssertTrue(url.path.hasPrefix(caches.appending(path: "mam-docs").path + "/"), url.path)
+        XCTAssertEqual(url.deletingLastPathComponent().lastPathComponent.count, 16, "sha256 앞 16자")
+        XCTAssertEqual(url.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent, "mam-docs")
+    }
+
+    func testHwpUnavailableMessage() {
+        let server = "한글(HWP) 변환기가 없습니다. Mac 에서 `python3 -m pip install --user pyhwp` 를 실행하세요."
+        let message = FileViewerLogic.hwpUnavailableMessage(server)
+        XCTAssertTrue(message.hasPrefix("한글(HWP) 변환기가 없습니다."), message)
+        XCTAssertFalse(message.contains("`"), "백틱은 떼고 명령만 남긴다")
+        XCTAssertTrue(message.contains("\npython3 -m pip install --user pyhwp\n"), "명령은 따로 줄에 둔다: \(message)")
+
+        XCTAssertEqual(FileViewerLogic.hwpUnavailableMessage("변환기가 없습니다"), "변환기가 없습니다", "백틱이 없으면 서버 문구 그대로")
+        XCTAssertEqual(FileViewerLogic.hwpUnavailableMessage("   "), FileViewerLogic.hwpConverterMissingMessage, "빈 문구는 기본 안내")
+    }
+
+    func testConverterUnavailableDetection() {
+        XCTAssertTrue(FileViewerLogic.isConverterUnavailable(APIError.server(code: .agentUnavailable, message: "x", status: 501)))
+        XCTAssertTrue(FileViewerLogic.isConverterUnavailable(APIError.server(code: .agentUnavailable, message: "x", status: 500)))
+        XCTAssertFalse(FileViewerLogic.isConverterUnavailable(APIError.server(code: .internalError, message: "x", status: 500)))
+        XCTAssertFalse(FileViewerLogic.isConverterUnavailable(URLError(.timedOut)))
+    }
 }
