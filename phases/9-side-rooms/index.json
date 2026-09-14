@@ -54,10 +54,28 @@
     {
       "step": 2,
       "name": "side-rooms-server",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         1
-      ]
+      ],
+      "started_at": "2026-09-14T15:55:48+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "13b02178-a9ec-46a5-9715-82a8c657ff74",
+          "cost_usd": 9.508479999999997,
+          "duration_s": 1070.5,
+          "num_turns": 61,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 9.50848,
+      "duration_s": 1070.5,
+      "retries": 0,
+      "session_id": "13b02178-a9ec-46a5-9715-82a8c657ff74",
+      "summary": "곁방 서버 구현: dispatcher.ts 에 순수 sideRoomParticipants(그룹방 에이전트→에이전트만 분리, 상한 초과·DM·사용자는 null)·RoomRef·reason \"side\"·route 곁방 지원·DispatchQueue.hasRoot 추가; team-manager.ts 에 findSideRoom/ensureSideRoom(정렬 참가자 집합이 신원, opened 카드+lastSeen 0+즉시 영속화)·dispatchRoom(방이 바뀔 때만 본문 복사, 원본 유지)·noteSideRoot/closeSideRoomIfDone(뿌리별 closed 카드 1건, 대화 수+결론 80자)·statusRooms=그룹+자기DM+참가 곁방 추가; room-manager 초안에 sideRoom 통과(seq 발급은 그대로); types.ts 가 구 레코드의 sideRoomMaxParticipants 기본 3 을 채움(상수는 templates 와 공유). 테스트 29건 추가(dispatcher 표 12+곁방 route 4+hasRoot, 신규 side-rooms.test.ts 9건 = 분리·재사용·상한 브로드캐스트·같은 방 홉+1·3인 새 방·사용자 전원 디스패치·변경 카드 그룹방·맥락 격리·재시작 복원, store 마이그레이션 2건), 기존 team-manager 연쇄 테스트 1건은 새 동작으로 갱신, ARCHITECTURE 2.5 두 줄 보정. AC 전부 통과(npm ci, typecheck, npm test 885 passed, grep 2건, dev-smoke OK 1~24, scripts/test.sh OK 포함 iOS).",
+      "completed_at": "2026-09-14T16:13:39+0900"
     },
     {
       "step": 3,
