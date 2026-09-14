@@ -270,6 +270,21 @@ UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로.
 | `preview.custom` · `preview.open` | 시트 "직접 입력" 의 포트 필드 · "열기" |
 | `preview.recent.<port>` | 시트 "최근" 의 행 |
 
+### 10.10 문서 뷰어(PDF·Office QuickLook, 한글 HTML) (2026-09-14, Phase `8-document-viewer`)
+
+파일 탭·브라우저에서 문서를 바로 연다. 진입점은 지금까지와 같은 `FileViewerView` 이고, 파일 이름의 확장자로 `FileViewerLogic.documentKind` 가 세 갈래를 고른다(nil 이면 기존 `/fs/read` 텍스트·이미지 흐름 그대로). 프로토콜은 `GET /fs/download`·`GET /fs/render` 두 개만 늘었다(`docs/PROTOCOL.md` 1절).
+
+- **`quickLook`**(`pdf` `doc(x)` `xls(x)` `ppt(x)` `rtf(d)` `pages` `numbers` `key` `epub`): `APIClient.downloadFile` 로 원본을 `Caches/mam-docs/<경로 sha256 앞 16자>/<파일 이름>` 에 내려받아 `QuickLookView`(`QLPreviewController`)에 넘긴다. 받는 동안은 진행률 막대(`documentViewer.progress`)와 "취소", 뷰어를 닫으면 내려받기를 멈추고 캐시 폴더를 지운다. 이름을 그대로 쓰는 이유는 QuickLook 이 확장자로 형식을 정하기 때문이다.
+- **`hwp` · `hwpx`**: iOS 가 못 여는 한글 문서는 `GET /fs/render` 가 준 자체 완결 HTML 을 `HTMLDocumentView`(`WKWebView`)로 그린다. 스크립트는 꺼져 있고 링크 탭·폼 전송은 막으며(`loadHTMLString` 의 `.other` 만 허용), 다크 모드는 CSS `color-scheme` 로 따라간다. `warnings` 가 있으면 위에 회색 배너(`documentViewer.warnings`), 툴바의 "원본 공유"(`documentViewer.share`)는 누를 때 원본을 내려받아 공유 시트로 넘긴다.
+- **크기·오류**: `FsEntry.size` 를 알면 100 MiB 초과를 서버 호출 전에 막고(서버 415 와 같은 문구), 모르면 서버 415 문구를 그대로 쓴다. 501 `agent_unavailable` 은 "한글 변환기가 없습니다" 화면 + 서버 안내 문구(백틱 명령을 줄로 빼서 보여준다) + "다시 시도"이고, 나머지는 기존 파일 오류 문구를 쓴다(`docs/RUNBOOK.md` 9절에 설치 방법).
+- **UI 테스트** `MacAgentUITests/DocumentViewerUITests.swift`(`MAM_UI_TEST_SERVER`·`MAM_UI_TEST_REPO` 가 없으면 `XCTSkip`): 새 세션(cwd = 저장소) → "파일" 탭 → `sample.pdf` → QuickLook(`QLPreviewControllerView` 와 페이지 본문 "MacAgent PDF") → "닫기" → `sample.hwpx` → 웹 뷰의 "안녕하세요"(`app.webViews.staticTexts`) → "닫기". 두 샘플은 `bash scripts/dev-smoke.sh` 24단계가 저장소 안에 만들어 커밋한다(비추적 파일이 있으면 팀 머지가 409 라서 커밋한다).
+
+| 식별자 | 위치 |
+|---|---|
+| `documentViewer.progress` | 원본을 내려받는 중의 진행률 막대 |
+| `documentViewer.share` | 한글 문서 뷰어 툴바의 "원본 공유" |
+| `documentViewer.warnings` | 한글 문서 뷰어 위의 변환 경고 배너 |
+
 ## 11. 범위 밖 (Phase 1)
 
 - 파일 편집·업로드, 터미널, 푸시 알림(APNs, Phase 3), 여러 서버 동시 관리(서버 1개만 저장), 세션 검색, 위젯·Live Activity, iPad 멀티윈도우.

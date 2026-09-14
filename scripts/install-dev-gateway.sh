@@ -92,6 +92,7 @@ shell_which() {
 NODE_BIN=""
 CODEX_BIN=""
 CLAUDE_BIN=""
+HWP5HTML_BIN=""
 PATH_VALUE=""
 
 resolve_bins() {
@@ -110,6 +111,8 @@ resolve_bins() {
   CLAUDE_BIN="$(shell_which claude)"
   [ -n "$CODEX_BIN" ] || warn "codex 를 찾지 못했습니다. MAM_CODEX_BIN 없이 설치합니다(Codex 세션은 못 씁니다)"
   [ -n "$CLAUDE_BIN" ] || warn "claude 를 찾지 못했습니다. MAM_CLAUDE_BIN 없이 설치합니다(Claude 세션은 못 씁니다)"
+  # 한글(HWP) 변환기도 같은 이유로 경로를 박아 둔다(docs/RUNBOOK.md 9절). 없으면 그냥 빼고 설치한다(HWPX 는 변환기 없이 열린다).
+  HWP5HTML_BIN="${MAM_HWP5HTML_BIN:-$(shell_which hwp5html)}"
   PATH_VALUE="$(dirname "$NODE_BIN"):/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 }
 
@@ -122,6 +125,7 @@ env_dict() {
   printf '    <key>MAM_DEV_PORT</key>\n    <string>%s</string>\n' "$PORT"
   if [ -n "$CODEX_BIN" ]; then printf '    <key>MAM_CODEX_BIN</key>\n    <string>%s</string>\n' "$(esc "$CODEX_BIN")"; fi
   if [ -n "$CLAUDE_BIN" ]; then printf '    <key>MAM_CLAUDE_BIN</key>\n    <string>%s</string>\n' "$(esc "$CLAUDE_BIN")"; fi
+  if [ -n "$HWP5HTML_BIN" ]; then printf '    <key>MAM_HWP5HTML_BIN</key>\n    <string>%s</string>\n' "$(esc "$HWP5HTML_BIN")"; fi
   printf '    <key>HOME</key>\n    <string>%s</string>\n' "$(esc "$HOME")"
   printf '    <key>PATH</key>\n    <string>%s</string>' "$(esc "$PATH_VALUE")"
 }

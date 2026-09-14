@@ -6,9 +6,10 @@
 // 19단계는 2026-09-13 추가분(PROTOCOL.md 6.2 PATCH members: mode full-auto 는 승인 없는 턴, effort·model 반영).
 // 22단계는 2026-09-13 추가분(PROTOCOL.md 1절 POST /git/init: dryRun → 초기화 → 그 디렉토리로 팀 생성 → 삭제 → 다시 409).
 // 23단계는 2026-09-14 추가분(PROTOCOL.md 1절 GET /net/ports: 임시 리스너 등장 → gateway 포트 제외 → 종료 후 사라짐).
+// 24단계는 2026-09-14 추가분(PROTOCOL.md 1절 GET /fs/download·GET /fs/render: PDF 원본 스트리밍, HWPX 변환, 400/501·500/415).
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, truncate, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir, userInfo } from "node:os";
 import path from "node:path";
@@ -284,6 +285,7 @@ async function main() {
     uiTestRepo = await teamSteps(cwd);
     await gitInitSteps(cwd);
     await netPortsStep();
+    await documentSteps(cwd, uiTestRepo);
   } finally {
     if (!KEEP) await rm(cwd, { recursive: true }).catch(() => {});
   }
@@ -307,6 +309,22 @@ function git(cwd, ...args) {
     child.once("close", (code) => {
       if (code === 0) resolve(out);
       else reject(new Error(`git ${args.join(" ")} exit ${code}: ${err.trim()}`));
+    });
+  });
+}
+
+/** 셸 없이 `<bin> <args>` 를 실행하고 stdout 을 돌려준다(CRITICAL 4). */
+function run(bin, args, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (err += d));
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code === 0) resolve(out);
+      else reject(new Error(`${bin} ${args.join(" ")} exit ${code}: ${err.trim()}`));
     });
   });
 }
@@ -648,6 +666,129 @@ async function netPortsStep() {
   } finally {
     if (!closed) server.close();
   }
+}
+
+/** UI 테스트(DocumentViewerUITests)와 스모크가 같이 쓰는 한글 문서의 본문. */
+const SAMPLE_TEXT = "안녕하세요";
+
+/** 최소 OWPML 머리말: 글자·문단·스타일 각각 하나씩(section0.xml 이 id 0 을 참조한다). */
+const HWPX_HEADER_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head">
+  <hh:refList>
+    <hh:charProperties itemCnt="1"><hh:charPr id="0" height="1000"/></hh:charProperties>
+    <hh:paraProperties itemCnt="1"><hh:paraPr id="0"><hh:align horizontal="LEFT" vertical="BASELINE"/></hh:paraPr></hh:paraProperties>
+    <hh:styles itemCnt="1"><hh:style id="0" type="PARA" name="바탕글" engName="Normal"/></hh:styles>
+  </hh:refList>
+</hh:head>
+`;
+
+/** 최소 OWPML 본문: 문단 하나("안녕하세요"). */
+const HWPX_SECTION_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
+  <hp:p paraPrIDRef="0" styleIDRef="0"><hp:run charPrIDRef="0"><hp:t>SAMPLE_TEXT_PLACEHOLDER</hp:t></hp:run></hp:p>
+</hs:sec>
+`.replace("SAMPLE_TEXT_PLACEHOLDER", SAMPLE_TEXT);
+
+/**
+ * 한 페이지짜리 최소 PDF 바이트(`%PDF-1.4` … `%%EOF`). xref 오프셋을 직접 계산해 QuickLook 이 그대로 연다.
+ * 본문은 Helvetica 표준 인코딩이라 ASCII 만 쓴다.
+ */
+function minimalPdf(text) {
+  const content = `BT /F1 24 Tf 20 100 Td (${text}) Tj ET\n`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}endstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [];
+  objects.forEach((body, index) => {
+    offsets.push(Buffer.byteLength(pdf, "latin1"));
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const startxref = Buffer.byteLength(pdf, "latin1");
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${startxref}\n%%EOF\n`;
+  return Buffer.from(pdf, "latin1");
+}
+
+/** `zip` CLI 로 최소 HWPX(zip + OWPML)를 만든다. 셸 없이 인자 배열만 쓴다(CRITICAL 4). */
+async function makeSampleHwpx(target, scratch) {
+  const src = path.join(scratch, "hwpx-src");
+  await rm(src, { recursive: true, force: true });
+  await mkdir(path.join(src, "Contents"), { recursive: true });
+  await writeFile(path.join(src, "mimetype"), "application/hwp+zip");
+  await writeFile(path.join(src, "Contents", "header.xml"), HWPX_HEADER_XML);
+  await writeFile(path.join(src, "Contents", "section0.xml"), HWPX_SECTION_XML);
+  await run("zip", ["-q", "-r", "-X", target, "mimetype", "Contents"], src);
+  await rm(src, { recursive: true, force: true });
+}
+
+/**
+ * 24단계: PROTOCOL.md 1절 `GET /fs/download`·`GET /fs/render`(2026-09-13 추가).
+ * UI 테스트 저장소 안에 `sample.pdf`(최소 PDF)와 `sample.hwpx`(최소 OWPML)를 만들어 커밋하고
+ * (`--keep` 이면 그대로 남아 iOS `DocumentViewerUITests` 가 연다. 커밋하는 이유는 팀 머지가 더러운 작업 트리를 409 로 막기 때문),
+ * 원본 스트리밍(200 · `application/pdf` · `content-length` · 바이트 동일) → HWPX 변환(200 · `kind hwpx` · 본문)
+ * → PDF 변환 400 → 빈 `.hwp` 501(변환기 없음) 또는 500(있지만 변환 실패) → 101 MiB 희소 파일 415 를 확인한다.
+ */
+async function documentSteps(cwd, repo) {
+  step = "24. GET /api/v1/fs/download(PDF) + GET /api/v1/fs/render(HWPX·PDF 400·HWP·415)";
+  const target = repo ?? cwd;
+  const pdfPath = path.join(target, "sample.pdf");
+  const hwpxPath = path.join(target, "sample.hwpx");
+  const pdfBytes = minimalPdf("MacAgent PDF");
+  await writeFile(pdfPath, pdfBytes);
+  await makeSampleHwpx(hwpxPath, cwd);
+  if (repo) {
+    // 저장소를 깨끗하게 유지한다(비추적 파일이 있으면 팀 머지가 409).
+    await git(repo, "add", "sample.pdf", "sample.hwpx");
+    await git(repo, ...GIT_IDENTITY, "commit", "-q", "-m", "samples");
+  }
+
+  const download = await fetch(`${BASE}/api/v1/fs/download?path=${encodeURIComponent(pdfPath)}`, { headers: PROTOCOL_HEADERS });
+  assert.equal(download.status, 200, `fs/download status ${download.status}`);
+  assert.equal(download.headers.get("content-type"), "application/pdf", `content-type ${download.headers.get("content-type")}`);
+  assert.equal(Number(download.headers.get("content-length")), pdfBytes.length, `content-length ${download.headers.get("content-length")} !== ${pdfBytes.length}`);
+  assert.match(download.headers.get("content-disposition") ?? "", /^inline; filename\*=UTF-8''sample\.pdf$/, `content-disposition ${download.headers.get("content-disposition")}`);
+  const body = Buffer.from(await download.arrayBuffer());
+  assert.ok(body.equals(pdfBytes), `내려받은 ${body.length}바이트가 원본 ${pdfBytes.length}바이트와 다름`);
+
+  const rendered = await api("GET", `/api/v1/fs/render?path=${encodeURIComponent(hwpxPath)}`);
+  assert.equal(rendered.status, 200, `fs/render(hwpx) status ${rendered.status}: ${JSON.stringify(rendered.json)}`);
+  assert.equal(rendered.json.kind, "hwpx", `kind ${rendered.json.kind}`);
+  assert.equal(rendered.json.path, hwpxPath, `path ${rendered.json.path}`);
+  assert.ok(rendered.json.html.includes(SAMPLE_TEXT), `변환한 HTML 에 "${SAMPLE_TEXT}" 가 없음: ${rendered.json.html.slice(0, 200)}`);
+  assert.ok(Array.isArray(rendered.json.warnings), `warnings 가 배열이 아님: ${JSON.stringify(rendered.json.warnings)}`);
+
+  const pdfRender = await api("GET", `/api/v1/fs/render?path=${encodeURIComponent(pdfPath)}`);
+  assert.equal(pdfRender.status, 400, `fs/render(pdf) status ${pdfRender.status}: ${JSON.stringify(pdfRender.json)}`);
+  assert.equal(pdfRender.json.error.code, "invalid_request", `fs/render(pdf) error.code ${pdfRender.json.error.code}`);
+
+  // 빈 .hwp: 변환기(pyhwp hwp5html)가 없으면 501 agent_unavailable, 있으면 변환에 실패해 500 internal 이다.
+  const hwpPath = path.join(cwd, "sample.hwp");
+  await writeFile(hwpPath, "");
+  const hwpRender = await api("GET", `/api/v1/fs/render?path=${encodeURIComponent(hwpPath)}`);
+  assert.ok([501, 500].includes(hwpRender.status), `fs/render(hwp) status ${hwpRender.status}: ${JSON.stringify(hwpRender.json)}`);
+  const expectedHwpCode = hwpRender.status === 501 ? "agent_unavailable" : "internal";
+  assert.equal(hwpRender.json.error.code, expectedHwpCode, `fs/render(hwp) error.code ${hwpRender.json.error.code}`);
+  const hwpNote = hwpRender.status === 501 ? "501 agent_unavailable(변환기 없음)" : "500 internal(변환기 있음, 빈 파일 변환 실패)";
+
+  // 101 MiB 희소 파일(디스크를 쓰지 않는다) → 100 MiB 상한 415.
+  const hugePath = path.join(cwd, "huge.pdf");
+  await writeFile(hugePath, "");
+  await truncate(hugePath, 101 * 1024 * 1024);
+  try {
+    const huge = await api("GET", `/api/v1/fs/download?path=${encodeURIComponent(hugePath)}`);
+    assert.equal(huge.status, 415, `fs/download(101 MiB) status ${huge.status}: ${JSON.stringify(huge.json)}`);
+    assert.equal(huge.json.error.code, "unsupported_media", `fs/download(101 MiB) error.code ${huge.json.error.code}`);
+  } finally {
+    await rm(hugePath, { force: true });
+  }
+
+  note(`24. fs/download sample.pdf(${pdfBytes.length}B, application/pdf, 바이트 동일) + fs/render sample.hwpx("${SAMPLE_TEXT}") + pdf 400 + hwp ${hwpNote} + 101 MiB 415 OK`);
 }
 
 async function closeAll() {

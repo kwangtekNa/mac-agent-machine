@@ -153,3 +153,24 @@ Codex 는 `POST /api/v1/auth/codex/login` 이 `{ url, instructions: "링크를 �
 | 포트를 이미 쓰는 프로세스 | `lsof -nP -iTCP:7777 -sTCP:LISTEN`. `dev-smoke.sh --keep` 를 띄워 두었다면 끄거나 `--port` 로 다른 포트를 쓴다 |
 
 보안 노트: 개발 모드 gateway 는 TLS 없이 tailnet IP 의 7777 에 뜨고 **접속자를 전부 현재 사용자(설치한 본인)로 취급한다**(`--dev` 는 whois 대신 고정 신원, ADR-004). tailnet 에 다른 사람(또는 공유받은 노드)이 있으면 그 사람도 내 계정 권한으로 파일과 에이전트를 쓸 수 있으므로 이 경로를 쓰지 말고 1절의 정식 설치를 쓴다. 바인딩은 항상 tailnet IPv4 하나뿐이며 `0.0.0.0` 이나 LAN IP 로 설치하지 않는다.
+
+## 9. 문서 미리보기
+
+폰에서 작업 디렉토리의 문서를 그 자리에서 본다(`docs/PROTOCOL.md` 1절 `GET /fs/download`·`GET /fs/render`, 화면은 `docs/IOS.md` 10.10).
+
+- **QuickLook 이 여는 형식**(서버는 원본 바이트만 내려준다): `pdf`, `doc`/`docx`, `xls`/`xlsx`, `ppt`/`pptx`, `rtf`/`rtfd`, `pages`/`numbers`/`key`, `epub`. 텍스트·코드·이미지는 지금까지대로 파일 뷰어가 연다.
+- **한글 문서**: `.hwpx` 는 서버가 직접 HTML 로 바꾼다(문단·줄바꿈·표·이미지·기본 서식). **변환기를 설치하지 않아도 동작한다.** `.hwp`(5.x 바이너리)만 아래 변환기가 필요하다.
+- **크기 상한 100 MiB**: 넘으면 415 `unsupported_media` 와 "파일이 100 MiB 를 넘어 미리 볼 수 없습니다". 변환 결과 HTML 이 8 MiB 를 넘으면 이미지를 빼고 경고를 붙인다.
+
+### 한글(HWP) 변환기 설치
+
+`.hwp` 를 열면 변환기가 없을 때 501 `agent_unavailable` 과 안내 문구가 온다. **사용자 계정에서** 설치한다(에이전트와 같은 권한으로 도는 agent-host 가 실행한다).
+
+```bash
+python3 -m pip install --user pyhwp
+hwp5html --version          # 경로가 잡혔는지 확인
+```
+
+- anaconda·pyenv 등 다른 python 을 쓰면 **그 python 의 pip** 로 설치한다(`/opt/homebrew/anaconda3/bin/python3 -m pip install --user pyhwp`). 서버는 `hwp5html` 을 찾지 못하면 `python3` 의 `hwp5` 모듈로도 시도한다.
+- `hwp5html` 이 PATH 에 없으면(예: `~/Library/Python/3.13/bin` 을 PATH 에 넣지 않은 경우) gateway 환경에 `MAM_HWP5HTML_BIN=<hwp5html 절대 경로>` 를 준다. 8절의 LaunchAgent(`dev.mam.dev-gateway`)라면 그 값을 환경에 두고 `bash scripts/install-dev-gateway.sh` 를 다시 실행하면 plist 에 박힌다(정식 설치의 LaunchDaemon 은 `sudo bash scripts/setup-server.sh` 재실행).
+- 설치하지 않아도 `.hwpx` 와 나머지 형식은 그대로 열린다. 변환기 유무는 `bash scripts/dev-smoke.sh` 24단계가 501(없음)/500(있음) 으로 알려 준다.
