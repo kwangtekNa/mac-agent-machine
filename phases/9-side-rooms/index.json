@@ -80,11 +80,29 @@
     {
       "step": 3,
       "name": "ios-side-rooms",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         1,
         2
-      ]
+      ],
+      "started_at": "2026-09-14T16:13:39+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "8fba9084-0d2e-4efe-ad1d-c108d760d1eb",
+          "cost_usd": 9.6695695,
+          "duration_s": 1059.5,
+          "num_turns": 76,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 9.669569,
+      "duration_s": 1059.5,
+      "retries": 0,
+      "session_id": "8fba9084-0d2e-4efe-ad1d-c108d760d1eb",
+      "summary": "곁방 iOS: Room.swift 에 RoomKind.side·Room.participants·SideRoomEventKind/SideRoomRef·RoomMessage.sideRoom, Team.swift 에 TeamSettings.sideRoomMaxParticipants(호출부 6곳 명시 갱신), ProtocolFixturesTests 의 임시 JSONValue 를 없애고 곁방 fixture 2개를 roomWsExpectations(RoomEvent)로 흡수(파일 75 유지). TeamRoomsView: TeamRoomRow.Kind.side + TeamRoomSection(group/dm/side, 행 없으면 섹션 생략) + 곁방 최근메시지→이름 정렬, 식별자 rooms.side.<roomId>, 참가자 아바타 겹침 행. 신규 Features/Rooms/Cards/SideRoomCard.swift(SideRoomCardState.make 순수 — opened/closed 문구·\"결론: \" 추출·참가자 이름은 현재 팀원 기준·모르는 kind 는 서버 문구, ItemCard + bubble.left.and.bubble.right .secondary, 전체 버튼 room.sideRoom.<roomId>), RoomEntry.sideRoom 케이스 + ItemStyle.roomStyle 대응. RoomView 는 기존 화면·모델·WS 재사용(중복 구현/NavigationStack 중첩 없음): 툴바 부제 \"에이전트 간 · 참가자 N명\", 컴포저 캡션 \"참가자 전원에게 전달됩니다\", 멘션 자동완성은 그 방 참가자로 제한(모르는 토큰 판정은 팀 전체), 카드 탭 → compact push / regular AppState.selectedRoom, RoomModel.participants 파생. 테스트 먼저 작성: SideRoomCardStateTests 신규 8건 + TeamRoomsLogic 섹션/정렬/숨김 + 컴포저 곁방 + RoomModel 곁방 + fixture 실제 타입·lenient + 카드 렌더. AC 전부 통과(xcodegen generate, xcodebuild test exit 0, grep 3건, bash scripts/test.sh OK — TS 885 passed). 서버·프로토콜·fixture 무변경.",
+      "completed_at": "2026-09-14T16:31:18+0900"
     },
     {
       "step": 4,
