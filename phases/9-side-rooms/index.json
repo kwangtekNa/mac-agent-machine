@@ -1,0 +1,44 @@
+{
+  "project": "mac-agent-machine",
+  "phase": "9-side-rooms",
+  "steps": [
+    {
+      "step": 0,
+      "name": "context-filter",
+      "status": "pending"
+    },
+    {
+      "step": 1,
+      "name": "side-rooms-protocol",
+      "status": "pending",
+      "depends_on": [
+        0
+      ]
+    },
+    {
+      "step": 2,
+      "name": "side-rooms-server",
+      "status": "pending",
+      "depends_on": [
+        1
+      ]
+    },
+    {
+      "step": 3,
+      "name": "ios-side-rooms",
+      "status": "pending",
+      "depends_on": [
+        1,
+        2
+      ]
+    },
+    {
+      "step": 4,
+      "name": "verify-and-install",
+      "status": "pending",
+      "depends_on": [
+        3
+      ]
+    }
+  ]
+}
