@@ -15,6 +15,11 @@ struct MessageCard: View {
     /// 컨텍스트 메뉴 "@이름에게 답장". nil 이면 메뉴에 없다.
     var onReply: ((TeamMember) -> Void)? = nil
 
+    /// 본문의 `localhost` 링크를 Mac 주소로 바꿀 기준(앱 루트가 넣는다). 없으면 시스템이 그대로 연다.
+    @Environment(\.previewServerURL) private var previewServerURL
+    /// 변환된 링크를 여는 앱 안 브라우저.
+    @State private var safariLink: SafariLink?
+
     /// VoiceOver: "지연(개발자): 본문", 사용자는 "나: 본문", 모르는 팀원은 "팀원: 본문".
     static func accessibilityLabel(message: RoomMessage, role: Role) -> String {
         switch role {
@@ -58,6 +63,7 @@ struct MessageCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Self.accessibilityLabel(message: message, role: role))
         .accessibilityIdentifier("room.message.\(message.id)")
+        .safariSheet(link: $safariLink)
     }
 
     private var userCard: some View {
@@ -92,6 +98,7 @@ struct MessageCard: View {
                 .markdownTheme(Theme.macAgent(dimmed: false))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .previewLinks(serverURL: previewServerURL, into: $safariLink)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)

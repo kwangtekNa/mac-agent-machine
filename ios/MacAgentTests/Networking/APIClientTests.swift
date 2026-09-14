@@ -263,6 +263,27 @@ final class APIClientTests: XCTestCase {
         }
     }
 
+    // MARK: - 2026-09-13 추가분 (net ports)
+
+    func testListeningPortsDecodesFixture() async throws {
+        try stub(status: 200, fixture: "rest/net-ports.json")
+        let ports = try await client.listeningPorts()
+        let request = try XCTUnwrap(lastRequest)
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:7777/api/v1/net/ports")
+        XCTAssertNil(request.httpBody)
+        XCTAssertEqual(ports.map(\.port), [3000, 5173, 8080])
+        XCTAssertEqual(ports.map(\.process), ["node", "node", "python3"])
+        XCTAssertEqual(ports.map(\.address), ["*", "127.0.0.1", "*"])
+        XCTAssertEqual(ports[0].pid, 4821)
+    }
+
+    func testListeningPortsEmptyList() async throws {
+        try stub(status: 200, body: Data(#"{"ports":[]}"#.utf8))
+        let ports = try await client.listeningPorts()
+        XCTAssertTrue(ports.isEmpty, "lsof 를 쓸 수 없으면 서버가 빈 배열을 준다(500 이 아니다)")
+    }
+
     func testUsageDecodesFixture() async throws {
         try stub(status: 200, fixture: "rest/usage.json")
         let usage = try await client.usage()

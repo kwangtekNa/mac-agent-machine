@@ -36,6 +36,8 @@ private struct TimelineScreen: View {
     @State private var isAtBottom = true
     @State private var showsNewEvents = false
     @State private var showsInfo = false
+    /// 툴바 "미리보기": 열린 포트 목록 시트.
+    @State private var showsPreview = false
     @State private var focusRequest = 0
     @State private var detailApproval: Approval?
     /// compact 의 "대화 | 파일" 세그먼트(IOS.md 9.1). iPad 3열(`onToggleFiles` 있음)에서는 항상 대화.
@@ -113,6 +115,13 @@ private struct TimelineScreen: View {
                 }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    showsPreview = true
+                } label: {
+                    Image(systemName: "safari")
+                }
+                .accessibilityLabel("미리보기")
+                .accessibilityIdentifier("timeline.preview")
                 ModeMenu(mode: model.mode) { mode in
                     Task { await model.setMode(mode) }
                 }
@@ -138,6 +147,9 @@ private struct TimelineScreen: View {
         }
         .sheet(item: $detailApproval) { approval in
             ApprovalSheet(model: model, approvalId: approval.approvalId)
+        }
+        .sheet(isPresented: $showsPreview) {
+            PreviewPortsSheet(client: client, serverURL: client.baseURL)
         }
         .task { await model.start() }
         .onDisappear { model.stop() }

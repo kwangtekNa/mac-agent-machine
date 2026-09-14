@@ -29,10 +29,13 @@ private struct ConnectedRootView: View {
     @State private var store: SessionsStore
     @State private var teams: TeamsStore
     @State private var rolePresets = RolePresetStore()
+    /// 카드의 `localhost` 링크를 Mac 주소로 바꿀 기준(IOS.md 12절).
+    private let serverURL: URL
 
     init(client: APIClient) {
         _store = State(initialValue: SessionsStore(client: client))
         _teams = State(initialValue: TeamsStore(client: client))
+        serverURL = client.baseURL
     }
 
     var body: some View {
@@ -46,5 +49,6 @@ private struct ConnectedRootView: View {
         .environment(store)
         .environment(teams)
         .environment(rolePresets)
+        .environment(\.previewServerURL, serverURL)
     }
 }

@@ -39,7 +39,8 @@ ios/
 │   │   ├── Approvals/               # 승인 배너, 승인 시트, 입력 폼
 │   │   ├── Files/                   # 파일 브라우저, 파일 뷰어, diff 뷰
 │   │   ├── Teams/                   # 팀 목록 행, 새 팀 시트, 팀원 편집기, 팀 설정, 방 목록, TeamsStore (10절)
-│   │   └── Rooms/                   # 방 화면, 컴포저, RoomModel, 멘션 파서, 방 카드(Cards/) (10절)
+│   │   ├── Rooms/                   # 방 화면, 컴포저, RoomModel, 멘션 파서, 방 카드(Cards/) (10절)
+│   │   └── Preview/                 # localhost 링크 변환, 앱 안 브라우저, 포트 시트 (12절)
 │   ├── Shared/                      # ItemStyle(아이콘·색), 공용 뷰, 포맷터, 햅틱
 │   └── Resources/                   # Assets.xcassets, Localizable.xcstrings
 └── MacAgentTests/                   # 단위 테스트. fixtures 폴더 참조(../packages/protocol/fixtures)
@@ -256,3 +257,12 @@ UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로.
 ## 11. 범위 밖 (Phase 1)
 
 - 파일 편집·업로드, 터미널, 푸시 알림(APNs, Phase 3), 여러 서버 동시 관리(서버 1개만 저장), 세션 검색, 위젯·Live Activity, iPad 멀티윈도우.
+
+## 12. 미리보기 (2026-09-14, Phase `7-preview-and-remote`)
+
+폰에서 Mac 의 개발 서버를 열어 본다. 앱 안 브라우저는 `SFSafariViewController`(`SafariServices`)이며 새 패키지는 없다(ADR-012). 서버는 프록시하지 않고 앱이 Mac 주소로 직접 연다.
+
+- **주소 변환**(`Features/Preview/PreviewLink.swift`, 순수): 스킴이 `http`/`https` 이고 호스트가 `localhost` · `127.0.0.1` · `0.0.0.0` · `::1` 이면 **호스트만** 저장된 서버 URL 의 호스트로 바꾼다(포트·경로·쿼리·스킴은 원본 그대로, 포트가 없으면 붙이지 않는다). 그 외 링크는 nil 이고 기존대로 시스템이 연다. 기준 주소는 환경값 `previewServerURL`(앱 루트 `ConnectedRootView` 가 `client.baseURL` 을 넣는다)이며, 없으면 아무것도 바꾸지 않는다.
+- **링크 가로채기**: 에이전트 메시지(`MessageCard`) · 타임라인 답변(`AssistantMessageCard`)의 `Markdown` 에 `.environment(\.openURL, OpenURLAction { … })`(`View.previewLinks(serverURL:into:)`). 변환되면 `SafariLink` 를 담아 `.handled`, 아니면 `.systemAction`. 도구 출력·파일 뷰어의 평문은 변환하지 않는다.
+- **미리보기 시트**(`PreviewPortsSheet(client:serverURL:)`, 툴바 `safari` 아이콘): 섹션 "열린 포트"(`GET /net/ports`, 당겨서 새로고침. 빈 목록은 "열린 포트가 없습니다. 에이전트에게 개발 서버를 띄워 달라고 하세요.") · "직접 입력"(숫자 필드 1~65535) · "최근"(`RecentPortsStore`, UserDefaults, 최근 순 5개). 행은 `3000 · node` 이고 `address` 가 `127.0.0.1`/`::1` 이면 회색 캡션 "Mac 안에서만 열림 — 폰에서 안 열릴 수 있습니다"(`PreviewLink.isMacOnly`). 탭하면 `http://<서버 호스트>:<port>/` 를 앱 안 브라우저로 연다. 표시 규칙은 `PreviewPortsState`(순수).
+- 식별자: `room.preview` · `timeline.preview`(툴바), `preview.port.<port>` · `preview.custom` · `preview.open` · `preview.recent.<port>`(시트).

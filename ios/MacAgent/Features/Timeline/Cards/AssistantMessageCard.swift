@@ -10,6 +10,10 @@ struct AssistantMessageCard: View {
     let payload: AssistantMessagePayload
     /// 스트리밍 중 마지막으로 그린 텍스트.
     @State private var streamed = ""
+    /// 본문의 `localhost` 링크를 Mac 주소로 바꿀 기준(앱 루트가 넣는다). 없으면 시스템이 그대로 연다.
+    @Environment(\.previewServerURL) private var previewServerURL
+    /// 변환된 링크를 여는 앱 안 브라우저.
+    @State private var safariLink: SafariLink?
 
     var body: some View {
         ItemCard(item: item, style: ItemStyle.style(for: item)) {
@@ -17,7 +21,9 @@ struct AssistantMessageCard: View {
                 .markdownTheme(Theme.macAgent(dimmed: payload.phase == .commentary))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .previewLinks(serverURL: previewServerURL, into: $safariLink)
         }
+        .safariSheet(link: $safariLink)
         .task(id: payload.text) {
             guard item.status == .running else { return }
             try? await Task.sleep(for: Self.debounce)

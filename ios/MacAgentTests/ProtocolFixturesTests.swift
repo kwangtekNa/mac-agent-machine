@@ -58,8 +58,8 @@ final class ProtocolFixturesTests: XCTestCase {
         // 2026-09-13 추가분(git init) rest 2개
         t["rest/git-init.json"] = decode(GitInitResponse.self)
         t["rest/git-init-dry-run.json"] = decode(GitInitResponse.self)
-        // 2026-09-13 추가분(net ports) rest 1개. iOS step 1 이 실제 타입(NetPortsResponse)으로 바꾼다.
-        t["rest/net-ports.json"] = decode(JSONValue.self)
+        // 2026-09-13 추가분(net ports) rest 1개
+        t["rest/net-ports.json"] = decode(NetPortsResponse.self)
         // room-ws/ 10개: 전부 RoomEvent (세션 ServerEvent 와 별도 enum)
         for name in roomWsExpectations.keys {
             t["room-ws/\(name).json"] = decode(RoomEvent.self)

@@ -140,6 +140,29 @@ struct GitInitResponse: Codable, Hashable, Sendable {
     var createdGitignore: Bool
 }
 
+/// `GET /net/ports` 항목(2026-09-13 추가). agent-host 사용자가 TCP 로 LISTEN 중인 포트 하나.
+/// `address` 는 바인딩 주소(`*`, `0.0.0.0`, `127.0.0.1`, `::1`). 폰이 Mac 주소로 직접 열어 보는 용도이며 서버는 프록시하지 않는다.
+struct NetPort: Codable, Identifiable, Hashable, Sendable {
+    var port: Int
+    var pid: Int
+    var process: String
+    var address: String
+
+    var id: Int { port }
+
+    init(port: Int, pid: Int, process: String, address: String) {
+        self.port = port
+        self.pid = pid
+        self.process = process
+        self.address = address
+    }
+}
+
+/// `GET /net/ports`. `port` 오름차순이고, 서버가 `lsof` 를 쓸 수 없으면 빈 배열이다(500 이 아니다).
+struct NetPortsResponse: Codable, Hashable, Sendable {
+    var ports: [NetPort]
+}
+
 /// `POST /fs/mkdir` 본문(2026-09-10 추가). `~/` 로 시작하면 서버가 홈으로 치환한다.
 struct FsMkdirRequest: Codable, Hashable, Sendable {
     var path: String

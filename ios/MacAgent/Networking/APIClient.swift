@@ -103,6 +103,11 @@ struct APIClient: Sendable {
         try await get(ModelsResponse.self, "/models", query: [URLQueryItem(name: "agent", value: agent.rawValue)]).models
     }
 
+    /// `GET /net/ports` 사용자 프로세스가 LISTEN 중인 TCP 포트 목록(미리보기). 서버는 이 포트를 프록시하지 않는다.
+    func listeningPorts() async throws -> [NetPort] {
+        try await get(NetPortsResponse.self, "/net/ports").ports
+    }
+
     func gitStatus(cwd: String) async throws -> GitStatusResponse {
         try await get(GitStatusResponse.self, "/git/status", query: [URLQueryItem(name: "cwd", value: cwd)])
     }

@@ -30,6 +30,8 @@ struct RoomScreen: View {
     @State private var isAtBottom = true
     @State private var showsNewMessages = false
     @State private var showsMembers = false
+    /// 툴바 "미리보기": 열린 포트 목록 시트.
+    @State private var showsPreview = false
     @State private var insertRequest: String?
     /// compact: 팀원 시트가 닫힌 뒤 push 할 타임라인.
     @State private var pendingMember: MemberTimelineRef?
@@ -87,6 +89,15 @@ struct RoomScreen: View {
                 .accessibilityIdentifier("room.title")
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
+                if appState.client != nil {
+                    Button {
+                        showsPreview = true
+                    } label: {
+                        Image(systemName: "safari")
+                    }
+                    .accessibilityLabel("미리보기")
+                    .accessibilityIdentifier("room.preview")
+                }
                 Button {
                     showsMembers = true
                 } label: {
@@ -113,6 +124,11 @@ struct RoomScreen: View {
         }
         .sheet(item: $detailApproval) { approval in
             ApprovalSheet(model: model, approvalId: approval.approvalId)
+        }
+        .sheet(isPresented: $showsPreview) {
+            if let client = appState.client {
+                PreviewPortsSheet(client: client, serverURL: client.baseURL)
+            }
         }
         .task { await model.start() }
         .onDisappear { model.stop() }
