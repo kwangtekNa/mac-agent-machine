@@ -116,6 +116,9 @@ enum TeamRoomsLogic {
 /// 팀의 방 목록: `#전체` + 팀원별 DM + 에이전트끼리의 곁방. 탭하면 같은 스택에서 `RoomView` 로 push 한다.
 /// 툴바: 팀 설정(compact 는 push, iPad 는 시트), 작업 전부 중단. 상태 점은 `TeamsStore`+`SessionsStore` 조인.
 struct TeamRoomsView: View {
+    /// 화면이 보이는 동안 팀을 다시 읽는 주기. 세션 홈의 `.task` 는 이 화면을 push 하면 멈추므로 여기서 따로 돈다.
+    static let refreshInterval: Duration = .seconds(5)
+
     @Environment(TeamsStore.self) private var teamsStore
     @Environment(SessionsStore.self) private var store
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -210,6 +213,20 @@ struct TeamRoomsView: View {
         .refreshable {
             await teamsStore.refresh()
             await store.refresh()
+        }
+        .task(id: teamId) { await followTeam() }
+    }
+
+    /// 곁방은 에이전트가 서로를 부를 때 서버가 만든다(PROTOCOL.md 6.6). 방 목록이 그걸 따라가려면 보이는 동안 팀을 다시 읽어야 한다.
+    /// 팀 하나짜리 `GET /teams/:id` 라 가볍고, 화면을 떠나면 `.task` 가 취소된다.
+    private func followTeam() async {
+        while !Task.isCancelled {
+            await teamsStore.reloadTeam(id: teamId)
+            do {
+                try await Task.sleep(for: Self.refreshInterval)
+            } catch {
+                return
+            }
         }
     }
 

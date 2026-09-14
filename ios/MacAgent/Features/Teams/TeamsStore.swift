@@ -58,6 +58,14 @@ final class TeamsStore {
 
     // MARK: - 팀
 
+    /// `GET /teams/:id` 로 그 팀 하나만 다시 읽어 목록에서 교체한다. 방 목록이 **곁방 등장**을 따라가는 데 쓴다
+    /// (PROTOCOL.md 6.6 — 곁방은 팀을 만든 뒤 서버가 만들기 때문에 생성 응답에는 없다).
+    /// 주기적으로 불리므로 실패는 조용히 지나간다: 이전 값을 유지하고 `errorMessage` 도 건드리지 않는다.
+    func reloadTeam(id: String) async {
+        guard let detail = try? await client.team(id: id) else { return }
+        replace(detail.team)
+    }
+
     /// `POST /teams`. 성공하면 목록 맨 앞에 넣고 돌려준다. 오류는 그대로 던진다(문구는 시트가 만든다).
     func create(_ request: CreateTeamRequest) async throws -> Team {
         let team = try await client.createTeam(request)

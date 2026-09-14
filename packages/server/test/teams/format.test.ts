@@ -272,3 +272,100 @@ describe("buildTurnText", () => {
     expect(jiyeon.name).toBe("지연");
   });
 });
+
+/**
+ * 맥락 절감 측정(2026-09-14, Phase `9-side-rooms`, ADR-018). `dev-smoke.sh` 25단계가 만드는 방 로그와 같은 모양으로
+ * **곁방에 참가하지 않은 팀원(철수)** 의 턴 입력을 두 번 만든다:
+ * - `before` = 이 phase 이전 규칙 — 에이전트끼리의 대화가 전부 그룹방에 있었고(곁방 없음) 남의 승인·변경 카드도 맥락에 들어갔다.
+ *   `buildTurnText` 는 이제 항상 `isContextRelevant` 로 거르므로, 카드를 **같은 문구의 system 줄로 바꿔**(렌더 결과가 같다는 것을
+ *   아래 첫 케이스가 확인한다) 필터가 아무것도 떨어뜨리지 않게 만든 corpus 로 옛 규칙을 재현한다.
+ * - `after` = 지금 규칙 — 곁방 대화는 맥락 방이 아니고(6.6) 남의 카드는 걸러진다(6.4).
+ */
+describe("buildTurnText 맥락 절감 측정", () => {
+  const CHULSOO = "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA3";
+  const SIDE_ROOM = "room_01J8ZQ4K5N7P9R3S6T8V0W2XR3";
+  const MARK = "SIDEONLY";
+  const REPLY = "안녕하세요. 요청하신 명령을 실행하겠습니다.";
+  const HANDOFF = `${REPLY} @jiyeon 확인 부탁해요.`;
+  const SYSTEM_PREFIX = "시스템: ";
+
+  const cast = [...members, { id: CHULSOO, name: "철수", roleLabel: "코드 리뷰어" }];
+  const stage = [...rooms, { id: SIDE_ROOM, kind: "side" as const, name: "민수 ↔ 지연" }];
+  const chulsoo = cast.find((m) => m.id === CHULSOO)!;
+
+  let cards = 0;
+  function approval(memberId: string, roomId: string): RoomMessage {
+    const fixture = fixtureMessage("room.message.approval");
+    cards += 1;
+    return { ...fixture, id: `msg_apr${cards}`, roomId, author: { kind: "agent", memberId }, approval: { ...fixture.approval!, memberId } };
+  }
+  function changes(memberId: string, roomId: string): RoomMessage {
+    const fixture = fixtureMessage("room.message.changes");
+    cards += 1;
+    return { ...fixture, id: `msg_chg${cards}`, roomId, author: { kind: "agent", memberId }, changes: { ...fixture.changes!, memberId } };
+  }
+  /** 옛 규칙 corpus: 곁방 메시지를 그룹방으로 되돌리고, 카드는 같은 문구의 system 줄로 바꿔 필터를 통과시킨다. */
+  function legacy(message: RoomMessage): RoomMessage {
+    const inGroup: RoomMessage = { ...message, roomId: GROUP_ROOM };
+    if (message.kind !== "approval" && message.kind !== "changes") return inGroup;
+    const line = formatMessageLine(inGroup, cast, stage);
+    return {
+      ...inGroup,
+      kind: "system",
+      author: { kind: "system" },
+      text: line.slice(line.indexOf(SYSTEM_PREFIX) + SYSTEM_PREFIX.length),
+      approval: null,
+      changes: null,
+    };
+  }
+
+  const group: RoomMessage[] = [
+    msg({ text: "@minsu ask @jiyeon에게 확인 좀 부탁해", mentions: [MINSU] }),
+    approval(MINSU, GROUP_ROOM),
+    msg({ text: HANDOFF, author: { kind: "agent", memberId: MINSU } }),
+    msg({ text: "민수 ↔ 지연 곁방을 열었습니다", author: { kind: "system" }, kind: "system" }),
+    msg({ text: `민수 ↔ 지연 곁방 대화 3건 · 결론: ${REPLY}`, author: { kind: "system" }, kind: "system" }),
+    msg({ text: "@minsu 다시 ask @jiyeon에게 물어봐줘", mentions: [MINSU] }),
+    approval(MINSU, GROUP_ROOM),
+    msg({ text: HANDOFF, author: { kind: "agent", memberId: MINSU } }),
+    msg({ text: `민수 ↔ 지연 곁방 대화 5건 · 결론: ${REPLY}`, author: { kind: "system" }, kind: "system" }),
+    changes(JIYEON, GROUP_ROOM),
+  ];
+  const side: RoomMessage[] = [
+    msg({ text: HANDOFF, author: { kind: "agent", memberId: MINSU }, roomId: SIDE_ROOM }),
+    approval(JIYEON, SIDE_ROOM),
+    msg({ text: HANDOFF, author: { kind: "agent", memberId: JIYEON }, roomId: SIDE_ROOM }),
+    msg({ text: HANDOFF, author: { kind: "agent", memberId: MINSU }, roomId: SIDE_ROOM }),
+    approval(JIYEON, SIDE_ROOM),
+    msg({ text: HANDOFF, author: { kind: "agent", memberId: JIYEON }, roomId: SIDE_ROOM }),
+    msg({ text: `정리해줘 [${MARK}]`, roomId: SIDE_ROOM }),
+    approval(MINSU, SIDE_ROOM),
+    msg({ text: REPLY, author: { kind: "agent", memberId: MINSU }, roomId: SIDE_ROOM }),
+    approval(JIYEON, SIDE_ROOM),
+    msg({ text: REPLY, author: { kind: "agent", memberId: JIYEON }, roomId: SIDE_ROOM }),
+  ];
+  const trigger = msg({ text: "@chulsoo 상태 알려줘", mentions: [CHULSOO] });
+
+  const measure = (context: RoomMessage[]): ReturnType<typeof buildTurnText> =>
+    buildTurnText({ member: chulsoo, members: cast, rooms: stage, context, trigger, maxMessages: 40, maxChars: 12_000 });
+
+  it("renders a shadowed card exactly like the card itself (so the legacy corpus is faithful)", () => {
+    const card = approval(JIYEON, GROUP_ROOM);
+    expect(formatMessageLine(legacy(card), cast, stage)).toBe(formatMessageLine(card, cast, stage));
+    expect(isContextRelevant(legacy(card), CHULSOO)).toBe(true);
+    expect(isContextRelevant(card, CHULSOO)).toBe(false);
+  });
+
+  it("cuts a non-participant's turn input to 42% of the old rules", () => {
+    const before = measure([...group, ...side].map(legacy));
+    const after = measure(group);
+    expect(before.omitted).toBe(0);
+    expect(after.omitted).toBe(0);
+    // 곁방 대화는 참가자가 아닌 팀원에게 아예 보이지 않는다. 그룹방의 연결 카드(요약 한 줄)는 그대로 보인다.
+    expect(before.text).toContain(MARK);
+    expect(after.text).not.toContain(MARK);
+    expect(after.text).toContain("곁방 대화 5건");
+    // 실측(이 corpus 기준): 1,062자 → 443자. 58% 절감. 수치가 바뀌면 ADR-018 도 같이 고친다.
+    expect({ before: before.text.length, after: after.text.length }).toEqual({ before: 1062, after: 443 });
+  });
+});

@@ -285,6 +285,21 @@ UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로.
 | `documentViewer.share` | 한글 문서 뷰어 툴바의 "원본 공유" |
 | `documentViewer.warnings` | 한글 문서 뷰어 위의 변환 경고 배너 |
 
+### 10.11 곁방(에이전트 간 대화) (2026-09-14, Phase `9-side-rooms`)
+
+에이전트끼리의 대화는 서버가 곁방으로 떼어낸다(`docs/PROTOCOL.md` 6.6). 앱은 새 화면·새 모델·새 소켓을 만들지 않는다 — 곁방도 `RoomView`/`RoomModel`/`RoomSocket` 을 그대로 쓴다. 프로토콜 추가분은 `Room.kind = "side"` · `Room.participants` · `RoomMessage.sideRoom` 뿐이다.
+
+- **방 목록**(`TeamRoomsLogic.sections`): `#전체` / `DM` / **"에이전트 간"** 세 섹션이고 행이 없는 섹션은 만들지 않는다(곁방이 없으면 섹션 자체가 없다). 곁방 행은 최근 메시지 순(없으면 이름 순)이며 참가자 아바타를 겹쳐 그린다. 섹션 푸터는 "에이전트끼리 나눈 대화입니다. 들어가서 직접 끼어들 수 있습니다." 곁방은 팀을 만든 뒤 서버가 만들기 때문에(6.6) `TeamRoomsView` 는 보이는 동안 5초마다 `TeamsStore.reloadTeam(id:)`(`GET /teams/:id` 하나만)으로 그 팀을 다시 읽는다 — 세션 홈의 15초 폴링은 이 화면을 push 하면 멈춘다. 실패는 조용히 지나가고 다음 주기가 다시 시도한다.
+- **연결 카드**(`SideRoomCard` + 순수 `SideRoomCardState`): 그룹방에 남는 `sideRoom` 시스템 메시지. `opened` 는 "민수 ↔ 지연 곁방을 열었습니다", `closed` 는 "민수 ↔ 지연 곁방 대화 7건" + 결론 한 줄(본문의 `결론: ` 뒤). 참가자 이름은 메시지 본문이 아니라 **현재 팀원 목록**에서 만들고, 모르는 `kind` 는 서버 문구를 그대로 보여준다. 카드 전체가 버튼이라 탭하면 곁방으로 들어간다(compact 는 같은 스택에 push, iPad 는 `AppState.selectedRoom`). 아이콘·색은 `ItemStyle.roomStyle(for: .sideRoom)`(`bubble.left.and.bubble.right` · `.secondary`).
+- **곁방 화면**: 제목은 서버가 만든 방 이름(`민수 ↔ 지연`), 부제는 "에이전트 간 · 참가자 N명". 컴포저는 멘션이 없으면 그룹방의 팀장 캡션 대신 **"참가자 전원에게 전달됩니다"**(PROTOCOL 6.4), 멘션 제안은 그 방 참가자만 올린다(모르는 `@토큰` 판정은 팀 전체 기준 — 참가자가 아닌 팀원을 멘션하면 서버가 그 조합의 새 곁방을 만든다). 승인 배너·작업 요약·상태 줄은 그룹방과 같다. 변경 카드는 곁방에서 한 작업이라도 그룹방에 올라온다(6.5).
+- **UI 테스트** `MacAgentUITests/SideRoomUITests.swift`(`MAM_UI_TEST_SERVER`·`MAM_UI_TEST_REPO` 가 없으면 `XCTSkip`): REST 로 팀을 만들고(팀장 민수 + 개발자 지연, 둘 다 `full-auto` 라 승인 배너가 없다) 홈의 팀 행 → `#전체` → 팀장이 개발자를 부르게 하는 메시지 전송 → `room.sideRoom.*` 연결 카드 탭 → 곁방(제목 `↔`, 부제 "에이전트 간") → 메시지 확인 → 뒤로 → 방 목록의 "에이전트 간" 섹션과 `rooms.side.*` 행 → 곁방에서 직접 한 줄 보내기(캡션 "참가자 전원에게 전달됩니다"). 정리는 REST 팀 삭제.
+
+| 식별자 | 위치 |
+|---|---|
+| `rooms.side.<roomId>` | 방 목록 "에이전트 간" 섹션의 곁방 행 |
+| `room.sideRoom.<roomId>` | 그룹방의 곁방 연결 카드(탭 → 그 곁방) |
+| `room.composer.caption` | 컴포저 위 캡션(곁방은 "참가자 전원에게 전달됩니다") |
+
 ## 11. 범위 밖 (Phase 1)
 
 - 파일 편집·업로드, 터미널, 푸시 알림(APNs, Phase 3), 여러 서버 동시 관리(서버 1개만 저장), 세션 검색, 위젯·Live Activity, iPad 멀티윈도우.

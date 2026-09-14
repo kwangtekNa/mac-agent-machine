@@ -354,6 +354,9 @@ describe("side rooms", () => {
     replies.set(minsu.id, ["@지연 확인 부탁해"]);
     await first.teams.postUserMessage(team.id, group.id, { text: "시작해줘" });
     await waitUntil(quiet(first.teams, team.id));
+    // `quiet` 은 팀원이 idle 로 바뀌는 순간 참이 되지만 그 뒤의 `room.status` 가 아직 곁방 seq 를 하나 더 쓴다.
+    // `closed` 카드는 그 `room.status` **다음에** 올라가므로, 카드를 기다린 뒤 읽어야 `lastSeq` 가 확정된 방을 얻는다.
+    await waitForClosed(first.teams, team.id, group.id);
     const side = sideRooms(first.teams, team.id)[0]!;
     const before = await messagesIn(first.teams, team.id, side.id);
     await first.teams.shutdown();

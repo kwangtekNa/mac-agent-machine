@@ -105,6 +105,49 @@ final class TeamsStoreTests: XCTestCase {
         XCTAssertNil(store.errorMessage, "성공하면 문구를 지운다")
     }
 
+    // MARK: - reloadTeam
+
+    /// 방 목록이 곁방 등장을 따라가려면 그 팀 하나만 다시 읽어야 한다(PROTOCOL.md 6.6 — 곁방은 팀을 만든 뒤 서버가 만든다).
+    func testReloadTeamReplacesOnlyThatTeamFromDetail() async throws {
+        install(try listRoutes())
+        await store.refresh()
+        let before = try XCTUnwrap(store.team(id: teamId))
+
+        var grown = before
+        grown.name = "backend (곁방)"
+        grown.rooms.append(
+            Room(
+                id: "room_01J8ZQ4K5N7P9R3S6T8V0W2XR9", teamId: before.id, kind: .side, memberId: nil,
+                name: "민수 ↔ 하나", lastSeq: 3, lastMessageAt: Date(),
+                participants: before.members.prefix(2).map(\.id)
+            )
+        )
+        let detail = TeamDetailResponse(team: grown, dispatch: DispatchState(running: [], queued: []), changes: [])
+        install(try listRoutes() + [
+            Route(method: "GET", path: "/api/v1/teams/\(teamId)", status: 200, body: try JSONCoding.encoder.encode(detail)),
+        ])
+
+        await store.reloadTeam(id: teamId)
+
+        let after = try XCTUnwrap(store.team(id: teamId))
+        XCTAssertEqual(after.name, "backend (곁방)")
+        XCTAssertEqual(after.rooms.count, before.rooms.count + 1)
+        XCTAssertTrue(after.rooms.contains { $0.kind == .side && $0.name == "민수 ↔ 하나" }, "새 곁방이 목록에 반영돼야 한다")
+        XCTAssertEqual(store.teams.count, 1, "다른 팀을 건드리지 않는다")
+    }
+
+    /// 주기 폴링이라 실패는 조용히 지나간다: 이전 값을 유지하고 배너 문구도 바꾸지 않는다.
+    func testReloadTeamKeepsPreviousValueWhenRequestFails() async throws {
+        install(try listRoutes())
+        await store.refresh()
+
+        StubURLProtocol.handler = { _ in throw URLError(.cannotConnectToHost) }
+        await store.reloadTeam(id: teamId)
+
+        XCTAssertEqual(store.team(id: teamId)?.name, "backend")
+        XCTAssertNil(store.errorMessage)
+    }
+
     // MARK: - create / patch / delete
 
     func testCreateInsertsTeamAtFront() async throws {

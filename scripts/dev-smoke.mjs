@@ -7,6 +7,7 @@
 // 22단계는 2026-09-13 추가분(PROTOCOL.md 1절 POST /git/init: dryRun → 초기화 → 그 디렉토리로 팀 생성 → 삭제 → 다시 409).
 // 23단계는 2026-09-14 추가분(PROTOCOL.md 1절 GET /net/ports: 임시 리스너 등장 → gateway 포트 제외 → 종료 후 사라짐).
 // 24단계는 2026-09-14 추가분(PROTOCOL.md 1절 GET /fs/download·GET /fs/render: PDF 원본 스트리밍, HWPX 변환, 400/501·500/415).
+// 25단계는 2026-09-14 추가분(PROTOCOL.md 6.6 곁방: 에이전트 간 대화 분리 → 연결 카드 → 재사용 → 참가자 전원 디스패치 → 맥락 격리).
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
 import { mkdir, rm, stat, truncate, writeFile } from "node:fs/promises";
@@ -286,6 +287,7 @@ async function main() {
     await gitInitSteps(cwd);
     await netPortsStep();
     await documentSteps(cwd, uiTestRepo);
+    await sideRoomSteps(cwd);
   } finally {
     if (!KEEP) await rm(cwd, { recursive: true }).catch(() => {});
   }
@@ -789,6 +791,189 @@ async function documentSteps(cwd, repo) {
   }
 
   note(`24. fs/download sample.pdf(${pdfBytes.length}B, application/pdf, 바이트 동일) + fs/render sample.hwpx("${SAMPLE_TEXT}") + pdf 400 + hwp ${hwpNote} + 101 MiB 415 OK`);
+}
+
+/** 팀의 실행·대기 디스패치가 빌 때까지 폴링한다(에이전트 연쇄가 이어지므로 상한을 둔다). 마지막 `GET /teams/:id` 응답을 돌려준다. */
+async function waitTeamIdle(teamId, description) {
+  let last = null;
+  for (let i = 0; i < 240; i += 1) {
+    const res = await api("GET", `/api/v1/teams/${teamId}`);
+    assert.equal(res.status, 200, `GET /teams/:id status ${res.status}: ${JSON.stringify(res.json)}`);
+    last = res.json;
+    if (last.dispatch.running.length + last.dispatch.queued.length === 0) return last;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`${description}: 디스패치가 60초 안에 끝나지 않음: ${JSON.stringify(last?.dispatch)}`);
+}
+
+/** `GET /teams/:id/rooms/:roomId` 의 메시지 목록. */
+async function roomMessages(teamId, roomId) {
+  const res = await api("GET", `/api/v1/teams/${teamId}/rooms/${roomId}`);
+  assert.equal(res.status, 200, `GET room status ${res.status}: ${JSON.stringify(res.json)}`);
+  return res.json.messages;
+}
+
+/** 세션 타임라인의 마지막 `user_message` 본문(= 그 팀원의 마지막 턴 입력, PROTOCOL 6.4 "턴 입력"). */
+async function lastTurnInput(sessionId) {
+  const res = await api("GET", `/api/v1/sessions/${sessionId}`);
+  assert.equal(res.status, 200, `GET /sessions/:id status ${res.status}: ${JSON.stringify(res.json)}`);
+  const userMessages = res.json.items.filter((i) => i.kind === "user_message");
+  assert.ok(userMessages.length > 0, `세션 ${sessionId} 에 user_message 아이템이 없음`);
+  return userMessages[userMessages.length - 1].payload.text;
+}
+
+/**
+ * 25단계: PROTOCOL.md 6.6 곁방(2026-09-14 추가). 팀원 3명(팀장 민수 · 개발자 지연 · 리뷰어 철수, 전부 `full-auto` 라 승인 카드가 없다)으로
+ * **팀장이 개발자를 부르게** 만들고(Fake 의 `ask @<핸들>` 지시, `agents/fake/script.ts`) 그 대화가 곁방으로 갈라지는지 본다:
+ * 곁방 1개 생성(`participants` = 두 팀원) → 그룹방에 `opened` 연결 카드 1건, 개발자 답변은 그룹방이 아니라 곁방에
+ * → 연쇄가 끝나면 `closed` 카드 1건(`messages` = 곁방 메시지 수) → 같은 조합을 다시 불러도 방이 늘지 않음
+ * → 곁방에 멘션 없이 쓰면 참가자 전원 디스패치 → 곁방에 참가하지 않은 팀원의 턴 입력에는 곁방 문구가 없음(맥락 격리).
+ * 팀은 실패해도 best-effort 로 지운다. 저장소는 cwd 와 함께 정리된다(`--keep` 이면 남는다).
+ */
+async function sideRoomSteps(cwd) {
+  step = "25. 곁방: 에이전트 간 대화 분리 · 연결 카드 · 재사용 · 참가자 전원 디스패치 · 맥락 격리";
+  const repo = path.join(cwd, "side-repo");
+  let team = null;
+  try {
+    await mkdir(repo, { recursive: true });
+    await git(repo, "init", "-q", "-b", "main");
+    await writeFile(path.join(repo, "README.md"), "# side\n");
+    await git(repo, "add", "README.md");
+    await git(repo, ...GIT_IDENTITY, "commit", "-q", "-m", "init");
+
+    const created = await api("POST", "/api/v1/teams", {
+      cwd: repo,
+      name: "side",
+      members: [
+        { name: "민수", handle: "minsu", role: "team-lead", agent: "claude", isLead: true, mode: "full-auto" },
+        { name: "지연", handle: "jiyeon", role: "developer", agent: "codex", mode: "full-auto" },
+        { name: "철수", handle: "chulsoo", role: "code-reviewer", agent: "claude", mode: "full-auto" },
+      ],
+    });
+    assert.equal(created.status, 201, `POST /teams status ${created.status}: ${JSON.stringify(created.json)}`);
+    team = created.json;
+    assert.equal(team.settings.sideRoomMaxParticipants, 3, `sideRoomMaxParticipants ${team.settings.sideRoomMaxParticipants}`);
+    const minsu = team.members.find((m) => m.handle === "minsu");
+    const jiyeon = team.members.find((m) => m.handle === "jiyeon");
+    const chulsoo = team.members.find((m) => m.handle === "chulsoo");
+    const group = team.rooms.find((r) => r.kind === "group");
+    assert.ok(minsu && jiyeon && chulsoo && group, "팀원·방 구성이 예상과 다름");
+    assert.equal(team.rooms.filter((r) => r.kind === "side").length, 0, "새 팀에 곁방이 있음");
+    const pair = [minsu.id, jiyeon.id].sort();
+
+    const groupWs = await connect(`${WS_BASE}/api/v1/teams/${team.id}/rooms/${group.id}/ws`);
+    await groupWs.waitFor((e) => e.type === "room.snapshot", 5000, "room.snapshot(group)");
+
+    // Fake 는 턴 텍스트의 `ask @<핸들>` 을 보고 답변 끝에 `@<핸들> 확인 부탁해요.` 를 붙인다(script.ts).
+    // 사용자가 `@jiyeon` 을 그대로 쓰면 이 메시지 자체가 지연을 멘션해 그룹방에서 바로 디스패치되므로(6.4) "팀장이 부른 것"이 아니게 된다.
+    // 조사를 붙이면(`@jiyeon에게`) 멘션 파서는 모르는 토큰으로 흘려보내고(무시 + recoverable room.error) Fake 의 `ask @jiyeon` 만 걸린다.
+    const ask = await api("POST", `/api/v1/teams/${team.id}/rooms/${group.id}/messages`, { text: "@minsu ask @jiyeon에게 확인 좀 부탁해" });
+    assert.equal(ask.status, 201, `POST messages status ${ask.status}: ${JSON.stringify(ask.json)}`);
+    assert.deepEqual(ask.json.message.mentions, [minsu.id], `mentions ${JSON.stringify(ask.json.message.mentions)}`);
+    assert.equal(ask.json.dispatches.length, 1, `dispatches ${JSON.stringify(ask.json.dispatches)} (팀장 1건이어야 함)`);
+
+    const opened = await groupWs.waitFor(
+      (e) => e.type === "room.message" && e.message.sideRoom !== null && e.message.sideRoom.kind === "opened",
+      30_000,
+      "room.message(sideRoom opened)",
+    );
+    const sideRoomId = opened.message.sideRoom.roomId;
+    assert.equal(opened.message.kind, "system", `opened 카드 kind ${opened.message.kind}`);
+    assert.equal(opened.message.author.kind, "system", `opened 카드 author ${JSON.stringify(opened.message.author)}`);
+    assert.equal(opened.message.sideRoom.messages, 0, `opened 카드 messages ${opened.message.sideRoom.messages}`);
+    assert.deepEqual([...opened.message.sideRoom.participants].sort(), pair, `opened 카드 participants ${JSON.stringify(opened.message.sideRoom.participants)}`);
+
+    const closed = await groupWs.waitFor(
+      (e) => e.type === "room.message" && e.message.sideRoom !== null && e.message.sideRoom.kind === "closed",
+      30_000,
+      "room.message(sideRoom closed)",
+    );
+    assert.equal(closed.message.sideRoom.roomId, sideRoomId, "closed 카드가 다른 곁방을 가리킴");
+    const afterFirst = await waitTeamIdle(team.id, "첫 연쇄");
+
+    // 2. GET /teams/:id 의 rooms 에 곁방 1개, participants 는 두 팀원.
+    const sideRooms = afterFirst.team.rooms.filter((r) => r.kind === "side");
+    assert.equal(sideRooms.length, 1, `곁방 ${sideRooms.length}개: ${JSON.stringify(sideRooms.map((r) => r.name))}`);
+    assert.equal(sideRooms[0].id, sideRoomId, "곁방 id 가 연결 카드와 다름");
+    assert.equal(sideRooms[0].memberId, null, `곁방 memberId ${sideRooms[0].memberId}`);
+    assert.deepEqual(sideRooms[0].participants, pair, `곁방 participants ${JSON.stringify(sideRooms[0].participants)}`);
+    assert.equal(sideRooms[0].name, "민수 ↔ 지연", `곁방 이름 ${sideRooms[0].name}`);
+
+    // 3. 그룹방에는 opened 카드 1건 + 팀장 원본 답변. 개발자 답변은 그룹방에 없고 곁방에 있다.
+    const groupMsgs = await roomMessages(team.id, group.id);
+    const sideMsgs = await roomMessages(team.id, sideRoomId);
+    assert.equal(groupMsgs.filter((m) => m.sideRoom !== null && m.sideRoom.kind === "opened").length, 1, "그룹방의 opened 카드가 1건이 아님");
+    assert.equal(
+      groupMsgs.filter((m) => m.kind === "text" && m.author.kind === "agent" && m.author.memberId === jiyeon.id).length,
+      0,
+      `개발자 답변이 그룹방에 남음: ${JSON.stringify(groupMsgs.map((m) => m.text))}`,
+    );
+    assert.ok(
+      groupMsgs.some((m) => m.kind === "text" && m.author.kind === "agent" && m.author.memberId === minsu.id),
+      "팀장 원본 답변이 그룹방에서 사라짐",
+    );
+    assert.ok(
+      sideMsgs.some((m) => m.kind === "text" && m.author.kind === "agent" && m.author.memberId === jiyeon.id),
+      `곁방에 개발자 답변이 없음: ${JSON.stringify(sideMsgs.map((m) => m.text))}`,
+    );
+
+    // 4. closed 카드는 1건이고 messages 가 곁방 메시지 수와 같다.
+    const closedCards = groupMsgs.filter((m) => m.sideRoom !== null && m.sideRoom.kind === "closed");
+    assert.equal(closedCards.length, 1, `closed 카드 ${closedCards.length}건`);
+    assert.equal(closedCards[0].sideRoom.messages, sideMsgs.length, `closed.messages ${closedCards[0].sideRoom.messages} !== 곁방 메시지 ${sideMsgs.length}`);
+
+    // 5. 같은 조합을 다시 부르면 방이 늘지 않고 opened 카드도 다시 올라오지 않는다.
+    const again = await api("POST", `/api/v1/teams/${team.id}/rooms/${group.id}/messages`, { text: "@minsu 다시 ask @jiyeon에게 물어봐줘" });
+    assert.equal(again.status, 201, `POST messages(again) status ${again.status}: ${JSON.stringify(again.json)}`);
+    const closedAgain = await groupWs.waitFor(
+      (e) => e.type === "room.message" && e.message.sideRoom !== null && e.message.sideRoom.kind === "closed" && e.seq > closed.seq,
+      30_000,
+      "room.message(sideRoom closed, 2회차)",
+    );
+    assert.equal(closedAgain.message.sideRoom.roomId, sideRoomId, "같은 조합인데 다른 곁방으로 갔음");
+    const afterSecond = await waitTeamIdle(team.id, "두 번째 연쇄");
+    assert.equal(afterSecond.team.rooms.filter((r) => r.kind === "side").length, 1, "같은 조합을 다시 불렀는데 곁방이 늘었음");
+    const groupMsgs2 = await roomMessages(team.id, group.id);
+    assert.equal(groupMsgs2.filter((m) => m.sideRoom !== null && m.sideRoom.kind === "opened").length, 1, "방을 재사용했는데 opened 카드가 또 올라옴");
+
+    // 6. 곁방에 멘션 없이 쓰면 참가자 전원에게 디스패치한다(PROTOCOL 6.4 "곁방 안").
+    const mark = `SIDEONLY-${Date.now()}`;
+    const inSide = await api("POST", `/api/v1/teams/${team.id}/rooms/${sideRoomId}/messages`, { text: `정리해줘 [${mark}]` });
+    assert.equal(inSide.status, 201, `POST messages(side) status ${inSide.status}: ${JSON.stringify(inSide.json)}`);
+    assert.deepEqual(inSide.json.message.mentions, [], `곁방 사용자 메시지 mentions ${JSON.stringify(inSide.json.message.mentions)}`);
+    assert.equal(inSide.json.dispatches.length, pair.length, `곁방 디스패치 ${inSide.json.dispatches.length}건 (참가자 ${pair.length}명이어야 함)`);
+    await waitTeamIdle(team.id, "곁방 사용자 메시지");
+    const sideMsgs2 = await roomMessages(team.id, sideRoomId);
+    const answered = new Set(
+      sideMsgs2.filter((m) => m.kind === "text" && m.author.kind === "agent" && m.seq > inSide.json.message.seq).map((m) => m.author.memberId),
+    );
+    assert.deepEqual([...answered].sort(), pair, `곁방에서 답한 팀원 ${JSON.stringify([...answered])}`);
+    // 참가자의 턴 입력에는 그 메시지가 실제로 들어간다(격리 검증의 대조군).
+    const minsuInput = await lastTurnInput(afterSecond.team.members.find((m) => m.handle === "minsu").sessionId);
+    assert.ok(minsuInput.includes(mark), `참가자(민수) 턴 입력에 곁방 메시지가 없음`);
+
+    // 7. 맥락 격리: 곁방에 참가하지 않은 철수를 그룹방에서 부르고, 그 턴 입력에 곁방 문구가 없는지 본다.
+    const callChulsoo = await api("POST", `/api/v1/teams/${team.id}/rooms/${group.id}/messages`, { text: "@chulsoo 상태 알려줘" });
+    assert.equal(callChulsoo.status, 201, `POST messages(chulsoo) status ${callChulsoo.status}: ${JSON.stringify(callChulsoo.json)}`);
+    assert.deepEqual(callChulsoo.json.message.mentions, [chulsoo.id], `mentions ${JSON.stringify(callChulsoo.json.message.mentions)}`);
+    await groupWs.waitFor(isAgentText(chulsoo.id), 30_000, "room.message(agent 철수)");
+    const settled = await waitTeamIdle(team.id, "철수 연쇄");
+    const chulsooInput = await lastTurnInput(settled.team.members.find((m) => m.handle === "chulsoo").sessionId);
+    assert.ok(chulsooInput.includes("상태 알려줘"), `철수 턴 입력에 트리거가 없음: ${chulsooInput.length}자`);
+    assert.ok(chulsooInput.includes("곁방 대화"), "철수 턴 입력에 그룹방의 곁방 연결 카드가 없음(그룹방 요약은 보여야 한다)");
+    assert.ok(!chulsooInput.includes(mark), "곁방에 참가하지 않은 팀원의 턴 입력에 곁방 메시지가 들어감");
+    assertMonotonicSeq(groupWs.events);
+    await groupWs.close();
+    note(
+      `25. 곁방 ${sideRoomId}(${sideRooms[0].name}): opened 1 + closed ${closedCards[0].sideRoom.messages}건 · 재호출에도 방 1개 ·` +
+        ` 곁방 사용자 메시지 → 디스패치 ${inSide.json.dispatches.length}건 · 철수 턴 입력 ${chulsooInput.length}자에 곁방 문구 없음 OK`,
+    );
+  } finally {
+    if (team) {
+      const res = await api("DELETE", `/api/v1/teams/${team.id}`).catch(() => null);
+      if (!res || res.status !== 200) await api("DELETE", `/api/v1/teams/${team.id}?keepWorktrees=true`).catch(() => null);
+    }
+  }
 }
 
 async function closeAll() {
