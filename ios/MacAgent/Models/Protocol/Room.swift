@@ -2,8 +2,9 @@ import Foundation
 
 // PROTOCOL.md 6.1 방·메시지·변경 모델(2026-09-12 추가). `RoomAuthor.kind` 만 엄격한 판별자다.
 
+/// `side` 는 에이전트끼리의 대화를 떼어낸 곁방(2026-09-14 추가, PROTOCOL.md 6.6).
 enum RoomKind: String, LenientRawEnum {
-    case group, dm
+    case group, dm, side
     case unknown
 }
 
@@ -11,14 +12,17 @@ struct Room: Codable, Identifiable, Hashable, Sendable {
     var id: String
     var teamId: String
     var kind: RoomKind
-    /// nullable. DM 상대. 그룹방은 `null`.
+    /// nullable. DM 상대. 그룹방과 곁방은 `null`.
     var memberId: String?
-    /// 그룹방 `전체`, DM 은 팀원 이름.
+    /// 그룹방 `전체`, DM 은 팀원 이름, 곁방은 참가자 이름을 `↔` 로 이은 문자열(서버가 만든다).
     var name: String
     /// 방 이벤트 로그의 마지막 seq(세션 seq 와 별개).
     var lastSeq: Int
     /// nullable. 메시지가 없으면 `null`.
     var lastMessageAt: Date?
+    /// optional(키 생략 가능). `side` 일 때 정렬된 팀원 id 2개 이상이며 이 집합이 곁방의 신원이다(PROTOCOL.md 6.6).
+    /// 그 외 방에는 키가 없다.
+    var participants: [String]?
 }
 
 /// 메시지 작성자. `kind` 판별자는 **엄격**하다: 모르는 값이면 `DecodingError`(PROTOCOL.md 0절).
@@ -87,6 +91,24 @@ enum RoomMessageKind: String, LenientRawEnum {
     case unknown
 }
 
+/// 곁방 연결 카드의 종류(2026-09-14). 판별자가 아니므로 lenient.
+enum SideRoomEventKind: String, LenientRawEnum {
+    case opened, closed
+    case unknown
+}
+
+/// 그룹방(또는 다른 곁방)에 남는 곁방 연결 카드(PROTOCOL.md 6.1 `SideRoomLink`, 6.6).
+/// `kind: "system"` 메시지에만 붙고, `roomId` 로 그 곁방에 들어갈 수 있다.
+struct SideRoomRef: Codable, Hashable, Sendable {
+    /// 가리키는 곁방.
+    var roomId: String
+    /// 곁방의 참가자(그 방 `Room.participants` 와 같다).
+    var participants: [String]
+    var kind: SideRoomEventKind
+    /// `closed` 면 곁방에서 오간 메시지 수, `opened` 면 0.
+    var messages: Int
+}
+
 /// 방에 미러링된 승인. 실제 응답은 기존 `POST /sessions/:sessionId/approvals/:approvalId`.
 struct RoomApproval: Codable, Hashable, Sendable {
     var memberId: String
@@ -148,6 +170,8 @@ struct RoomMessage: Codable, Identifiable, Hashable, Sendable {
     var approval: RoomApproval?
     /// nullable. `kind: "changes"` 일 때만 값.
     var changes: ChangeSet?
+    /// nullable(키가 없는 구 레코드 포함). `kind: "system"` 이고 곁방이 열리거나 닫힐 때만 값(2026-09-14, PROTOCOL.md 6.6).
+    var sideRoom: SideRoomRef?
 }
 
 /// `POST /teams/:id/changes/:changeId/merge` 응답. `merged` 면 `--no-ff` 머지 커밋, `conflict` 면 `null`.

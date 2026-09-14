@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 방 화면(PROTOCOL.md 6.3, IOS.md 5.3 규칙을 방에 적용). `AppState.roomModel(for:roomId:client:)` 로 방별 `RoomModel` 을 얻는다(회전·재진입에도 유지).
+/// 방 화면(PROTOCOL.md 6.3, IOS.md 5.3 규칙을 방에 적용). 그룹방·DM·곁방이 같은 화면을 쓴다(PROTOCOL.md 6.6). `AppState.roomModel(for:roomId:client:)` 로 방별 `RoomModel` 을 얻는다(회전·재진입에도 유지).
 /// 바깥 스택 안에서 push 되는 화면이므로 자체 스택을 만들지 않는다(IOS.md 9.1).
 struct RoomView: View {
     @Environment(AppState.self) private var appState
@@ -36,6 +36,8 @@ struct RoomScreen: View {
     /// compact: 팀원 시트가 닫힌 뒤 push 할 타임라인.
     @State private var pendingMember: MemberTimelineRef?
     @State private var pushedMember: MemberTimelineRef?
+    /// compact: 연결 카드로 들어간 곁방(같은 `RoomView` 를 다시 쓴다).
+    @State private var pushedRoom: RoomRef?
     /// 승인 카드 "자세히 보기" → `ApprovalSheet`(배너와 같은 모델).
     @State private var detailApproval: Approval?
 
@@ -77,10 +79,15 @@ struct RoomScreen: View {
                 VStack(spacing: 0) {
                     if let member = model.dmMember {
                         MemberChip(member: member, compact: true)
+                    } else if isSideRoom {
+                        Text(model.room?.name ?? String(localized: "곁방"))
+                            .font(.headline)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     } else {
                         Text("#전체").font(.headline)
                     }
-                    Text(teamName)
+                    Text(subtitle)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -122,6 +129,9 @@ struct RoomScreen: View {
         .navigationDestination(item: $pushedMember) { ref in
             TimelineView(sessionId: ref.sessionId)
         }
+        .navigationDestination(item: $pushedRoom) { ref in
+            RoomView(teamId: ref.teamId, roomId: ref.roomId)
+        }
         .sheet(item: $detailApproval) { approval in
             ApprovalSheet(model: model, approvalId: approval.approvalId)
         }
@@ -158,6 +168,7 @@ struct RoomScreen: View {
                             onReply: reply,
                             onOpenMember: openMember(sessionId:),
                             onApprovalDetail: { id in detailApproval = model.pendingApprovals.first { $0.approvalId == id } },
+                            onOpenSideRoom: openSideRoom(roomId:),
                             mergeSubmit: model.mergeSubmit,
                             onMerge: { change in Task { await model.requestMerge(change) } },
                             onDismiss: { change in Task { await model.dismiss(change) } }
@@ -206,6 +217,24 @@ struct RoomScreen: View {
         teamsStore.team(id: model.teamId)?.name ?? String(localized: "팀")
     }
 
+    private var isSideRoom: Bool { model.room?.kind == .side }
+
+    /// 툴바 부제: 보통은 팀 이름, 곁방은 "에이전트 간 · 참가자 N명".
+    private var subtitle: String {
+        guard isSideRoom else { return teamName }
+        return String(localized: "에이전트 간 · 참가자 \(model.participants.count)명")
+    }
+
+    /// 곁방 연결 카드 탭: compact 는 같은 스택에 push, regular(iPad)는 content 열의 선택을 바꾼다.
+    private func openSideRoom(roomId: String) {
+        let ref = RoomRef(teamId: model.teamId, roomId: roomId)
+        if horizontalSizeClass == .regular {
+            appState.selectedRoom = ref
+        } else {
+            pushedRoom = ref
+        }
+    }
+
     /// 컨텍스트 메뉴 "@이름에게 답장" → 컴포저에 `@이름 ` 삽입.
     private func reply(to member: TeamMember) {
         insertRequest = "@\(member.name) "
@@ -228,7 +257,8 @@ struct RoomScreen: View {
     }
 }
 
-/// 항목 종류 → 카드/행. 에이전트 답변은 `MessageCard` + (work 가 있으면) 아래 12pt 간격의 `WorkSummaryCard`,
+/// 항목 종류 → 카드/행. 곁방 연결 카드는 `SideRoomCard`(탭하면 그 곁방),
+/// 에이전트 답변은 `MessageCard` + (work 가 있으면) 아래 12pt 간격의 `WorkSummaryCard`,
 /// 승인은 `RoomApprovalCard`(응답은 배너·시트), 변경은 `ChangesReadyCard`(머지·거절은 `RoomModel` REST, 확정은 서버 값).
 struct RoomEntryRow: View {
     let entry: RoomEntry
@@ -238,6 +268,8 @@ struct RoomEntryRow: View {
     var onOpenMember: ((String) -> Void)? = nil
     /// 승인 카드 "자세히 보기"(approvalId).
     var onApprovalDetail: ((String) -> Void)? = nil
+    /// 곁방 연결 카드 탭 → 그 곁방(roomId).
+    var onOpenSideRoom: ((String) -> Void)? = nil
     var mergeSubmit: MergeSubmitState = .idle
     var onMerge: ((ChangeSet) -> Void)? = nil
     var onDismiss: ((ChangeSet) -> Void)? = nil
@@ -259,6 +291,12 @@ struct RoomEntryRow: View {
                     }
                 }
             case .system:
+                SystemRow(payload: SystemPayload(text: message.text))
+            }
+        case .sideRoom(let message):
+            if let state = SideRoomCardState.make(message: message, members: members) {
+                SideRoomCard(state: state) { roomId in onOpenSideRoom?(roomId) }
+            } else {
                 SystemRow(payload: SystemPayload(text: message.text))
             }
         case .system(let message):

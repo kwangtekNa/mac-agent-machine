@@ -71,6 +71,53 @@ final class RoomCardsRenderTests: XCTestCase {
         XCTAssertLessThan(resolvedHeight, pendingHeight, "해결되면 한 줄 요약만 남는다")
     }
 
+    func testSideRoomCardRendersTitleAndConclusion() async throws {
+        let opened = try message("room.message.side-opened")
+        let state = try XCTUnwrap(SideRoomCardState.make(message: opened, members: team.members))
+        XCTAssertEqual(state.title, "민수 ↔ 지연 곁방을 열었습니다")
+
+        // 실제 창에 붙여 레이아웃이 도는지 본다(다른 카드 렌더 테스트와 같은 방식).
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let controller = UIHostingController(rootView: SideRoomCard(state: state, onOpen: { _ in }))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        controller.view.layoutIfNeeded()
+        for _ in 0..<3 {
+            try await Task.sleep(for: .milliseconds(20))
+            controller.view.layoutIfNeeded()
+        }
+        XCTAssertGreaterThan(controller.view.bounds.height, 0)
+
+        let openedHeight = height(SideRoomCard(state: state, onOpen: { _ in }))
+        XCTAssertGreaterThan(openedHeight, 40, "제목 줄 + 아바타 줄")
+        XCTAssertLessThan(openedHeight, 120, "펼친 본문이 아니라 두 줄짜리 카드")
+
+        let closed = try XCTUnwrap(SideRoomCardState.make(message: try message("room.message.side-closed"), members: team.members))
+        XCTAssertEqual(closed.detail, "린트 오류 3건을 고쳤습니다")
+        XCTAssertGreaterThan(
+            height(SideRoomCard(state: closed, onOpen: { _ in })), openedHeight,
+            "결론 한 줄이 붙으면 카드가 커진다"
+        )
+
+        // 제목이 길어져 두 줄이 되지는 않는다(IOS.md 5.1 카드 제목은 한 줄).
+        let long = SideRoomCardState(
+            title: String(repeating: "아주 긴 제목 ", count: 20), detail: nil, isClosed: false,
+            roomId: state.roomId, participants: state.participants, createdAt: state.createdAt
+        )
+        XCTAssertEqual(height(SideRoomCard(state: long, onOpen: { _ in })), openedHeight, accuracy: 1)
+    }
+
+    func testRoomEntryRowDrawsSideRoomCard() throws {
+        let opened = try message("room.message.side-opened")
+        let entry = RoomEntry.make(opened)
+        let rowHeight = height(RoomEntryRow(entry: entry, members: team.members, onReply: { _ in }))
+        let plain = height(RoomEntryRow(entry: .system(opened), members: team.members, onReply: { _ in }))
+        XCTAssertGreaterThan(rowHeight, plain, "연결 카드는 한 줄짜리 시스템 행보다 크다")
+        XCTAssertEqual(ItemStyle.roomStyle(for: entry).symbol, "bubble.left.and.bubble.right")
+        XCTAssertEqual(ItemStyle.roomStyle(for: entry).tint, .secondary)
+    }
+
     func testRoomEntryRowUsesCardsAndWorkSummary() throws {
         let members = team.members
         let agent = try message("room.message.agent")

@@ -21,6 +21,8 @@ struct TeamRoomRow: Identifiable, Equatable {
     enum Kind: Equatable {
         case group
         case dm(TeamMember)
+        /// 곁방. 값은 아는 참가자(서버가 준 순서). 이름은 서버가 만든 `room.name` 이다(PROTOCOL.md 6.6).
+        case side([TeamMember])
     }
 
     let room: Room
@@ -28,24 +30,76 @@ struct TeamRoomRow: Identifiable, Equatable {
 
     var id: String { room.id }
 
-    /// 접근성 식별자 `rooms.group` / `rooms.dm.<memberId>`.
+    /// 접근성 식별자 `rooms.group` / `rooms.dm.<memberId>` / `rooms.side.<roomId>`.
     var identifier: String {
         switch kind {
         case .group: "rooms.group"
         case .dm(let member): "rooms.dm.\(member.id)"
+        case .side: "rooms.side.\(room.id)"
         }
     }
 }
 
+/// 방 목록의 한 섹션. 비어 있는 섹션은 만들지 않는다(곁방이 없으면 "에이전트 간" 섹션 자체가 없다).
+struct TeamRoomSection: Identifiable, Equatable {
+    enum Kind: String {
+        case group, dm, side
+    }
+
+    let kind: Kind
+    /// nil 이면 헤더 없음(그룹방).
+    let title: String?
+    let footer: String?
+    let rows: [TeamRoomRow]
+
+    var id: String { kind.rawValue }
+}
+
 enum TeamRoomsLogic {
-    /// `#전체` 먼저, DM 은 팀원 순서. 팀원을 모르는 DM 은 뺀다.
+    /// `#전체` → DM(팀원 순서) → 곁방(최근 메시지 순) 순의 평평한 목록. 팀원을 모르는 DM 은 뺀다.
     static func rows(team: Team) -> [TeamRoomRow] {
+        sections(team: team).flatMap(\.rows)
+    }
+
+    /// 세 섹션(`group` / `dm` / `side`). 행이 없는 섹션은 빼므로 곁방이 없으면 섹션도 없다.
+    static func sections(team: Team) -> [TeamRoomSection] {
         let groups = team.rooms.filter { $0.kind == .group }.map { TeamRoomRow(room: $0, kind: .group) }
         let dms = team.members.compactMap { member -> TeamRoomRow? in
             guard let room = team.rooms.first(where: { $0.kind == .dm && $0.memberId == member.id }) else { return nil }
             return TeamRoomRow(room: room, kind: .dm(member))
         }
-        return groups + dms
+        let sides = team.rooms
+            .filter { $0.kind == .side }
+            .sorted(by: sideRoomOrder)
+            .map { room in
+                TeamRoomRow(
+                    room: room,
+                    kind: .side((room.participants ?? []).compactMap { id in team.members.first { $0.id == id } })
+                )
+            }
+        return [
+            TeamRoomSection(
+                kind: .group, title: nil,
+                footer: String(localized: "멘션 없는 #전체 메시지는 팀장에게, @이름 은 그 팀원에게 갑니다."),
+                rows: groups
+            ),
+            TeamRoomSection(kind: .dm, title: String(localized: "DM"), footer: nil, rows: dms),
+            TeamRoomSection(
+                kind: .side, title: String(localized: "에이전트 간"),
+                footer: String(localized: "에이전트끼리 나눈 대화입니다. 들어가서 직접 끼어들 수 있습니다."),
+                rows: sides
+            ),
+        ].filter { !$0.rows.isEmpty }
+    }
+
+    /// 곁방 정렬: 최근 메시지가 먼저, 메시지가 없으면 뒤에서 이름 순.
+    private static func sideRoomOrder(_ lhs: Room, _ rhs: Room) -> Bool {
+        switch (lhs.lastMessageAt, rhs.lastMessageAt) {
+        case (let l?, let r?): return l == r ? lhs.name < rhs.name : l > r
+        case (_?, nil): return true
+        case (nil, _?): return false
+        case (nil, nil): return lhs.name < rhs.name
+        }
     }
 
     /// 방을 열지 않아도 보이는 상태: 세션 목록에 팀원 세션이 있으면 그 status 매핑(`MemberStatus`), 없으면 서버 `member.state`.
@@ -59,7 +113,7 @@ enum TeamRoomsLogic {
     }
 }
 
-/// 팀의 방 목록: `#전체` + 팀원별 DM. 탭하면 같은 스택에서 `RoomView` 로 push 한다.
+/// 팀의 방 목록: `#전체` + 팀원별 DM + 에이전트끼리의 곁방. 탭하면 같은 스택에서 `RoomView` 로 push 한다.
 /// 툴바: 팀 설정(compact 는 push, iPad 는 시트), 작업 전부 중단. 상태 점은 `TeamsStore`+`SessionsStore` 조인.
 struct TeamRoomsView: View {
     @Environment(TeamsStore.self) private var teamsStore
@@ -91,15 +145,23 @@ struct TeamRoomsView: View {
                     ErrorBannerRow(message: errorMessage) { self.errorMessage = nil }
                 }
             }
-            Section {
-                ForEach(TeamRoomsLogic.rows(team: team)) { row in
-                    NavigationLink(value: RoomRef(teamId: team.id, roomId: row.room.id)) {
-                        RoomRowView(row: row, state: rowState(row))
+            ForEach(TeamRoomsLogic.sections(team: team)) { section in
+                Section {
+                    ForEach(section.rows) { row in
+                        NavigationLink(value: RoomRef(teamId: team.id, roomId: row.room.id)) {
+                            RoomRowView(row: row, state: rowState(row))
+                        }
+                        .accessibilityIdentifier(row.identifier)
                     }
-                    .accessibilityIdentifier(row.identifier)
+                } header: {
+                    if let title = section.title {
+                        Text(title)
+                    }
+                } footer: {
+                    if let footer = section.footer {
+                        Text(footer)
+                    }
                 }
-            } footer: {
-                Text("멘션 없는 #전체 메시지는 팀장에게, @이름 은 그 팀원에게 갑니다.")
             }
         }
         .listStyle(.insetGrouped)
@@ -210,6 +272,29 @@ struct RoomRowView: View {
             .padding(.vertical, 2)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(member.name) DM, \(member.roleLabel)\(member.isLead ? ", 팀장" : "")" + (state.map { ", \($0.label)" } ?? ""))
+        case .side(let participants):
+            HStack(spacing: 10) {
+                HStack(spacing: -8) {
+                    ForEach(participants) { member in
+                        MemberAvatar(member: member, size: 24)
+                    }
+                }
+                Text(row.room.name)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                if let last = TeamRoomsLogic.lastMessageLabel(row.room) {
+                    Text(last)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 2)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                "\(row.room.name) 곁방" + (TeamRoomsLogic.lastMessageLabel(row.room).map { ", 마지막 메시지 \($0)" } ?? "")
+            )
         }
     }
 }

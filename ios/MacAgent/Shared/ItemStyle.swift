@@ -45,7 +45,8 @@ struct ItemStyle: Equatable {
         }
     }
 
-    /// 방 항목(PROTOCOL.md 6.1 `RoomMessage.kind`)용. 메시지는 아이콘 없음, 승인·변경은 타임라인의 같은 종류와 같은 아이콘, system 은 `info.circle`.
+    /// 방 항목(PROTOCOL.md 6.1 `RoomMessage.kind`)용. 메시지는 아이콘 없음, 승인·변경은 타임라인의 같은 종류와 같은 아이콘,
+    /// 곁방 연결 카드는 말풍선 둘, system 은 `info.circle`.
     static func roomStyle(for entry: RoomEntry) -> ItemStyle {
         switch entry {
         case .message(let message):
@@ -65,6 +66,8 @@ struct ItemStyle: Equatable {
             default:
                 return ItemStyle(symbol: "plus.forwardslash.minus", tint: .teal, defaultExpanded: true)
             }
+        case .sideRoom:
+            return ItemStyle(symbol: "bubble.left.and.bubble.right", tint: .secondary, defaultExpanded: true)
         case .system:
             return ItemStyle(symbol: "info.circle", tint: .secondary, defaultExpanded: true)
         }

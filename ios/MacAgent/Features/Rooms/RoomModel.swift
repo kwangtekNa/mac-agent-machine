@@ -52,6 +52,12 @@ final class RoomModel {
         guard room?.kind == .dm, let id = room?.memberId else { return nil }
         return member(id: id)
     }
+    /// 곁방 참가자(`room.participants` 순서, 아는 팀원만). 곁방이 아니면 빈 배열(PROTOCOL.md 6.6).
+    /// 컴포저 캡션·멘션 자동완성·툴바 부제가 쓴다.
+    var participants: [TeamMember] {
+        guard room?.kind == .side, let ids = room?.participants else { return [] }
+        return ids.compactMap { id in member(id: id) }
+    }
     var lead: TeamMember? { members.first { $0.isLead } }
     /// 컴포저 캡션용: 그룹방에서 멘션 없는 메시지는 팀장에게 간다.
     var leadName: String? { lead?.name }

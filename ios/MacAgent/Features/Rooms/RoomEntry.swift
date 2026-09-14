@@ -8,12 +8,14 @@ enum RoomEntry: Identifiable, Hashable, Sendable {
     case approval(RoomMessage)
     /// `kind: changes`, `message.changes` 필수.
     case changes(RoomMessage)
+    /// `kind: system` 이고 `message.sideRoom` 이 있는 곁방 연결 카드(2026-09-14, PROTOCOL.md 6.6).
+    case sideRoom(RoomMessage)
     /// `kind: system` 또는 강등된 카드.
     case system(RoomMessage)
 
     var message: RoomMessage {
         switch self {
-        case .message(let m), .approval(let m), .changes(let m), .system(let m): m
+        case .message(let m), .approval(let m), .changes(let m), .sideRoom(let m), .system(let m): m
         }
     }
 
@@ -29,6 +31,8 @@ enum RoomEntry: Identifiable, Hashable, Sendable {
             return .approval(message)
         case .changes where message.changes != nil:
             return .changes(message)
+        case .system where message.sideRoom != nil:
+            return .sideRoom(message)
         case .approval, .changes, .system, .unknown:
             return .system(message)
         }

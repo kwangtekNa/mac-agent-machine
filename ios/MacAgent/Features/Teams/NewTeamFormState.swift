@@ -2,7 +2,9 @@ import Foundation
 
 extension TeamSettings {
     /// PROTOCOL.md 6.1 기본값.
-    static let defaults = TeamSettings(maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40)
+    static let defaults = TeamSettings(
+        maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40, sideRoomMaxParticipants: 3
+    )
     static let maxHopsRange = 0...50
     static let maxConcurrentRange = 1...8
 }

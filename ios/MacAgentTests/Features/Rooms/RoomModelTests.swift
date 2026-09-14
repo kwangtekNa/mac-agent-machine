@@ -288,6 +288,50 @@ final class RoomModelTests: XCTestCase {
         XCTAssertEqual(model.lastSeq, 1)
     }
 
+    // MARK: - 곁방 (2026-09-14, PROTOCOL.md 6.6)
+
+    func testSideRoomDerivesParticipantsFromMembers() async throws {
+        let sideRoomId = "room_01J8ZQ4K5N7P9R3S6T8V0W2XR3"
+        install([
+            ("GET", "/api/v1/teams/\(teamId)", 200, try FixtureLoader.data("rest/team-detail.json")),
+            ("GET", "/api/v1/teams/\(teamId)/rooms/\(sideRoomId)", 200, try json("rest/room.json") { json in
+                json["room"] = [
+                    "id": sideRoomId, "teamId": self.teamId, "kind": "side", "memberId": NSNull(),
+                    "name": "민수 ↔ 지연", "lastSeq": 7, "lastMessageAt": "2026-09-12T09:31:20Z",
+                    "participants": [self.devId, self.leadId],
+                ]
+                json["messages"] = []
+            }),
+        ])
+        let model = makeModel(roomId: sideRoomId)
+        defer { model.stop() }
+        await model.start()
+
+        XCTAssertEqual(model.room?.kind, .side)
+        XCTAssertFalse(model.isGroup)
+        XCTAssertNil(model.dmMember, "곁방은 DM 상대가 없다")
+        XCTAssertEqual(model.participants.map(\.id), [devId, leadId], "room.participants 순서를 따른다")
+        XCTAssertEqual(model.lastSeq, 7)
+    }
+
+    func testSideRoomParticipantsSkipUnknownMembersAndAreEmptyElsewhere() async throws {
+        try installTeamAndRoom()
+        let model = makeModel()
+        defer { model.stop() }
+        await model.start()
+        XCTAssertTrue(model.participants.isEmpty, "그룹방은 참가자가 없다")
+
+        // 스냅샷이 곁방으로 바뀌면(같은 방 id) 참가자도 따라 바뀐다. 모르는 팀원은 뺀다.
+        model.apply(try event("room.snapshot", mutate: { json in
+            json["room"] = [
+                "id": self.roomId, "teamId": self.teamId, "kind": "side", "memberId": NSNull(),
+                "name": "민수 ↔ 유령", "lastSeq": 4, "lastMessageAt": NSNull(),
+                "participants": [self.leadId, "agt_ghost"],
+            ]
+        }))
+        XCTAssertEqual(model.participants.map(\.id), [leadId], "모르는 팀원은 뺀다")
+    }
+
     // MARK: - error
 
     func testRecoverableErrorIsTransientAndFatalErrorStays() async throws {

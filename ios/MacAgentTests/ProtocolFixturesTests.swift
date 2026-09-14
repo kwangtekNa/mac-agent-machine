@@ -62,14 +62,9 @@ final class ProtocolFixturesTests: XCTestCase {
         t["rest/net-ports.json"] = decode(NetPortsResponse.self)
         // 2026-09-13 추가분(문서 변환) rest 1개
         t["rest/fs-render.json"] = decode(FsRenderResponse.self)
-        // room-ws/ 10개: 전부 RoomEvent (세션 ServerEvent 와 별도 enum)
+        // room-ws/ 12개: 전부 RoomEvent (세션 ServerEvent 와 별도 enum). 곁방 연결 카드 2개(2026-09-14)도 여기 있다.
         for name in roomWsExpectations.keys {
             t["room-ws/\(name).json"] = decode(RoomEvent.self)
-        }
-        // 2026-09-14 추가분(곁방 연결 카드) room-ws 2개.
-        // 아직 Swift 에 `SideRoomLink` 타입이 없어 임시로 JSONValue 로만 디코드한다(다음 step 이 실제 타입으로 바꾼다).
-        for name in ADDED_2026_09_14 {
-            t[name] = decode(JSONValue.self)
         }
         // room-client/ 3개: 전부 RoomClientMessage
         for name in roomClientExpectations.keys {
@@ -163,6 +158,9 @@ final class ProtocolFixturesTests: XCTestCase {
         "room.message.changes": .roomMessage,
         "room.message.system": .roomMessage,
         "room.message.updated": .roomMessageUpdated,
+        // 2026-09-14 추가분(곁방 연결 카드)
+        "room.message.side-opened": .roomMessage,
+        "room.message.side-closed": .roomMessage,
         "room.status": .roomStatus,
         "room.error": .roomError,
         "pong": .pong,
@@ -219,11 +217,11 @@ final class ProtocolFixturesTests: XCTestCase {
         XCTAssertEqual(Set(Self.clientExpectations.values), Set(ClientMessage.MessageType.allCases))
         XCTAssertEqual(Set(Self.roomWsExpectations.values), Set(RoomEvent.EventType.allCases))
         XCTAssertEqual(Set(Self.roomClientExpectations.values), Set(RoomClientMessage.MessageType.allCases))
-        // 방 fixture 표는 ADDED_2026_09_12 와 정확히 같은 파일을 가리킨다
+        // 방 fixture 표는 ADDED_2026_09_12 ∪ ADDED_2026_09_14 와 정확히 같은 파일을 가리킨다
         let roomFiles = Set(Self.roomWsExpectations.keys.map { "room-ws/\($0).json" })
             .union(Self.roomClientExpectations.keys.map { "room-client/\($0).json" })
-        XCTAssertTrue(roomFiles.isSubset(of: Self.ADDED_2026_09_12))
-        XCTAssertEqual(roomFiles.count, 13)
+        XCTAssertTrue(roomFiles.isSubset(of: Self.ADDED_2026_09_12.union(Self.ADDED_2026_09_14)))
+        XCTAssertEqual(roomFiles.count, 15)
     }
 
     // MARK: - 전수 디코딩
@@ -302,6 +300,49 @@ final class ProtocolFixturesTests: XCTestCase {
                 break
             }
         }
+    }
+
+    /// 2026-09-14 곁방 연결 카드(PROTOCOL.md 6.6): `RoomMessage.sideRoom` 이 실제 타입으로 디코드되고 `kind` 는 lenient 다.
+    func testSideRoomFixturesDecodeIntoSideRoomLink() throws {
+        func message(_ name: String) throws -> RoomMessage {
+            guard case .roomMessage(let e) = try decodeFixture(RoomEvent.self, "room-ws/\(name).json") else {
+                throw XCTSkip("room.message 가 아니다")
+            }
+            return e.message
+        }
+        let opened = try message("room.message.side-opened")
+        XCTAssertEqual(opened.kind, .system)
+        XCTAssertEqual(opened.author.kind, .system)
+        let openedLink = try XCTUnwrap(opened.sideRoom)
+        XCTAssertEqual(openedLink.kind, .opened)
+        XCTAssertEqual(openedLink.roomId, "room_01J8ZQ4K5N7P9R3S6T8V0W2XR3")
+        XCTAssertEqual(openedLink.participants, [
+            "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1", "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2",
+        ])
+        XCTAssertEqual(openedLink.messages, 0)
+
+        let closed = try message("room.message.side-closed")
+        let closedLink = try XCTUnwrap(closed.sideRoom)
+        XCTAssertEqual(closedLink.kind, .closed)
+        XCTAssertEqual(closedLink.messages, 7)
+        XCTAssertEqual(closedLink.roomId, openedLink.roomId)
+
+        // 다른 방 메시지에는 sideRoom 이 없다(null 또는 키 없음).
+        XCTAssertNil(try message("room.message.system").sideRoom)
+        XCTAssertNil(try message("room.message.agent").sideRoom)
+
+        // 모르는 sideRoom.kind 는 `.unknown`(판별자가 아니므로 lenient, PROTOCOL.md 0절).
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: FixtureLoader.data("room-ws/room.message.side-opened.json")) as? [String: Any]
+        )
+        var m = try XCTUnwrap(json["message"] as? [String: Any])
+        var link = try XCTUnwrap(m["sideRoom"] as? [String: Any])
+        link["kind"] = "paused"
+        m["sideRoom"] = link
+        json["message"] = m
+        let lenient = try JSONCoding.decoder.decode(RoomEvent.self, from: JSONSerialization.data(withJSONObject: json))
+        guard case .roomMessage(let e) = lenient else { return XCTFail("room.message 가 아니다") }
+        XCTAssertEqual(e.message.sideRoom?.kind, .unknown)
     }
 
     func testRoomClientFixturesRoundTrip() throws {

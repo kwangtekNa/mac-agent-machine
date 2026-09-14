@@ -429,8 +429,14 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(lastRequest?.httpMethod, "PATCH")
         XCTAssertEqual(lastRequest?.url?.absoluteString, "http://127.0.0.1:7777/api/v1/teams/\(teamId)")
         XCTAssertEqual(try bodyDictionary(), ["name": "새 이름"] as NSDictionary)
-        _ = try await client.patchTeam(id: teamId, PatchTeamRequest(settings: TeamSettings(maxHops: 3, maxConcurrent: 1, contextMaxMessages: 20)))
-        XCTAssertEqual(try bodyDictionary(), ["settings": ["maxHops": 3, "maxConcurrent": 1, "contextMaxMessages": 20]] as NSDictionary)
+        _ = try await client.patchTeam(
+            id: teamId,
+            PatchTeamRequest(settings: TeamSettings(maxHops: 3, maxConcurrent: 1, contextMaxMessages: 20, sideRoomMaxParticipants: 3))
+        )
+        XCTAssertEqual(
+            try bodyDictionary(),
+            ["settings": ["maxHops": 3, "maxConcurrent": 1, "contextMaxMessages": 20, "sideRoomMaxParticipants": 3]] as NSDictionary
+        )
 
         try stub(status: 200, body: Data(#"{"ok":true}"#.utf8))
         try await client.deleteTeam(id: teamId)

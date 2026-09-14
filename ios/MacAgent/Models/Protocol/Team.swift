@@ -55,11 +55,13 @@ struct TeamMember: Codable, Identifiable, Hashable, Sendable {
     var updatedAt: Date
 }
 
-/// 기본값 `maxHops` 6, `maxConcurrent` 2, `contextMaxMessages` 40.
+/// 기본값 `maxHops` 6, `maxConcurrent` 2, `contextMaxMessages` 40, `sideRoomMaxParticipants` 3.
 struct TeamSettings: Codable, Hashable, Sendable {
     var maxHops: Int
     var maxConcurrent: Int
     var contextMaxMessages: Int
+    /// 곁방 참가자 수 상한(2~8). 넘으면 곁방을 만들지 않고 그룹방에 남긴다(2026-09-14, PROTOCOL.md 6.6).
+    var sideRoomMaxParticipants: Int
 }
 
 struct Team: Codable, Identifiable, Hashable, Sendable {

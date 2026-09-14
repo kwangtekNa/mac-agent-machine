@@ -10,6 +10,9 @@ final class RoomComposerStateTests: XCTestCase {
     private var dev: TeamMember!
     private var group: Room!
     private var dm: Room!
+    /// 곁방(참가자 = 민수·지연)과 참가자가 아닌 팀원.
+    private var side: Room!
+    private var outsider: TeamMember!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -19,6 +22,21 @@ final class RoomComposerStateTests: XCTestCase {
         dev = try XCTUnwrap(members.first { !$0.isLead })
         group = try XCTUnwrap(team.rooms.first { $0.kind == .group })
         dm = try XCTUnwrap(team.rooms.first { $0.kind == .dm })
+        side = try XCTUnwrap(team.rooms.first { $0.kind == .side })
+        outsider = {
+            var member = members[1]
+            member.id = "agt_outsider"
+            member.name = "철수"
+            member.handle = "chulsoo"
+            return member
+        }()
+    }
+
+    /// 곁방 케이스용: 팀원이 3명이고 그중 둘(민수·지연)만 이 곁방 참가자다.
+    private func makeSide(_ text: String, room: Room? = nil, lead: TeamMember?? = nil) -> RoomComposerState {
+        RoomComposerState.make(
+            text: text, room: room ?? side, members: members + [outsider], lead: lead ?? self.lead
+        )
     }
 
     private func make(_ text: String, room: Room? = nil, lead: TeamMember?? = nil) -> RoomComposerState {
@@ -70,6 +88,40 @@ final class RoomComposerStateTests: XCTestCase {
         let state = RoomComposerState.make(text: "@지", room: nil, members: members, lead: lead)
         XCTAssertNil(state.caption)
         XCTAssertTrue(state.suggestions.isEmpty)
+    }
+
+    // MARK: - 곁방 (2026-09-14, PROTOCOL.md 6.6)
+
+    func testSideRoomWithoutMentionForwardsToEveryParticipant() {
+        XCTAssertEqual(makeSide("어떻게 할까?").caption, "참가자 전원에게 전달됩니다")
+        XCTAssertNil(makeSide("").caption)
+        XCTAssertNil(makeSide("@지연 봐줘").caption, "멘션이 있으면 캡션 없음")
+        XCTAssertNil(makeSide("@철수 봐줘").caption, "참가자가 아닌 팀원 멘션도 아는 팀원이다(새 곁방으로 간다)")
+        XCTAssertEqual(makeSide("@영희 봐줘").caption, "모르는 팀원 @영희 는 무시됩니다", "모르는 토큰이 우선")
+        XCTAssertEqual(
+            makeSide("어떻게 할까?", lead: .some(nil)).caption, "참가자 전원에게 전달됩니다",
+            "곁방 캡션은 팀장과 무관하다"
+        )
+    }
+
+    func testSideRoomSuggestionsAreLimitedToParticipants() throws {
+        XCTAssertEqual(makeSide("@").suggestions.map(\.id), [lead.id, dev.id], "그 방 참가자만")
+        XCTAssertTrue(makeSide("@철").suggestions.isEmpty, "참가자가 아닌 팀원은 제안하지 않는다")
+        XCTAssertEqual(makeSide("@철").caption, "참가자 전원에게 전달됩니다", "입력 중인 토큰은 캡션을 바꾸지 않는다")
+        XCTAssertEqual(makeSide("@지").applying(dev), "@지연 ")
+
+        XCTAssertEqual(
+            makeSide("@", room: group).suggestions.map(\.id), [lead.id, dev.id, outsider.id],
+            "그룹방은 전체 팀원 그대로"
+        )
+        XCTAssertEqual(makeSide("@철", room: group).suggestions.map(\.id), [outsider.id])
+    }
+
+    func testSideRoomWithoutParticipantsFallsBackToNoSuggestions() throws {
+        var unknownSide = side!
+        unknownSide.participants = nil
+        XCTAssertTrue(makeSide("@", room: unknownSide).suggestions.isEmpty, "참가자를 모르면 제안하지 않는다")
+        XCTAssertEqual(makeSide("어떻게 할까?", room: unknownSide).caption, "참가자 전원에게 전달됩니다")
     }
 
     // MARK: - 제안 칩

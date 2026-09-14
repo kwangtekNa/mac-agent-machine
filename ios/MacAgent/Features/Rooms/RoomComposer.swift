@@ -1,20 +1,27 @@
 import SwiftUI
 
 /// 컴포저가 텍스트·방·팀원으로 계산하는 것(순수): 캡션, 제안 칩, 제안 적용·답장 삽입.
-/// 그룹방에서만 의미가 있다(DM 은 멘션을 무시하므로 캡션도 제안도 없다).
+/// 그룹방과 곁방에서만 의미가 있다(DM 은 멘션을 무시하므로 캡션도 제안도 없다).
 struct RoomComposerState: Equatable {
-    /// 그룹방·멘션 없음·텍스트 있음 → "팀장 민수에게 전달됩니다", 모르는 `@토큰` → "모르는 팀원 @xxx 는 무시됩니다"(우선).
+    /// 그룹방·멘션 없음·텍스트 있음 → "팀장 민수에게 전달됩니다", 곁방은 "참가자 전원에게 전달됩니다"(PROTOCOL.md 6.4),
+    /// 모르는 `@토큰` → "모르는 팀원 @xxx 는 무시됩니다"(우선).
     var caption: String?
-    /// 텍스트 끝 `@토큰` 에 맞는 팀원(`MentionParser.suggestions`).
+    /// 텍스트 끝 `@토큰` 에 맞는 팀원(`MentionParser.suggestions`). 곁방은 그 방 참가자만 제안한다.
     var suggestions: [TeamMember]
     var suggestionToken: Range<String.Index>?
     private var text: String
 
     static func make(text: String, room: Room?, members: [TeamMember], lead: TeamMember?) -> RoomComposerState {
-        guard room?.kind == .group else {
+        guard let room, room.kind == .group || room.kind == .side else {
             return RoomComposerState(caption: nil, suggestions: [], suggestionToken: nil, text: text)
         }
-        let suggestion = MentionParser.suggestions(for: text, members: members)
+        let isSide = room.kind == .side
+        // 제안은 그 방에서 이어질 수 있는 상대만(곁방은 참가자). 모르는 토큰·멘션 판정은 팀 전체로 한다
+        // (곁방에서 참가자가 아닌 팀원을 멘션하면 서버가 새 곁방을 만든다, PROTOCOL.md 6.4).
+        let candidates = isSide
+            ? members.filter { room.participants?.contains($0.id) == true }
+            : members
+        let suggestion = MentionParser.suggestions(for: text, members: candidates)
         var caption: String?
         if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let unknown = MentionParser.unknownTokens(in: text, members: members)
@@ -23,8 +30,12 @@ struct RoomComposerState: Equatable {
                 caption = String(localized: "모르는 팀원 \(list) 는 무시됩니다")
             } else {
                 let mentions = MentionParser.mentions(in: text, members: members)
-                if mentions.memberIds.isEmpty, !mentions.all, let lead {
-                    caption = String(localized: "팀장 \(lead.name)에게 전달됩니다")
+                if mentions.memberIds.isEmpty, !mentions.all {
+                    if isSide {
+                        caption = String(localized: "참가자 전원에게 전달됩니다")
+                    } else if let lead {
+                        caption = String(localized: "팀장 \(lead.name)에게 전달됩니다")
+                    }
                 }
             }
         }

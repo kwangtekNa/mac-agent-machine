@@ -38,7 +38,10 @@ final class NewTeamFormStateTests: XCTestCase {
         XCTAssertTrue(form.members.isEmpty)
         XCTAssertNil(form.templateId)
         XCTAssertEqual(form.settings, TeamSettings.defaults)
-        XCTAssertEqual(TeamSettings.defaults, TeamSettings(maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40))
+        XCTAssertEqual(
+            TeamSettings.defaults,
+            TeamSettings(maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40, sideRoomMaxParticipants: 3)
+        )
 
         let custom = NewTeamFormState.initial(initialCwd: "~/other", projects: projects)
         XCTAssertEqual(custom.directory.selectedPath, "~/other")

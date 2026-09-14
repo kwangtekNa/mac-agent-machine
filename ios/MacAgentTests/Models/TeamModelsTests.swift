@@ -155,7 +155,7 @@ final class TeamModelsTests: XCTestCase {
 
         XCTAssertEqual(RoleId.allCases.count, 6)
         XCTAssertEqual(TeamMemberState.allCases.count, 6)
-        XCTAssertEqual(RoomKind.allCases.count, 3)
+        XCTAssertEqual(RoomKind.allCases.count, 4, "group·dm·side·unknown")
         XCTAssertEqual(RoomMessageKind.allCases.count, 5)
         XCTAssertEqual(ChangeSetStatus.allCases.count, 7)
         XCTAssertEqual(RoleId.teamLead.rawValue, "team-lead")
@@ -375,8 +375,8 @@ final class TeamModelsTests: XCTestCase {
     func testTeamHasGroupRoomAndDMPerMember() throws {
         let team = try decodeFixture(Team.self, "rest/team.json")
         XCTAssertEqual(team.id, Self.teamId)
-        // 마지막은 곁방(`kind: "side"`, 2026-09-14 추가). Swift `RoomKind` 에 아직 case 가 없어 unknown 으로 디코드된다.
-        XCTAssertEqual(team.rooms.map(\.kind), [.group, .dm, .dm, .unknown])
+        // 마지막은 곁방(`kind: "side"`, 2026-09-14 추가. PROTOCOL.md 6.6).
+        XCTAssertEqual(team.rooms.map(\.kind), [.group, .dm, .dm, .side])
         let group = team.rooms[0]
         XCTAssertNil(group.memberId)
         XCTAssertEqual(group.name, "전체")
@@ -389,6 +389,15 @@ final class TeamModelsTests: XCTestCase {
         XCTAssertEqual(team.rooms[1].lastSeq, 0)
         XCTAssertNotNil(team.rooms[2].lastMessageAt)
         XCTAssertTrue(team.rooms.allSatisfy { $0.teamId == team.id })
+
+        // 곁방: 참가자 집합이 신원이고(정렬된 팀원 id 2개 이상) `memberId` 는 null, 이름은 `↔` 로 이은 참가자 이름.
+        let side = team.rooms[3]
+        XCTAssertEqual(side.participants, team.members.map(\.id))
+        XCTAssertNil(side.memberId)
+        XCTAssertEqual(side.name, "민수 ↔ 지연")
+        // 그 외 방은 키 자체가 없다.
+        XCTAssertNil(group.participants)
+        XCTAssertNil(team.rooms[1].participants)
     }
 
     func testTeamMembersAndSettings() throws {
@@ -396,7 +405,10 @@ final class TeamModelsTests: XCTestCase {
         XCTAssertEqual(team.name, "backend")
         XCTAssertEqual(team.cwd, "/Users/alice/work/app")
         XCTAssertEqual(team.baseBranch, "main")
-        XCTAssertEqual(team.settings, TeamSettings(maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40))
+        XCTAssertEqual(
+            team.settings,
+            TeamSettings(maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40, sideRoomMaxParticipants: 3)
+        )
         XCTAssertEqual(team.members.count, 2)
         XCTAssertEqual(team.members.map(\.id), [Self.leadId, Self.devId])
         XCTAssertEqual(team.members.map(\.name), ["민수", "지연"])
@@ -494,22 +506,24 @@ final class TeamModelsTests: XCTestCase {
         )
         let full = CreateTeamRequest(
             cwd: "~/work/app", name: "backend", members: [],
-            settings: TeamSettings(maxHops: 3, maxConcurrent: 1, contextMaxMessages: 20),
+            settings: TeamSettings(maxHops: 3, maxConcurrent: 1, contextMaxMessages: 20, sideRoomMaxParticipants: 3),
             templateId: "tpl_01J8ZQ4K5N7P9R3S6T8V0W2XP1"
         )
         XCTAssertEqual(
             try jsonObject(full),
             [
                 "cwd": "~/work/app", "name": "backend", "members": [],
-                "settings": ["maxHops": 3, "maxConcurrent": 1, "contextMaxMessages": 20],
+                "settings": ["maxHops": 3, "maxConcurrent": 1, "contextMaxMessages": 20, "sideRoomMaxParticipants": 3],
                 "templateId": "tpl_01J8ZQ4K5N7P9R3S6T8V0W2XP1",
             ] as NSDictionary
         )
 
         XCTAssertEqual(try jsonObject(PatchTeamRequest(name: "새 이름")), ["name": "새 이름"] as NSDictionary)
         XCTAssertEqual(
-            try jsonObject(PatchTeamRequest(settings: TeamSettings(maxHops: 2, maxConcurrent: 2, contextMaxMessages: 10))),
-            ["settings": ["maxHops": 2, "maxConcurrent": 2, "contextMaxMessages": 10]] as NSDictionary
+            try jsonObject(PatchTeamRequest(
+                settings: TeamSettings(maxHops: 2, maxConcurrent: 2, contextMaxMessages: 10, sideRoomMaxParticipants: 4)
+            )),
+            ["settings": ["maxHops": 2, "maxConcurrent": 2, "contextMaxMessages": 10, "sideRoomMaxParticipants": 4]] as NSDictionary
         )
         XCTAssertEqual(try jsonObject(PatchMemberRequest()), [:] as NSDictionary)
         XCTAssertEqual(try jsonObject(PatchMemberRequest(emoji: "🦊")), ["emoji": "🦊"] as NSDictionary)
