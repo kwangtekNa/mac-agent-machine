@@ -5,7 +5,25 @@
     {
       "step": 0,
       "name": "context-filter",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-14T15:36:01+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "02edda4c-35cb-4dca-9a64-baed58bf3791",
+          "cost_usd": 2.7527470000000003,
+          "duration_s": 354.7,
+          "num_turns": 35,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 2.752747,
+      "duration_s": 354.7,
+      "retries": 0,
+      "session_id": "02edda4c-35cb-4dca-9a64-baed58bf3791",
+      "summary": "format.ts 에 순수 함수 isContextRelevant 추가(자기 승인·변경 카드만 통과, 자기 text 제외, 나머지 대화·시스템 통과)하고 buildTurnText 맥락 필터를 이걸로 교체 — omitted 는 상한 초과분만 계수, 트리거는 필터와 무관하게 항상 마지막. docs/PROTOCOL.md 6.4 에 2026-09-14 한 줄 추가. 테스트: format.test.ts 에 표 기반 isContextRelevant + 남의 카드 20건 필터 + 트리거 방어 케이스, team-manager.test.ts 에 \"지연 승인 카드가 민수 턴 입력에서 빠지고 방에는 남는다\" 추가(필터 되돌려 실패 확인). AC 전부 통과(typecheck, npm test 842 passed, dev-smoke 1~24, scripts/test.sh OK). 방 로그·UI·승인/머지 흐름 무변경, format.ts 는 여전히 I/O 없는 순수 모듈.",
+      "completed_at": "2026-09-14T15:41:56+0900"
     },
     {
       "step": 1,
@@ -40,5 +58,6 @@
         3
       ]
     }
-  ]
+  ],
+  "created_at": "2026-09-14T15:36:01+0900"
 }
