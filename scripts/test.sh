@@ -41,6 +41,9 @@ npm run typecheck --if-present
 echo "==> unit tests"
 npm run test --if-present
 
+echo "==> install-dev-gateway.sh (--dry-run 단위 검사)"
+bash scripts/test-install-dev-gateway.sh
+
 if [ -f ios/project.yml ] && [ "${MAM_TEST_SKIP_IOS:-0}" != "1" ]; then
   echo "==> iOS build + test"
   # 클린 체크아웃에도 서명 xcconfig 가 있어야 generate 가 된다(팀 ID 비어 있어도 시뮬레이터 빌드는 가능).

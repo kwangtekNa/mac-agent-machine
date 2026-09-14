@@ -46,6 +46,8 @@ bash scripts/dev-smoke.sh --keep   # 빌드 → Fake 어댑터로 gateway 기동
 MAM_DEV_BIND=$(ipconfig getifaddr en0) node packages/server/dist/cli.js gateway --dev   # 앱에는 http://<그 IP>:7777 입력
 ```
 
+어디서나 같은 주소로 붙으려면 tailnet IP 에 바인딩한 개발 gateway 를 로그인 시 자동 시작시킨다: `bash scripts/install-dev-gateway.sh` (LaunchAgent `dev.mam.dev-gateway`, 상태 `--status`, 제거 `--uninstall`. 절차는 `docs/RUNBOOK.md` 8절).
+
 ```bash
 curl -s -H 'X-MAM-Protocol: 1' http://127.0.0.1:7777/api/v1/me
 curl -s -H 'X-MAM-Protocol: 1' -H 'Content-Type: application/json' \

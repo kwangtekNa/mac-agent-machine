@@ -139,6 +139,8 @@ mac-agent-machine/
 | `~/.mam/teams/<teamId>/` | user, 0700 | `team.json`, `rooms/<roomId>.events.jsonl`, `changes.json`, `worktrees/<memberId>/`(팀원 git worktree, 브랜치 `mam/<team-slug>/<handle>`) |
 | `~/.mam/team-templates/<tplId>.json` | user | 팀 템플릿(사용자별) |
 | `~/work/` | user | 기본 워크스페이스 루트 (설정 가능) |
+| `~/Library/LaunchAgents/dev.mam.dev-gateway.plist` | user, 0644 | 개발 gateway LaunchAgent(`scripts/install-dev-gateway.sh`). `MAM_DEV_BIND=tailscale` 로 tailnet IPv4:7777 에 바인딩하고 로그인 시 자동 시작한다. 정식 LaunchDaemon `dev.mam.gateway` 와 별개다(RUNBOOK 8절) |
+| `~/.mam/dev-gateway.log` | user | 위 LaunchAgent 의 stdout/stderr |
 
 ## 5. 설정 (`/etc/mam/config.json`)
 

@@ -126,3 +126,30 @@ Codex 는 `POST /api/v1/auth/codex/login` 이 `{ url, instructions: "링크를 �
 ## 7. 보안 노트
 
 네트워크 경계는 Tailscale이며 gateway는 tailnet IP에만 바인딩한다. 신원은 전송 계층(`tailscale whois`)에서만 오고 클라이언트 헤더는 덮어쓴다. root 코드는 gateway뿐이며 파일·git·에이전트는 사용자 권한 agent-host가 처리한다. 파일 접근은 홈 안으로 제한된다. 서버 코드는 셸 문자열을 실행하지 않는다. 토큰·승인 본문·파일 내용·비밀번호는 로그에 남기지 않는다. SSH는 공개키 전용(`/etc/ssh/sshd_config.d/mam.conf`)이며 방화벽에서 sshd를 tailnet 인터페이스로만 허용하도록 권장한다.
+
+## 8. 원격 접속 (Tailscale + 개발 gateway)
+
+내 Mac 한 대를 나 혼자 쓰는 경우의 간이 경로다. 정식 설치(1절, root LaunchDaemon `dev.mam.gateway` + TLS + whois 신원)와는 별개이며 서로 건드리지 않는다. 개발 모드 gateway 를 tailnet IPv4 에만 바인딩해 **로그인할 때마다 자동 시작**하는 LaunchAgent(`dev.mam.dev-gateway`)를 걸어 두면, 카페든 회사든 네트워크가 바뀌어도 폰에서 항상 같은 주소(`http://100.x.y.z:7777`)로 붙는다.
+
+1. **Mac: Tailscale 로그인.** 메뉴 막대의 Tailscale 앱에서 로그인하거나 `tailscale up` 을 실행한다. 주소는 `tailscale ip -4` 로 확인한다(`100.` 으로 시작하는 IPv4).
+2. **Mac: 빌드 + LaunchAgent 설치.**
+
+   ```bash
+   npm run build --workspaces --if-present && bash scripts/install-dev-gateway.sh
+   ```
+
+   스크립트는 `node`·`codex`·`claude` 의 절대 경로를 로그인 셸에서 찾아 `~/Library/LaunchAgents/dev.mam.dev-gateway.plist` 를 만들고(`MAM_DEV_BIND=tailscale`, `MAM_DEV_PORT=7777`, `KeepAlive`), `launchctl bootstrap gui/<uid>` 로 등록한 뒤 `http://<tailnet ip>:7777/healthz` 를 확인하고 앱에 넣을 주소를 출력한다. 포트를 바꾸려면 `--port 8777`. 손으로 띄운 gateway 나 `dev-smoke.sh --keep` 가 같은 포트를 잡고 있으면 설치하지 않고 멈춘다(먼저 끄면 된다). 제거는 `--uninstall`, 설치하지 않고 plist 만 보려면 `--dry-run`.
+3. **폰: Tailscale 연결.** App Store 의 Tailscale 앱을 설치해 같은 계정으로 로그인하고 연결(VPN)을 켠다.
+4. **폰: 앱 서버 주소.** MacAgent 앱 첫 화면에 `http://<tailnet ip>:7777` 을 입력한다. 로그인 화면은 없다.
+
+문제 해결:
+
+| 증상 | 확인 |
+|---|---|
+| 폰에서 안 붙음 | `bash scripts/install-dev-gateway.sh --status` (plist·launchd 상태·healthz·주소를 한 번에 보여준다) |
+| gateway 가 안 뜸 | 로그 `~/.mam/dev-gateway.log`. Tailscale 이 꺼져 있으면 tailnet IP 가 없어 바인딩에 실패하고, `KeepAlive` 가 10초(`ThrottleInterval`)마다 다시 시도한다. Tailscale 을 켜면 그대로 붙는다 |
+| Claude/Codex 세션이 "사용할 수 없음" | LaunchAgent 는 로그인 셸을 거치지 않아 nvm 경로가 잡히지 않는다. 스크립트가 `MAM_CLAUDE_BIN`/`MAM_CODEX_BIN` 을 plist 에 박아 두므로, 설치 뒤에 CLI 를 새로 깔았다면 스크립트를 다시 실행한다 |
+| 회사 VPN 과 같이 쓸 때 | VPN 이 `100.64.0.0/10`(tailnet 대역) 라우팅을 가로채지 않는지 확인한다. Tailscale 앱의 "Use Tailscale subnets" 설정과 VPN 클라이언트의 split tunnel 설정을 본다 |
+| 포트를 이미 쓰는 프로세스 | `lsof -nP -iTCP:7777 -sTCP:LISTEN`. `dev-smoke.sh --keep` 를 띄워 두었다면 끄거나 `--port` 로 다른 포트를 쓴다 |
+
+보안 노트: 개발 모드 gateway 는 TLS 없이 tailnet IP 의 7777 에 뜨고 **접속자를 전부 현재 사용자(설치한 본인)로 취급한다**(`--dev` 는 whois 대신 고정 신원, ADR-004). tailnet 에 다른 사람(또는 공유받은 노드)이 있으면 그 사람도 내 계정 권한으로 파일과 에이전트를 쓸 수 있으므로 이 경로를 쓰지 말고 1절의 정식 설치를 쓴다. 바인딩은 항상 tailnet IPv4 하나뿐이며 `0.0.0.0` 이나 LAN IP 로 설치하지 않는다.
