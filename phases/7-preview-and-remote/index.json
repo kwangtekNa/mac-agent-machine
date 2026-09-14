@@ -28,10 +28,28 @@
     {
       "step": 1,
       "name": "ios-preview",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-14T09:21:29+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "4610fc1d-a900-4062-812b-ebfc7a2c52b7",
+          "cost_usd": 7.671689999999999,
+          "duration_s": 780.7,
+          "num_turns": 82,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 7.67169,
+      "duration_s": 780.7,
+      "retries": 0,
+      "session_id": "4610fc1d-a900-4062-812b-ebfc7a2c52b7",
+      "summary": "iOS 미리보기 추가: Features/Preview/(PreviewLink+RecentPortsStore, SafariView/SafariLink+previewLinks(serverURL:into:)+\\.previewServerURL 환경키, PreviewPortsSheet+PreviewPortsState) + NetPort/NetPortsResponse(REST.swift)·APIClient.listeningPorts() + MessageCard·AssistantMessageCard 링크 가로채기(localhost 계열만 SFSafariViewController, 나머지 .systemAction) + 툴바 room.preview/timeline.preview 시트 + RootView 의 previewServerURL 주입; 테스트 PreviewLinkTests 7 + PreviewPortsSheetStateTests 5 + APIClientTests net/ports 2, ProtocolFixturesTests 는 net-ports.json 을 NetPortsResponse 로(JSONValue 제거, 72개 유지); 카드가 AppState 를 읽지 않도록 EnvironmentKey 로 서버 URL 을 넘기고 URL 대신 SafariLink 래퍼로 .sheet(item:) 을 쓴 것이 설계 결정. docs/IOS.md 12절 + 디렉토리 트리 갱신. xcodegen generate, xcodebuild test, bash scripts/test.sh(TS 802 + iOS) 모두 통과.",
+      "completed_at": "2026-09-14T09:34:30+0900"
     },
     {
       "step": 2,
