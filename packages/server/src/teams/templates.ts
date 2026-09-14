@@ -2,13 +2,14 @@ import type { CreateTeamTemplateRequest, PatchTeamTemplateRequest, TeamSettings,
 import { InvalidRequestError, NotFoundError } from "../errors.js";
 import { newId } from "../ids.js";
 import type { TeamStore } from "./store.js";
+import { DEFAULT_SIDE_ROOM_MAX_PARTICIPANTS } from "./types.js";
 
 /** PROTOCOL 6.1 `TeamSettings` 기본값. */
 export const DEFAULT_TEAM_SETTINGS: TeamSettings = {
   maxHops: 6,
   maxConcurrent: 2,
   contextMaxMessages: 40,
-  sideRoomMaxParticipants: 3,
+  sideRoomMaxParticipants: DEFAULT_SIDE_ROOM_MAX_PARTICIPANTS,
 };
 
 function nameKey(name: string): string {

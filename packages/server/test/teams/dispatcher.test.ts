@@ -1,7 +1,7 @@
 import { DispatchStateSchema, type RoomAuthor } from "@mam/protocol";
 import { describe, expect, it } from "vitest";
 import type { MentionResult } from "../../src/teams/mentions.js";
-import { DispatchQueue, hopExceeded, nextHop, route, type DispatchTarget } from "../../src/teams/dispatcher.js";
+import { DispatchQueue, hopExceeded, nextHop, route, sideRoomParticipants, type DispatchTarget, type RoomRef } from "../../src/teams/dispatcher.js";
 import { DM_JIYEON, DM_MINSU, GROUP_ROOM, JIYEON, MINSU, makeTeamRecord } from "../helpers/team-record.js";
 
 const team = makeTeamRecord();
@@ -232,5 +232,89 @@ describe("hops", () => {
     expect(hopExceeded(7, 6)).toBe(true);
     expect(hopExceeded(0, 0)).toBe(false);
     expect(hopExceeded(1, 0)).toBe(true);
+  });
+});
+
+describe("route in a side room (2026-09-14)", () => {
+  const sideMJ = { kind: "side" as const, memberId: null, participants: [MINSU, JIYEON] };
+
+  it("user without a mention wakes every participant", () => {
+    expect(route({ team: threeMembers, room: sideMJ, author: user, mentions: none })).toEqual([
+      { memberId: MINSU, reason: "side" },
+      { memberId: JIYEON, reason: "side" },
+    ]);
+  });
+
+  it("user with a mention wakes only that participant", () => {
+    expect(route({ team: threeMembers, room: sideMJ, author: user, mentions: mentions([JIYEON]) })).toEqual([{ memberId: JIYEON, reason: "mention" }]);
+  });
+
+  it("a user mention outside the room falls back to the participants", () => {
+    expect(route({ team: threeMembers, room: sideMJ, author: user, mentions: mentions([HANA]) })).toEqual([
+      { memberId: MINSU, reason: "side" },
+      { memberId: JIYEON, reason: "side" },
+    ]);
+  });
+
+  it("an agent dispatches only the mentioned members, self excluded", () => {
+    expect(route({ team: threeMembers, room: sideMJ, author: asMinsu, mentions: mentions([MINSU, JIYEON]) })).toEqual([{ memberId: JIYEON, reason: "mention" }]);
+    expect(route({ team: threeMembers, room: sideMJ, author: asMinsu, mentions: mentions([HANA]) })).toEqual([{ memberId: HANA, reason: "mention" }]);
+    expect(route({ team: threeMembers, room: sideMJ, author: asMinsu, mentions: none })).toEqual([]);
+  });
+});
+
+describe("sideRoomParticipants", () => {
+  const SUJIN = "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA4";
+  const group = { kind: "group" as const, memberId: null };
+  const dm = { kind: "dm" as const, memberId: MINSU };
+  const sideMJ = { kind: "side" as const, memberId: null, participants: [MINSU, JIYEON] };
+  const targets = (...ids: string[]): DispatchTarget[] => ids.map((memberId) => ({ memberId, reason: "mention" }));
+  const pair = [MINSU, JIYEON].sort();
+  const trio = [MINSU, JIYEON, HANA].sort();
+
+  const cases: Array<{ name: string; room: RoomRef; author: RoomAuthor; targets: DispatchTarget[]; max?: number; expected: string[] | null }> = [
+    { name: "group: agent calls one agent → pair", room: group, author: asMinsu, targets: targets(JIYEON), expected: pair },
+    { name: "group: agent calls two agents → trio", room: group, author: asMinsu, targets: targets(JIYEON, HANA), expected: trio },
+    { name: "group: agent calls three agents → over the limit, stays", room: group, author: asMinsu, targets: targets(JIYEON, HANA, SUJIN), expected: null },
+    { name: "group: limit 2 keeps a trio in the group room", room: group, author: asMinsu, targets: targets(JIYEON, HANA), max: 2, expected: null },
+    { name: "side: only participants → same room", room: sideMJ, author: asMinsu, targets: targets(JIYEON), expected: null },
+    { name: "side: an outsider makes a new set", room: sideMJ, author: asJiyeon, targets: targets(MINSU, HANA), expected: trio },
+    { name: "side: outsider only → author + target", room: sideMJ, author: asMinsu, targets: targets(HANA), expected: [MINSU, HANA].sort() },
+    { name: "side: over the limit falls back to the group room", room: sideMJ, author: asMinsu, targets: targets(JIYEON, HANA, SUJIN), expected: null },
+    { name: "dm: never splits", room: dm, author: asMinsu, targets: targets(JIYEON), expected: null },
+    { name: "user author: never splits", room: group, author: user, targets: targets(JIYEON), expected: null },
+    { name: "system author: never splits", room: group, author: { kind: "system" }, targets: targets(JIYEON), expected: null },
+    { name: "no target: nothing to split", room: group, author: asMinsu, targets: [], expected: null },
+  ];
+  for (const c of cases) {
+    it(c.name, () => {
+      expect(sideRoomParticipants({ author: c.author, room: c.room, targets: c.targets, maxParticipants: c.max ?? 3 })).toEqual(c.expected);
+    });
+  }
+
+  it("always returns a sorted, deduped set", () => {
+    const ids = sideRoomParticipants({ author: asMinsu, room: { kind: "group", memberId: null }, targets: targets(JIYEON, JIYEON), maxParticipants: 3 });
+    expect(ids).toEqual([MINSU, JIYEON].sort());
+    expect(ids).toEqual([...ids!].sort());
+  });
+});
+
+describe("DispatchQueue.hasRoot", () => {
+  let counter = 0;
+  const newId = (prefix: "dsp") => `${prefix}_01J8ZQ4K5N7P9R3S6T8V0W2X${String(++counter).padStart(2, "0")}`;
+  const base = { rootId: "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM1", roomId: GROUP_ROOM, sourceMessageId: "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM1", hop: 1 };
+
+  it("is true while the root has a queued or running item and false once it is done", () => {
+    const q = new DispatchQueue({ maxConcurrent: 2, newId });
+    expect(q.hasRoot(base.rootId)).toBe(false);
+    const a = q.enqueue({ ...base, memberId: MINSU }).item;
+    expect(q.hasRoot(base.rootId)).toBe(true);
+    q.markRunning(a.dispatchId, "ses_01J8ZQ4K5N7P9R3S6T8V0W2XS1");
+    expect(q.hasRoot(base.rootId)).toBe(true);
+    expect(q.hasRoot("msg_01J8ZQ4K5N7P9R3S6T8V0W2XM9")).toBe(false);
+    const b = q.enqueue({ ...base, rootId: "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM9", memberId: JIYEON }).item;
+    q.markDone(a.dispatchId);
+    expect(q.hasRoot(base.rootId)).toBe(false);
+    expect(q.hasRoot(b.rootId)).toBe(true);
   });
 });

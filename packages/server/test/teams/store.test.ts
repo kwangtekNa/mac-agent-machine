@@ -52,6 +52,28 @@ describe("TeamStore", () => {
     expect(parsed.members.every((m) => Object.keys(m.lastSeen).length === 0)).toBe(true);
   });
 
+  it("fills sideRoomMaxParticipants when an older record does not have it (2026-09-14)", async () => {
+    const { store } = await setup();
+    const record = makeTeamRecord();
+    const legacy = { ...record, settings: { maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40 } };
+    await store.save(legacy as unknown as typeof record);
+    const loaded = await store.load(record.id);
+    expect(loaded!.settings).toEqual({ maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40, sideRoomMaxParticipants: 3 });
+    // 파일은 아직 그대로다(저장은 다음 변경 때)
+    const raw = JSON.parse(await readFile(join(store.teamsDir, record.id, "team.json"), "utf8")) as { settings: Record<string, number> };
+    expect("sideRoomMaxParticipants" in raw.settings).toBe(false);
+  });
+
+  it("keeps a side room with its participants through save → load", async () => {
+    const { store } = await setup();
+    const record = makeTeamRecord();
+    const side = record.rooms.find((r) => r.kind === "side")!;
+    await store.save(record);
+    const loaded = await store.load(record.id);
+    expect(loaded!.rooms.find((r) => r.id === side.id)).toEqual(side);
+    expect(toTeam(loaded!).rooms.find((r) => r.id === side.id)!.participants).toEqual(side.participants);
+  });
+
   it("list scans teams/ and skips corrupted or foreign entries with a warning", async () => {
     const { dataDir, store } = await setup();
     const a = makeTeamRecord();

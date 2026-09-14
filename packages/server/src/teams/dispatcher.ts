@@ -6,14 +6,18 @@ import type { MentionResult } from "./mentions.js";
  * 세션·방·git·파일·타이머를 모른다. step 5 의 TeamManager 가 이 함수들을 조립한다.
  */
 
+/** 라우팅이 방에 대해 아는 것 전부. 곁방은 `participants` 가 신원이다(PROTOCOL 6.6). */
+export type RoomRef = Pick<Room, "kind" | "memberId" | "participants">;
+
 export interface DispatchTarget {
   memberId: string;
-  reason: "mention" | "lead" | "dm" | "all";
+  /** `side` 는 사용자가 곁방에 멘션 없이 써서 참가자 전원을 깨운 것(2026-09-14 추가). */
+  reason: "mention" | "lead" | "dm" | "all" | "side";
 }
 
 export interface RouteInput {
   team: Pick<Team, "members">;
-  room: Pick<Room, "kind" | "memberId">;
+  room: RoomRef;
   author: RoomAuthor;
   mentions: MentionResult;
 }
@@ -21,6 +25,8 @@ export interface RouteInput {
 /**
  * 그룹방: 멘션된 팀원 각각(`@all` 은 작성자 제외 전원). 멘션이 없으면 사용자 메시지는 팀장, 에이전트 답변은 대상 없음(연쇄 종료).
  * DM 방: 사용자 메시지만 그 방의 팀원에게, 다른 멘션은 무시. 시스템 메시지는 어디서도 디스패치하지 않는다. 자기 멘션·팀에 없는 ID 는 버린다.
+ * 곁방(2026-09-14, PROTOCOL 6.4 "곁방 안"): 사용자가 쓰면 멘션된 참가자, 멘션이 없거나 참가자 밖이면 **참가자 전원**(`reason: "side"`).
+ * 에이전트가 쓰면 그룹방과 똑같이 멘션된 팀원만(참가자 밖이어도 대상이 되고, 방을 옮기는 판단은 `sideRoomParticipants` 가 한다).
  */
 export function route(input: RouteInput): DispatchTarget[] {
   const { team, room, author, mentions } = input;
@@ -41,9 +47,41 @@ export function route(input: RouteInput): DispatchTarget[] {
     seen.add(memberId);
     targets.push({ memberId, reason });
   }
+  if (room.kind === "side") {
+    if (author.kind !== "user") return targets;
+    const participants = (room.participants ?? []).filter((id) => known.has(id));
+    const mentioned = targets.filter((t) => participants.includes(t.memberId));
+    if (mentioned.length > 0) return mentioned;
+    return participants.map((memberId) => ({ memberId, reason: "side" as const }));
+  }
   if (targets.length > 0 || author.kind !== "user") return targets;
   const lead = team.members.find((m) => m.isLead);
   return lead ? [{ memberId: lead.id, reason: "lead" }] : [];
+}
+
+export interface SideRoomInput {
+  author: RoomAuthor;
+  room: RoomRef;
+  /** `route()` 가 고른 대상. */
+  targets: DispatchTarget[];
+  /** `settings.sideRoomMaxParticipants`. */
+  maxParticipants: number;
+}
+
+/**
+ * 이 트리거의 디스패치를 어느 곁방에서 실행할지(PROTOCOL 6.4 "곁방 분리", 6.6). 참가자 집합(정렬·중복 제거)을 돌려주고,
+ * `null` 이면 방을 바꾸지 않는다. 에이전트가 에이전트를 부를 때만 갈라진다 — 사용자·시스템 작성자와 DM 은 그 방 그대로다.
+ * 참가자 수가 `maxParticipants` 를 넘으면 공지·브로드캐스트로 보고 `null`(곁방 안이었다면 호출자가 그룹방으로 보낸다).
+ */
+export function sideRoomParticipants(input: SideRoomInput): string[] | null {
+  const { author, room, targets, maxParticipants } = input;
+  if (author.kind !== "agent" || targets.length === 0 || room.kind === "dm") return null;
+  const participants = room.participants ?? [];
+  // 곁방 안에서 참가자끼리 이어지는 대화는 같은 방에 남는다.
+  if (room.kind === "side" && targets.every((t) => participants.includes(t.memberId))) return null;
+  const ids = [...new Set([author.memberId, ...targets.map((t) => t.memberId)])].sort();
+  if (ids.length < 2 || ids.length > maxParticipants) return null;
+  return ids;
 }
 
 export interface DispatchItem {
@@ -159,6 +197,12 @@ export class DispatchQueue {
   /** 실행 중이거나 대기 중이면 true. */
   isBusy(memberId: string): boolean {
     return this.isRunning(memberId) || this.queued.some((d) => d.memberId === memberId);
+  }
+
+  /** 이 연쇄 뿌리(`rootId`)의 실행·대기 항목이 남아 있으면 true(곁방 대화 종료 감지). */
+  hasRoot(rootId: string): boolean {
+    for (const r of this.running.values()) if (r.rootId === rootId) return true;
+    return this.queued.some((d) => d.rootId === rootId);
   }
 
   state(): DispatchState {

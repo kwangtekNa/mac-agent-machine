@@ -322,22 +322,39 @@ describe("TeamManager dispatch", () => {
     expect((await teams.roomDetail(team.id, dm.id)).messages.filter((m) => m.author.kind === "agent")).toHaveLength(1);
   });
 
-  it("chains the lead's @지연 mention with hop 2 and stops at maxHops with a system message", async () => {
+  it("chains the lead's @지연 mention into a side room with hop 2 and stops at maxHops with a system message", async () => {
     const { teams, codex, create } = await setup();
     const team = await create();
     const group = groupRoom(team);
+    const minsu = member(team, "민수");
+    const jiyeon = member(team, "지연");
     // 사용자 글에 @멘션이 없어야 팀장에게 가고, 팀장 답변의 @지연 이 연쇄를 만든다
     await teams.postUserMessage(team.id, group.id, { text: "call jiyeon" });
     await waitUntil(quiet(teams, team.id));
     await waitUntil(() => codex.sessions.length === 1 && codex.sessions[0]!.turns.length === 1);
     await waitUntil(quiet(teams, team.id));
+    // 그룹방에는 팀장의 원본 답변만 남고(에이전트 간 대화는 곁방으로 갈라진다, PROTOCOL 6.6)
     const msgs = (await teams.roomDetail(team.id, group.id)).messages;
-    const agents = msgs.filter((m) => m.author.kind === "agent");
-    expect(agents.map((m) => [m.text, m.hop, (m.author as { memberId: string }).memberId])).toEqual([
-      ["@지연 부탁해", 1, member(team, "민수").id],
-      ["완료했습니다: [#전체] 민수(팀장): 지연 부탁해", 2, member(team, "지연").id],
+    const agents = msgs.filter((m) => m.kind === "text" && m.author.kind === "agent");
+    expect(agents.map((m) => [m.text, m.hop, (m.author as { memberId: string }).memberId])).toEqual([["@지연 부탁해", 1, minsu.id]]);
+    expect(agents[0]!.mentions).toEqual([jiyeon.id]);
+    // 곁방에서 같은 본문이 트리거가 되고 지연의 답변이 hop 2 로 이어진다
+    const side = teams.getTeam(team.id).rooms.find((r) => r.kind === "side")!;
+    expect(side).toMatchObject({ kind: "side", memberId: null, participants: [minsu.id, jiyeon.id].sort() });
+    // 이름은 참가자 id 순서(= participants 순서)의 이름을 " ↔ " 로 이은 것이다
+    expect(side.name).toBe(side.participants!.map((id) => member(team, "민수").id === id ? "민수" : "지연").join(" ↔ "));
+    const sideMsgs = (await teams.roomDetail(team.id, side.id)).messages;
+    expect(sideMsgs.map((m) => [m.text, m.hop, (m.author as { memberId: string }).memberId])).toEqual([
+      ["@지연 부탁해", 1, minsu.id],
+      [`완료했습니다: [#${side.name}] 민수(팀장): 지연 부탁해`, 2, jiyeon.id],
     ]);
-    expect(agents[0]!.mentions).toEqual([member(team, "지연").id]);
+    // 그룹방에는 연결 카드 두 장(열림·닫힘)이 남는다
+    await waitUntil(async () => (await teams.roomDetail(team.id, group.id)).messages.some((m) => m.sideRoom?.kind === "closed"));
+    const cards = (await teams.roomDetail(team.id, group.id)).messages.filter((m) => m.sideRoom !== null);
+    expect(cards.map((m) => [m.kind, m.sideRoom!.kind, m.sideRoom!.roomId, m.sideRoom!.messages])).toEqual([
+      ["system", "opened", side.id, 0],
+      ["system", "closed", side.id, 2],
+    ]);
 
     const strict = await create({ name: "strict", settings: { maxHops: 0 } });
     const sg = groupRoom(strict);
@@ -346,6 +363,8 @@ describe("TeamManager dispatch", () => {
     const smsgs = (await teams.roomDetail(strict.id, sg.id)).messages;
     expect(smsgs.filter((m) => m.author.kind === "agent")).toHaveLength(1);
     expect(smsgs.at(-1)).toMatchObject({ kind: "system", text: "자동 연쇄 상한(0)에 도달했습니다. 계속하려면 직접 지시하세요" });
+    // 홉 상한에 걸린 멘션은 곁방을 만들지 않는다
+    expect(teams.getTeam(strict.id).rooms.some((r) => r.kind === "side")).toBe(false);
     expect(codex.sessions).toHaveLength(1);
   });
 

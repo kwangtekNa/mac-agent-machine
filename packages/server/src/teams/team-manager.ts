@@ -11,6 +11,7 @@ import type {
   PatchTeamRequest,
   Room,
   RoomApproval,
+  RoomAuthor,
   RoomDetailResponse,
   RoomMemberStatus,
   RoomMessage,
@@ -42,7 +43,7 @@ import {
 import { newId } from "../ids.js";
 import type { SessionManager } from "../sessions/manager.js";
 import { ChangeStore, conflictNoteFor } from "./changes.js";
-import { DispatchQueue, hopExceeded, nextHop, route, type RunningItem } from "./dispatcher.js";
+import { DispatchQueue, hopExceeded, nextHop, route, sideRoomParticipants, type DispatchTarget, type RunningItem } from "./dispatcher.js";
 import { buildTurnText } from "./format.js";
 import { parseMentions } from "./mentions.js";
 import { buildInstructions, rolePreset } from "./roles.js";
@@ -57,6 +58,8 @@ import type { TeamMemberRecord, TeamRecord } from "./types.js";
  * 턴 종료 자동 커밋과 "변경 준비됨" ChangeSet, 사용자 승인 머지(`--no-ff`)·dismiss·충돌 해결 턴·stale 정리(PROTOCOL 6, ADR-017). HTTP/WS 는 step 7.
  * 머지는 `merge()` 호출(사용자 액션)로만 일어나고 자동 머지는 없다. 충돌 시 베이스 체크아웃은 `merge --abort` 로 되돌리고
  * 그 팀원 worktree 에만 마커를 남긴 뒤 DM 방에서 해결 턴을 디스패치한다. 서버는 마커를 직접 해결하지 않는다.
+ * 에이전트가 에이전트를 부르면 그 연쇄를 곁방(`kind: "side"`)으로 옮긴다(PROTOCOL 6.6): 원본 답변은 그 방에 그대로 두고 같은 본문을
+ * 곁방에 트리거로 한 번 복사하며, 그룹방에는 열림·닫힘 연결 카드만 남긴다. 곁방은 참가자 집합이 신원이라 같은 조합이면 재사용하고 지우지 않는다.
  * 세션 구독은 턴 동안만 유지한다(구독자가 있으면 세션 유휴 종료가 막힌다). 방 seq 는 RoomManager, 세션 seq 는 SessionManager 만 발급한다.
  * 메시지 본문·프롬프트는 로그에 남기지 않는다(CRITICAL 6). 모든 경로는 `resolveInsideHome` 을 거치고 git 은 `worktree.ts` 헬퍼만 쓴다.
  */
@@ -80,6 +83,10 @@ export interface TeamDetail {
 
 const CONTEXT_MAX_CHARS = 12_000;
 const GROUP_ROOM_NAME = "전체";
+/** 곁방 이름은 참가자 이름을 이 구분자로 잇는다(PROTOCOL 6.1·6.6). */
+const SIDE_ROOM_NAME_SEP = " ↔ ";
+/** `closed` 연결 카드에 넣는 마지막 답변 첫 줄의 길이 상한. */
+const SIDE_ROOM_CONCLUSION_MAX = 80;
 const DEFAULT_MODE = "auto-edit" as const;
 const COMMIT_SUBJECT_MAX = 72;
 const DETAIL_LIMIT = 100_000;
@@ -105,6 +112,15 @@ interface ActiveRun {
   unsubscribe?: () => void;
 }
 
+/** 한 연쇄(뿌리)가 갈라져 나간 곁방. 연쇄가 끝나면 `closed` 연결 카드를 한 번 남긴다(PROTOCOL 6.6). */
+interface SideRoot {
+  roomId: string;
+  participants: string[];
+  /** 갈라진 시점의 곁방 `lastSeq`. 이 뒤의 메시지가 이 연쇄의 대화다. */
+  startSeq: number;
+  posted: boolean;
+}
+
 interface TeamRuntime {
   record: TeamRecord;
   rooms: RoomManager;
@@ -121,6 +137,8 @@ interface TeamRuntime {
   changesChain: Promise<void>;
   /** merge/dismiss 는 팀 단위로 직렬화한다(같은 ChangeSet 에 대한 동시 호출·베이스 체크아웃 경합 방지). */
   mergeChain: Promise<void>;
+  /** 연쇄 뿌리 → 그 연쇄가 처음 갈라져 나간 곁방(2026-09-14). */
+  sideRoots: Map<string, SideRoot>;
 }
 
 function cloneChange(c: ChangeSet): ChangeSet {
@@ -461,11 +479,12 @@ export class TeamManager {
       author: { kind: "user" },
       kind: "text",
       text: input.text,
-      mentions: room.kind === "group" ? mentions.memberIds : [],
+      // DM 은 멘션을 무시한다(PROTOCOL 6.4). 그룹방·곁방은 해석된 멘션을 그대로 담는다.
+      mentions: room.kind === "dm" ? [] : mentions.memberIds,
       hop: 0,
       dispatchId: null,
     });
-    if (room.kind === "group" && mentions.unknown.length > 0) {
+    if (room.kind !== "dm" && mentions.unknown.length > 0) {
       await rt.rooms.error(roomId, `멘션한 팀원을 찾을 수 없습니다: ${mentions.unknown.map((u) => `@${u}`).join(", ")}`, true);
     }
     const targets = route({ team: rt.record, room, author: { kind: "user" }, mentions });
@@ -476,7 +495,7 @@ export class TeamManager {
       if (input.attachments && input.attachments.length > 0) rt.attachments.set(item.dispatchId, input.attachments);
       this.markQueued(rt, target.memberId);
     }
-    if (targets.length === 0 && room.kind === "group") await rt.rooms.error(roomId, "메시지를 받을 팀원이 없습니다", true);
+    if (targets.length === 0 && room.kind !== "dm") await rt.rooms.error(roomId, "메시지를 받을 팀원이 없습니다", true);
     await this.emitStatus(rt, [roomId]);
     await this.persist(rt);
     this.pump(rt);
@@ -566,6 +585,7 @@ export class TeamManager {
       persistChain: Promise.resolve(),
       changesChain: Promise.resolve(),
       mergeChain: Promise.resolve(),
+      sideRoots: new Map(),
     };
     rooms.onRoomChanged = (room: Room) => {
       const target = rt.record.rooms.find((r) => r.id === room.id);
@@ -598,12 +618,81 @@ export class TeamManager {
     return rt.record.rooms.find((r) => r.kind === "dm" && r.memberId === memberId);
   }
 
-  /** 팀원 상태를 보여줄 방: 그룹방 + 그 팀원의 DM 방. */
+  /** 팀원의 맥락·상태 방: 그룹방 + 그 팀원의 DM 방 + 그 팀원이 참가한 곁방 전부(PROTOCOL 6.4 "턴 입력", 6.6). */
   private statusRooms(rt: TeamRuntime, memberId: string): string[] {
     const ids = [this.groupRoom(rt).id];
     const dm = this.dmRoom(rt, memberId);
     if (dm) ids.push(dm.id);
+    for (const room of rt.record.rooms) {
+      if (room.kind === "side" && (room.participants ?? []).includes(memberId)) ids.push(room.id);
+    }
     return ids;
+  }
+
+  private memberName(rt: TeamRuntime, memberId: string): string {
+    return rt.record.members.find((m) => m.id === memberId)?.name ?? memberId;
+  }
+
+  /** 참가자 집합(정렬)으로 곁방을 찾는다. 이 집합이 곁방의 신원이다(PROTOCOL 6.6). */
+  private findSideRoom(rt: TeamRuntime, participants: string[]): Room | undefined {
+    const key = participants.join(",");
+    return rt.record.rooms.find((r) => r.kind === "side" && (r.participants ?? []).join(",") === key);
+  }
+
+  /**
+   * 곁방을 찾고 없으면 만든다(PROTOCOL 6.6). 새로 만들면 참가자들의 `lastSeen` 을 0 으로 두고 즉시 영속화한 뒤
+   * 그룹방에 `opened` 연결 카드를 남긴다. 이름은 참가자 이름을 `↔` 로 이은 것이고, 방은 대화가 끝나도 지우지 않는다.
+   */
+  private async ensureSideRoom(rt: TeamRuntime, participants: string[]): Promise<Room> {
+    const ids = [...new Set(participants)].sort();
+    if (ids.length < 2) throw new InvalidRequestError("곁방은 참가자가 2명 이상이어야 합니다");
+    const existing = this.findSideRoom(rt, ids);
+    if (existing) return existing;
+    const name = ids.map((id) => this.memberName(rt, id)).join(SIDE_ROOM_NAME_SEP);
+    const room: Room = { id: newId("room"), teamId: rt.record.id, kind: "side", memberId: null, name, lastSeq: 0, lastMessageAt: null, participants: ids };
+    rt.record.rooms.push(room);
+    await rt.rooms.addRoom(room);
+    for (const m of rt.record.members) if (ids.includes(m.id)) m.lastSeen[room.id] = 0;
+    this.touch(rt);
+    await this.persist(rt);
+    await rt.rooms.post(this.groupRoom(rt).id, {
+      author: { kind: "system" },
+      kind: "system",
+      text: `${name} 곁방을 열었습니다`,
+      sideRoom: { roomId: room.id, participants: [...ids], kind: "opened", messages: 0 },
+    });
+    return room;
+  }
+
+  /** 이 연쇄 뿌리가 갈라져 나간 첫 곁방을 기억한다(뿌리별 `closed` 카드 1건). */
+  private noteSideRoot(rt: TeamRuntime, rootId: string, room: Room): void {
+    if (rt.sideRoots.has(rootId)) return;
+    rt.sideRoots.set(rootId, { roomId: room.id, participants: [...(room.participants ?? [])], startSeq: rt.rooms.lastSeq(room.id), posted: false });
+  }
+
+  /**
+   * 연쇄가 끝났으면(그 뿌리의 실행·대기 항목이 없다) 곁방 대화를 그룹방에 한 줄로 닫는다(PROTOCOL 6.6):
+   * 대화 수와 마지막 에이전트 답변의 첫 줄. 뿌리별로 한 번만 남기고 곁방은 지우지 않는다(같은 조합이면 재사용).
+   */
+  private async closeSideRoomIfDone(rt: TeamRuntime, rootId: string): Promise<void> {
+    if (this.closed) return;
+    const root = rt.sideRoots.get(rootId);
+    if (!root || root.posted || rt.queue.hasRoot(rootId)) return;
+    root.posted = true;
+    try {
+      const messages = await rt.rooms.messagesSince(root.roomId, root.startSeq);
+      const last = [...messages].reverse().find((m) => m.kind === "text" && m.author.kind === "agent");
+      const name = root.participants.map((id) => this.memberName(rt, id)).join(SIDE_ROOM_NAME_SEP);
+      const conclusion = firstLine(last?.text ?? "").slice(0, SIDE_ROOM_CONCLUSION_MAX);
+      await rt.rooms.post(this.groupRoom(rt).id, {
+        author: { kind: "system" },
+        kind: "system",
+        text: `${name} 곁방 대화 ${messages.length}건 · 결론: ${conclusion}`,
+        sideRoom: { roomId: root.roomId, participants: [...root.participants], kind: "closed", messages: messages.length },
+      });
+    } catch (err) {
+      this.logger.warn(`[teams] 곁방 종료 카드 게시 실패 team=${rt.record.id} room=${root.roomId}: ${errorMessage(err)}`);
+    }
   }
 
   private iso(): string {
@@ -942,6 +1031,7 @@ export class TeamManager {
         await this.persist(rt);
         await this.emitStatus(rt, this.statusRooms(rt, member.id));
         this.pump(rt);
+        await this.closeSideRoomIfDone(rt, item.rootId);
       }
     }
   }
@@ -963,7 +1053,7 @@ export class TeamManager {
     return undefined;
   }
 
-  /** 그룹방 + 자기 DM 방의 `lastSeen` 이후 메시지를 createdAt 순으로 모아 턴 텍스트를 만든다. */
+  /** 맥락 방(그룹방 + 자기 DM + 자기가 참가한 곁방)의 `lastSeen` 이후 메시지를 createdAt 순으로 모아 턴 텍스트를 만든다. */
   private async buildInput(
     rt: TeamRuntime,
     member: TeamMemberRecord,
@@ -1157,19 +1247,52 @@ export class TeamManager {
         work: { sessionId: item.sessionId, turnId, ...summarizeWork(items, turnId) },
       });
       const room = rt.record.rooms.find((r) => r.id === roomId) ?? this.groupRoom(rt);
-      const targets = route({ team: rt.record, room, author: { kind: "agent", memberId: member.id }, mentions });
+      const author: RoomAuthor = { kind: "agent", memberId: member.id };
+      const targets = route({ team: rt.record, room, author, mentions });
       const hop = nextHop(item.hop);
       if (targets.length > 0 && hopExceeded(hop, rt.record.settings.maxHops)) {
         await this.postSystem(rt, roomId, `자동 연쇄 상한(${rt.record.settings.maxHops})에 도달했습니다. 계속하려면 직접 지시하세요`);
-      } else {
+      } else if (targets.length > 0) {
+        const next = await this.dispatchRoom(rt, { item, room, author, targets, reply: replyMessage });
         for (const target of targets) {
-          rt.queue.enqueue({ rootId: item.rootId, memberId: target.memberId, roomId, sourceMessageId: replyMessage.id, hop });
+          rt.queue.enqueue({ rootId: item.rootId, memberId: target.memberId, roomId: next.roomId, sourceMessageId: next.sourceMessageId, hop });
           this.markQueued(rt, target.memberId);
         }
       }
     }
     if (turnId !== null) await this.commitTurn(rt, member, item.sessionId, turnId, reply ?? (trigger ? trigger.text : null));
     this.setState(rt, member.id, "idle");
+  }
+
+  /**
+   * 이 답변의 연쇄를 실행할 방(PROTOCOL 6.4 "곁방 분리", 6.6). 방이 그대로면 원본 답변이 트리거다.
+   * 곁방으로 갈라지거나(에이전트 → 에이전트) 곁방에서 상한을 넘어 그룹방으로 나갈 때는 같은 본문을 그 방에 한 번 게시하고
+   * 그 복사본을 트리거로 쓴다. 원본 답변은 지우거나 옮기지 않는다(사람이 보던 기록이 사라지지 않게).
+   */
+  private async dispatchRoom(
+    rt: TeamRuntime,
+    ctx: { item: RunningItem; room: Room; author: RoomAuthor; targets: DispatchTarget[]; reply: RoomMessage },
+  ): Promise<{ roomId: string; sourceMessageId: string }> {
+    const { item, room, author, targets, reply } = ctx;
+    const participants = sideRoomParticipants({ author, room, targets, maxParticipants: rt.record.settings.sideRoomMaxParticipants });
+    let target: Room | undefined;
+    if (participants !== null) {
+      target = await this.ensureSideRoom(rt, participants);
+      this.noteSideRoot(rt, item.rootId, target);
+    } else if (room.kind === "side" && targets.some((t) => !(room.participants ?? []).includes(t.memberId))) {
+      // 곁방 안에서 상한을 넘는 조합을 부르면 공지로 보고 그룹방에서 디스패치한다.
+      target = this.groupRoom(rt);
+    }
+    if (!target || target.id === room.id) return { roomId: room.id, sourceMessageId: reply.id };
+    const copy = await rt.rooms.post(target.id, {
+      author,
+      kind: "text",
+      text: reply.text,
+      mentions: targets.map((t) => t.memberId),
+      hop: reply.hop,
+      dispatchId: null,
+    });
+    return { roomId: target.id, sourceMessageId: copy.id };
   }
 
   /**

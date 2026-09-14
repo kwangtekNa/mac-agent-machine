@@ -11,6 +11,7 @@ import {
   type RoomMessage,
   type RoomMessageKind,
   type RoomServerEvent,
+  type SideRoomLink,
   type WorkSummary,
   type ChangeSet,
 } from "@mam/protocol";
@@ -47,6 +48,8 @@ export interface RoomMessageDraft {
   work?: WorkSummary | null;
   approval?: RoomApproval | null;
   changes?: ChangeSet | null;
+  /** 곁방 연결 카드(`kind: "system"` 전용, PROTOCOL 6.6). TeamManager 가 곁방을 열거나 닫을 때만 채운다. */
+  sideRoom?: SideRoomLink | null;
 }
 
 export type RoomMessagePatch = Partial<Pick<RoomMessage, "text" | "work" | "approval" | "changes">>;
@@ -156,8 +159,7 @@ export class RoomManager {
       work: draft.work ?? null,
       approval: draft.approval ?? null,
       changes: draft.changes ?? null,
-      // 곁방 연결 카드는 아직 만들지 않는다(PROTOCOL 6.6 은 계약만 있고 서버 동작은 다음 step).
-      sideRoom: null,
+      sideRoom: draft.sideRoom ?? null,
     };
     const message = this.validate(candidate);
     const event = this.emit(rs, { type: "room.message", message });
