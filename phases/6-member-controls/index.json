@@ -54,7 +54,7 @@
     {
       "step": 2,
       "name": "verify-and-install",
-      "status": "error",
+      "status": "completed",
       "depends_on": [
         1
       ],
@@ -86,14 +86,41 @@
           "num_turns": 1,
           "exit_code": 1,
           "timeout": false
+        },
+        {
+          "attempt": 1,
+          "session_id": null,
+          "cost_usd": null,
+          "duration_s": 1800.0,
+          "num_turns": null,
+          "exit_code": -1,
+          "timeout": true
+        },
+        {
+          "attempt": 2,
+          "session_id": null,
+          "cost_usd": null,
+          "duration_s": 1800.0,
+          "num_turns": null,
+          "exit_code": -1,
+          "timeout": true
+        },
+        {
+          "attempt": 3,
+          "session_id": "f91ce40c-1d72-4984-ae94-1b8f0757341e",
+          "cost_usd": 4.392570000000001,
+          "duration_s": 967.0,
+          "num_turns": 59,
+          "exit_code": 0,
+          "timeout": false
         }
       ],
-      "cost_usd": 2.543837,
-      "duration_s": 35.6,
-      "retries": 2,
-      "session_id": "a9e3a299-d11a-4c1e-9395-745217df97c8",
-      "error_message": "[3회 시도 후 실패] 세션이 구조화 결과를 반환하지 않았다 (subtype: success, exit code: 1). 작업 트리에 미완성 변경이 남아있을 수 있으니 git status로 확인한 뒤 이어서 작업하라.",
-      "failed_at": "2026-09-13T21:34:02+0900"
+      "cost_usd": 6.936407,
+      "duration_s": 4602.6,
+      "retries": 5,
+      "session_id": "f91ce40c-1d72-4984-ae94-1b8f0757341e",
+      "summary": "Phase 6 step 2 verify-and-install 완료. 이전 타임아웃 시도가 남긴 작업(dev-smoke 19단계, TeamRoomUITests 팀원 제어 흐름, fake/session.ts 의 mode 기반 autoApprove, 문서 4곳)을 검토·검증했고 추가 코드 변경 없음. AC 전부 통과: npm ci+typecheck+test 788 passed/10 skipped(55 파일), dev-smoke 22/22(신규 19단계 mode=full-auto → 승인 카드 0건·toolCalls=1, effort=low, model=fake-mini 는 effort 해제), --keep 서버 대상 UI 테스트 5/5 통과(TeamRoomUITests·ApprovalFlow·GitInit×2·UsageAndFiles, skip 없음 — xcresult 로 확인)·서버 종료 후 agent-host/gateway 잔여 없음, grep \"10.8\" docs/IOS.md OK, bash scripts/test.sh OK(TS+iOS). 실제 어댑터 full-auto 관측(loopback dev gateway, 팀장 1명 그룹방 echo pong 한 턴): Claude approvals=0 toolCalls=1 text=\"pong\", Codex approvals=0 toolCalls=1 text=\"pong\", 두 팀 모두 DELETE 200 으로 정리·서버 종료. iPhone(530EAE6A…): 절대 경로 xcodebuild build → devicectl install → launch 세 명령 모두 성공(dev.mam.MacAgent, 잠금 거부 없음). 문서는 IOS.md 10.8+식별자 표, PROTOCOL.md 4절 allowDangerouslySkipPermissions 주석, ADR-015 \"full-auto 는 모든 도구 승인 없음(2026-09-13 확정)\", RUNBOOK 팀 운영 한 줄, README/dev-smoke 단계 번호(21→22) 갱신 상태. 검증 중 환경 문제 2건 진단(코드 변경 없이 해결, 메모리에 기록): (1) 이전 세션이 남긴 agent-host 가 $TMPDIR/mam-dev/<user>/agent.sock 을 계속 잡고 있어 MAM_FAKE_AGENT=1 dev-smoke 가 실제 Claude 어댑터로 붙어 6단계에서 approval.requested 미수신 실패 — PID 지정 kill 후 정상; (2) codex 가 nvm bin 에만 있어 agent-host 의 제한된 env(PATH=CHILD_PATH+MAM_*)에서 로그인 셸 조회 실패로 /me 가 available:false — MAM_CODEX_BIN 오버라이드로 해결(claude 는 ~/.local/bin 이 resolve-bin 후보라 무사). 서버 변경은 fake/session.ts 한 줄 + 회귀 테스트뿐이라 CRITICAL 4·7 영향 없음. phases/ 미수정(index.json diff 는 executor 의 attempt 기록).",
+      "completed_at": "2026-09-14T09:06:50+0900"
     }
   ],
   "created_at": "2026-09-13T21:08:33+0900"
