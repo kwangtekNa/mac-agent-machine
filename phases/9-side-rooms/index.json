@@ -107,10 +107,37 @@
     {
       "step": 4,
       "name": "verify-and-install",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         3
-      ]
+      ],
+      "started_at": "2026-09-14T16:31:19+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "dbeb6715-022b-477e-bfde-7a7ede8f2377",
+          "cost_usd": null,
+          "duration_s": 1456.4,
+          "num_turns": null,
+          "exit_code": 1,
+          "timeout": false
+        },
+        {
+          "attempt": 2,
+          "session_id": "d2aa421c-6fa2-4d9c-8215-2089011fbc79",
+          "cost_usd": 8.636053500000006,
+          "duration_s": 1797.6,
+          "num_turns": 86,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 8.636054,
+      "duration_s": 3254.0,
+      "retries": 1,
+      "session_id": "d2aa421c-6fa2-4d9c-8215-2089011fbc79",
+      "summary": "Step 4 verify-and-install 완료. dev-smoke 25단계(곁방 분리·연결 카드·재사용·참가자 전원 디스패치·맥락 격리)와 ios/MacAgentUITests/SideRoomUITests.swift, docs(IOS.md 10.11 + 식별자 표, RUNBOOK 팀 운영 곁방 단락, ADR-018) 확정. 이전 시도에서 깨져 있던 두 가지를 고쳤다: (1) side-rooms.test.ts \"restart\" 케이스가 전체 스위트 부하에서 flaky — quiet() 가 setState(idle) 순간 참이 되어 그 뒤 room.status 가 올리는 곁방 lastSeq 를 놓쳤다(4 vs 5). closed 카드를 기다린 뒤 스냅샷하도록 수정. (2) TeamRoomsView 가 자체 새로고침이 없어 그룹방에 있는 동안 생긴 곁방이 방 목록에 안 나타났다(세션 홈 15초 .task 는 push 하면 멈춘다) — TeamsStore.reloadTeam(id:) (GET /teams/:id, 실패는 조용히) 추가 + 방 목록에서 5초 폴링, 테스트 먼저(TeamsStoreTests 2건) 작성하고 IOS.md 10.11 에 기록. AC 전부 통과: npm ci/typecheck/npm test(887 passed, 10 skipped), dev-smoke 1~25, UI 테스트 8/8 통과, 서버 종료 후 agent-host 잔여 없음·7777 free, scripts/test.sh OK, docs grep 2건. 효과 측정: 곁방 비참가 팀원의 턴 입력 1,062자 → 443자(58% 절감, format.test.ts \"맥락 절감 측정\" 케이스가 단언). iPhone 설치: 빌드 → devicectl install → process launch 모두 exit 0(dev.mam.MacAgent). phases/ 는 건드리지 않았다.",
+      "completed_at": "2026-09-14T17:25:33+0900"
     }
   ],
   "created_at": "2026-09-14T15:36:01+0900"
