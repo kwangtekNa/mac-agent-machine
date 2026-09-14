@@ -156,6 +156,8 @@ export class RoomManager {
       work: draft.work ?? null,
       approval: draft.approval ?? null,
       changes: draft.changes ?? null,
+      // 곁방 연결 카드는 아직 만들지 않는다(PROTOCOL 6.6 은 계약만 있고 서버 동작은 다음 step).
+      sideRoom: null,
     };
     const message = this.validate(candidate);
     const event = this.emit(rs, { type: "room.message", message });

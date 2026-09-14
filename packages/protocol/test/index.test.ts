@@ -93,6 +93,9 @@ const SCHEMA_EXPORTS = [
   "RoomMessageKindSchema",
   "RoomApprovalSchema",
   "RoomMessageSchema",
+  // 곁방(2026-09-14 추가)
+  "SideRoomLinkKindSchema",
+  "SideRoomLinkSchema",
   "MergeResultSchema",
   "DispatchStateSchema",
   "TeamTemplateMemberSchema",

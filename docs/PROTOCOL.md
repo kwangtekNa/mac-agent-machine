@@ -392,7 +392,7 @@ Codex app-server → TimelineItem:
 
 ## 6. 팀과 방 (2026-09-12 추가)
 
-사용자는 한 프로젝트(git 저장소 `cwd`)에 **에이전트 팀**을 꾸린다. 팀원은 이름·이모지·역할·에이전트 종류·모드를 가진 **기존 `Session` 하나**이며 자기 git worktree 에서 일한다. 대화는 **방**에서 한다: 그룹방 하나(`#전체`)와 팀원별 DM 방. 사용자가 방에 글을 쓰면 서버가 `@멘션`으로 팀원을 골라 그 세션에 턴을 보내고, 턴이 끝나면 답변을 방에 게시한다(스트리밍 없음). 턴 종료 시 서버가 worktree 변경을 커밋하고 "변경 준비됨" 카드를 올리며, 사용자가 방에서 머지를 승인한다. 팀은 프로젝트(`cwd`)에 속하고 템플릿은 사용자별로 저장된다. 근거는 ADR-017.
+사용자는 한 프로젝트(git 저장소 `cwd`)에 **에이전트 팀**을 꾸린다. 팀원은 이름·이모지·역할·에이전트 종류·모드를 가진 **기존 `Session` 하나**이며 자기 git worktree 에서 일한다. 대화는 **방**에서 한다: 그룹방 하나(`#전체`), 팀원별 DM 방, 그리고 에이전트끼리의 대화를 떼어낸 **곁방**(2026-09-14 추가. 6.6). 사용자가 방에 글을 쓰면 서버가 `@멘션`으로 팀원을 골라 그 세션에 턴을 보내고, 턴이 끝나면 답변을 방에 게시한다(스트리밍 없음). 턴 종료 시 서버가 worktree 변경을 커밋하고 "변경 준비됨" 카드를 올리며, 사용자가 방에서 머지를 승인한다. 팀은 프로젝트(`cwd`)에 속하고 템플릿은 사용자별로 저장된다. 근거는 ADR-017.
 
 방 이벤트는 세션 WS 와 **별도 스트림**이다(`room-ws/`·`room-client/` fixture). 세션 `ServerEvent`/`ClientMessage` 에 방 이벤트를 넣지 않는다.
 
@@ -430,7 +430,7 @@ TS 는 `packages/protocol/src/teams.ts`, `room-ws.ts`. 예시는 `fixtures/rest/
 | `state` | `idle \| queued \| running \| waiting_approval \| error` | 디스패처가 관리하는 상태 |
 | `createdAt`, `updatedAt` | ISO-8601 | |
 
-**TeamSettings**: `{ "maxHops": 6, "maxConcurrent": 2, "contextMaxMessages": 40 }`. `maxHops` 정수 0~50(기본 6), `maxConcurrent` 1~8(기본 2), `contextMaxMessages` 1~500(기본 40, 12,000자 상한과 함께 적용. 6.4).
+**TeamSettings**: `{ "maxHops": 6, "maxConcurrent": 2, "contextMaxMessages": 40, "sideRoomMaxParticipants": 3 }`. `maxHops` 정수 0~50(기본 6), `maxConcurrent` 1~8(기본 2), `contextMaxMessages` 1~500(기본 40, 12,000자 상한과 함께 적용. 6.4), `sideRoomMaxParticipants` 2~8(기본 3, 2026-09-14 추가. 곁방 참가자 수 상한. 6.6).
 
 **Team**
 
@@ -451,11 +451,12 @@ TS 는 `packages/protocol/src/teams.ts`, `room-ws.ts`. 예시는 `fixtures/rest/
 |---|---|---|
 | `id` | `room_<ulid>` | |
 | `teamId` | `team_<ulid>` | |
-| `kind` | `group \| dm` | |
-| `memberId` | `agt_<ulid>` \| null | DM 상대. 그룹방은 `null` |
-| `name` | string | 그룹방 `전체`, DM 은 팀원 이름 |
+| `kind` | `group \| dm \| side` | `side` 는 곁방(2026-09-14 추가. 6.6) |
+| `memberId` | `agt_<ulid>` \| null | DM 상대. 그룹방과 `side` 는 `null` |
+| `name` | string | 그룹방 `전체`, DM 은 팀원 이름, `side` 는 참가자 이름을 `↔` 로 이은 문자열(예: `민수 ↔ 지연`). 서버가 만든다 |
 | `lastSeq` | int ≥ 0 | 방 이벤트 로그의 마지막 seq(6.3) |
 | `lastMessageAt` | ISO-8601 \| null | 메시지가 없으면 `null` |
+| `participants`? | `agt_<ulid>[]` | (2026-09-14 추가) `side` 일 때 정렬된 팀원 id 2개 이상. 이 집합이 곁방의 신원이다(6.6). 그 외 방에는 키를 생략한다 |
 
 **RoomAuthor**: `{ "kind": "user" }` \| `{ "kind": "agent", "memberId": "agt_…" }` \| `{ "kind": "system" }`. 모르는 `kind` 는 실패(0절).
 
@@ -487,6 +488,16 @@ TS 는 `packages/protocol/src/teams.ts`, `room-ws.ts`. 예시는 `fixtures/rest/
 | `work` | WorkSummary \| null | `kind: "text"` 이고 작성자가 에이전트일 때만 값. 그 외 `null` |
 | `approval` | `{ memberId, sessionId, approval: Approval, resolution: ApprovalResolution \| null }` \| null | `kind: "approval"` 일 때만 값. 3절 `Approval` 을 그대로 미러링. 응답 전 `resolution: null` |
 | `changes` | ChangeSet \| null | `kind: "changes"` 일 때만 값 |
+| `sideRoom` | SideRoomLink \| null | (2026-09-14 추가) 곁방 연결 카드. `kind: "system"` 이고 곁방이 열리거나 닫힐 때만 값. 그 외 `null`(키가 없는 구 레코드도 `null`) |
+
+**SideRoomLink** (2026-09-14 추가)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `roomId` | `room_<ulid>` | 곁방 |
+| `participants` | `agt_<ulid>[]` | 곁방의 참가자(그 방 `Room.participants` 와 같다) |
+| `kind` | `opened \| closed` | 곁방이 열렸다 / 대화가 끝났다 |
+| `messages` | int ≥ 0 | `closed` 면 곁방에서 오간 메시지 수, `opened` 면 0 |
 
 **ChangeSet**
 
@@ -583,10 +594,13 @@ TS 는 `packages/protocol/src/teams.ts`, `room-ws.ts`. 예시는 `fixtures/rest/
 
 - **멘션 문법**: 본문의 `@<handle>` 또는 `@<이름>`(정규화 비교, 뒤에 공백·문장부호·끝). `@all` 은 작성자를 제외한 전원. 모르는 대상은 무시하고 `room.error`(recoverable) 로 알린다. 해석 결과가 `mentions` 다.
 - **그룹방 라우팅**: 멘션된 팀원 각각에게 디스패치 1건. 멘션이 없으면 팀장(`isLead`) 1건. 에이전트 답변의 멘션도 같은 규칙으로 디스패치한다(에이전트 간 호출). 자기 자신 멘션은 무시.
-- **DM 방**: 그 팀원에게만 디스패치하고, 본문의 다른 멘션은 **무시**한다(`mentions` 에도 넣지 않는다). DM 에서 에이전트 답변의 멘션도 디스패치하지 않는다.
+- **곁방 분리(2026-09-14 추가)**: 그룹방에서 **작성자가 에이전트이고** 멘션 대상도 에이전트면 `{작성자} ∪ {멘션 대상}` 의 곁방을 찾거나 만들고(6.6), 그 팀원들의 디스패치는 **곁방에서** 실행한다. 원본 답변은 그룹방에 그대로 남고, 곁방에는 같은 본문이 트리거 메시지로 한 번 게시된다(작성자는 그 에이전트, `hop` 은 원본과 같다). 참가자 수가 `settings.sideRoomMaxParticipants`(기본 3)를 넘으면 곁방을 만들지 않고 지금처럼 그룹방에서 디스패치한다(그건 공지·브로드캐스트다). **사용자 메시지는 언제나 그 방(그룹·DM·곁방)에서 처리한다** — 사용자↔에이전트 대화는 곁방으로 옮기지 않는다.
+- **곁방 안(2026-09-14 추가)**: 사용자가 곁방에 멘션 없이 쓰면 **참가자 전원**에게 디스패치한다(그룹방의 "멘션 없으면 팀장" 규칙을 쓰지 않는다). 에이전트가 **그 방 참가자**를 멘션하면 같은 곁방에서 이어지고, 참가자가 아닌 팀원을 멘션하면 그 조합(`{작성자} ∪ {멘션 대상}`)의 새 곁방으로 간다(상한을 넘으면 그룹방에서 디스패치).
+- **DM 방**: 그 팀원에게만 디스패치하고, 본문의 다른 멘션은 **무시**한다(`mentions` 에도 넣지 않는다). DM 에서 에이전트 답변의 멘션도 디스패치하지 않는다. 곁방 분리는 DM 에 적용하지 않는다.
 - **홉**: 사용자 메시지 `hop: 0`. 디스패치의 hop = 원인 메시지의 hop + 1 이고 답변 메시지가 그 hop 을 갖는다. `hop > settings.maxHops` 가 되는 멘션은 디스패치하지 않고 시스템 메시지(`"홉 상한(6)에 도달해 @민수 호출을 건너뛰었습니다"`)를 올린다. 새 사용자 메시지는 연쇄를 0 부터 다시 시작한다.
+- 홉·동시 실행 상한·중복 제거는 **방과 무관하게** 똑같이 적용한다(곁방으로 옮겨도 연쇄 깊이는 이어진다).
 - **동시 실행**: 팀 전체 `running` 은 `settings.maxConcurrent` 이하. 넘치면 `queued`(FIFO). 팀원은 세션이 하나라 **같은 팀원에게 온 디스패치는 그 팀원의 턴이 끝날 때까지 대기**한다(상한과 무관). 팀원 `state` 는 `idle → queued → running → (waiting_approval ⇄ running) → idle`, 실패 시 `error`.
-- **턴 입력**: 팀원 세션에 보내는 턴 텍스트는 (1) 방 맥락, (2) 이번 메시지 순이다. 맥락은 그 방의 최근 메시지를 `contextMaxMessages`(기본 40)개, 합쳐서 12,000자 이내로 잘라(오래된 것부터 버림) 한 줄씩 접두어를 붙인다: 사용자 `[#전체] 사용자: …` / `[DM] 사용자: …`, 에이전트 `[#전체] @민수(개발자): …`(`@handle(roleLabel)`), 시스템 `[#전체] 시스템: …`. 승인·변경 카드는 `text` 한 줄로 넣는다. 팀원이 이미 본 메시지(자기 세션에 전달된 것)는 다시 넣지 않는다. (2026-09-14 추가) 턴 입력에는 **그 팀원 자신의** 승인·변경 카드만 한 줄로 들어간다. 다른 팀원의 카드는 방 화면에는 남지만 턴 입력에서는 제외된다(맥락 절약).
+- **턴 입력**: 팀원 세션에 보내는 턴 텍스트는 (1) 방 맥락, (2) 이번 메시지 순이다. (2026-09-14 추가) 한 팀원의 **맥락 방**은 그룹방 + 자기 DM 방 + **자기가 참가한 곁방 전부**이며, 이미 본 메시지 표시(`lastSeen`)는 방마다 따로 둔다. 맥락은 그 방의 최근 메시지를 `contextMaxMessages`(기본 40)개, 합쳐서 12,000자 이내로 잘라(오래된 것부터 버림) 한 줄씩 접두어를 붙인다: 사용자 `[#전체] 사용자: …` / `[DM] 사용자: …`, 에이전트 `[#전체] @민수(개발자): …`(`@handle(roleLabel)`), 시스템 `[#전체] 시스템: …`. 승인·변경 카드는 `text` 한 줄로 넣는다. 팀원이 이미 본 메시지(자기 세션에 전달된 것)는 다시 넣지 않는다. (2026-09-14 추가) 턴 입력에는 **그 팀원 자신의** 승인·변경 카드만 한 줄로 들어간다. 다른 팀원의 카드는 방 화면에는 남지만 턴 입력에서는 제외된다(맥락 절약).
 - **답변 게시**: 턴이 끝나면 그 턴의 마지막 `assistant_message`(`phase: final`, 없으면 마지막 `assistant_message`)의 텍스트를 `kind: "text"` 메시지로 디스패치가 시작된 방에 게시하고 `work` 를 채운다. 스트리밍은 없다. 턴이 `error` 로 끝나면 시스템 메시지로 알리고 팀원 `state: error`.
 - **승인 미러링**: 팀원 세션의 `approval.requested` 는 디스패치가 시작된 방에 `kind: "approval"` 메시지로 미러링하고 `approval.resolved` 때 `room.message.updated`. 응답은 6.3 대로 기존 세션 API.
 
@@ -594,6 +608,18 @@ TS 는 `packages/protocol/src/teams.ts`, `room-ws.ts`. 예시는 `fixtures/rest/
 
 - 팀 생성·팀원 추가 시 `git worktree add -b mam/<team-slug>/<handle> ~/.mam/teams/<teamId>/worktrees/<memberId> <baseBranch>`. `<team-slug>` 는 팀 이름을 `[a-z0-9-]` 로 정규화한 값(영숫자가 없으면 `team-<id 끝 8자>`). 브랜치가 이미 있으면 재사용한다. worktree 는 저장소 밖·홈 안에 둔다(ADR-017).
 - 팀원 세션의 `cwd` 는 그 worktree 다. 세션의 `git/status`·`fs` API 도 worktree 경로로 쓴다.
-- **턴 종료 시 서버가 커밋**한다: worktree 에 변경(추적·비추적 포함, `.gitignore` 준수)이 있으면 `git add -A && git commit` 을 작성자 `<이름> (mam-team) <handle@mam.local>`, 메시지 첫 줄 `<이름>: <원인 메시지 앞 72자>` 로 만든다. 그 다음 `ChangeSet`(`status: ready`) 을 만들고 그룹방에 `kind: "changes"` 카드를 올린다. 같은 팀원의 이전 `ready` ChangeSet 은 `stale` 로 바꾸고 `room.message.updated`. 변경이 없으면 카드를 올리지 않는다.
+- **턴 종료 시 서버가 커밋**한다: worktree 에 변경(추적·비추적 포함, `.gitignore` 준수)이 있으면 `git add -A && git commit` 을 작성자 `<이름> (mam-team) <handle@mam.local>`, 메시지 첫 줄 `<이름>: <원인 메시지 앞 72자>` 로 만든다. 그 다음 `ChangeSet`(`status: ready`) 을 만들고 그룹방에 `kind: "changes"` 카드를 올린다. **곁방에서 한 작업의 변경 카드도 그룹방에 올린다**(2026-09-14 추가 — 사람이 머지를 한곳에서 본다). 같은 팀원의 이전 `ready` ChangeSet 은 `stale` 로 바꾸고 `room.message.updated`. 변경이 없으면 카드를 올리지 않는다.
 - **머지**는 `POST /teams/:id/changes/:changeId/merge`. 서버가 `cwd`(원본 저장소)에서 `git merge --no-ff <branch>` 를 실행한다. `cwd` 의 현재 브랜치가 `baseBranch` 가 아니거나 작업 트리가 더러우면 409. 충돌이면 `git merge --abort` 후 `status: conflict`, `conflictFiles`. 성공하면 `merged`, `mergeCommit`. **브랜치는 유지**하고 팀원은 같은 브랜치에서 계속 일한다(다음 턴 전에 서버가 `baseBranch` 를 팀원 브랜치에 머지해 최신화한다. 충돌 시 시스템 메시지로 알리고 사용자가 정리한다).
 - 팀·팀원 삭제 시 `git worktree remove` 와 브랜치 삭제. `keepWorktree(s)=true` 면 둘 다 남긴다. 커밋되지 않은 변경이 있으면 409.
+
+### 6.6 곁방(2026-09-14 추가)
+
+에이전트끼리의 1:1·2:1 대화가 전부 그룹방에서 일어나면 다른 팀원의 맥락을 잠식한다. 그래서 **에이전트 간 대화는 곁방(side room)으로 자동 분리**한다. 사용자↔에이전트 대화는 그룹방에 그대로 둔다.
+
+- **신원은 참가자 집합.** 곁방은 `Room.participants`(정렬된 팀원 id 2개 이상)로 식별한다. 같은 집합이면 **같은 방을 재사용**한다. 방은 대화가 끝나도 지우지 않는다.
+- **생성.** 그룹방(또는 다른 곁방)에서 에이전트가 에이전트를 멘션하면 `{작성자} ∪ {멘션 대상}` 의 곁방을 찾고, 없으면 만든다. `kind: "side"`, `memberId: null`, `name` 은 참가자 이름을 `↔` 로 이은 문자열(예: `민수 ↔ 지연`, 서버가 만든다).
+- **상한.** `{작성자} ∪ {멘션 대상}` 이 `settings.sideRoomMaxParticipants`(기본 3)를 넘으면 곁방을 만들지 않고 그룹방에 남긴다. 그 정도 인원이면 공지·브로드캐스트로 본다.
+- **연결 카드 두 종류.** 곁방이 처음 열리면 그룹방에 `kind: "system"` 메시지 한 줄(`sideRoom.kind: "opened"`, `messages: 0`), 곁방 대화가 끝나면 결론 한 줄(`sideRoom.kind: "closed"`, `messages` 는 곁방에서 오간 메시지 수)을 남긴다. 두 카드 모두 `sideRoom.roomId` 로 곁방을 가리키므로 클라이언트는 카드에서 곁방으로 들어갈 수 있다. 예시는 `fixtures/room-ws/room.message.side-opened.json`, `room.message.side-closed.json`.
+- **사람이 끼어들 수 있다.** 곁방은 방 목록의 "에이전트 간" 섹션에 보이고 사용자가 직접 들어가 쓸 수 있다. 멘션 없이 쓰면 참가자 전원이 응답한다(6.4).
+- **변경 카드는 그룹방.** 곁방에서 한 작업이라도 "변경 준비됨"(`kind: "changes"`) 카드는 그룹방에 올린다(6.5). 승인 카드는 지금처럼 디스패치가 시작된 방에 미러링한다.
+- **턴 입력.** 팀원의 맥락 방에는 자기가 참가한 곁방이 전부 들어간다(6.4 "턴 입력"). 참가하지 않은 곁방의 대화는 보이지 않는다 — 이게 맥락을 아끼는 지점이다.

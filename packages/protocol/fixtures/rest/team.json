@@ -6,7 +6,8 @@
   "settings": {
     "maxHops": 6,
     "maxConcurrent": 2,
-    "contextMaxMessages": 40
+    "contextMaxMessages": 40,
+    "sideRoomMaxParticipants": 3
   },
   "members": [
     {
@@ -77,6 +78,19 @@
       "name": "지연",
       "lastSeq": 1,
       "lastMessageAt": "2026-09-12T09:31:00Z"
+    },
+    {
+      "id": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR3",
+      "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+      "kind": "side",
+      "memberId": null,
+      "name": "민수 ↔ 지연",
+      "lastSeq": 7,
+      "lastMessageAt": "2026-09-12T09:31:20Z",
+      "participants": [
+        "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1",
+        "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+      ]
     }
   ],
   "createdAt": "2026-09-12T09:00:00Z",

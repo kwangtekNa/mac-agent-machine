@@ -375,14 +375,16 @@ final class TeamModelsTests: XCTestCase {
     func testTeamHasGroupRoomAndDMPerMember() throws {
         let team = try decodeFixture(Team.self, "rest/team.json")
         XCTAssertEqual(team.id, Self.teamId)
-        XCTAssertEqual(team.rooms.map(\.kind), [.group, .dm, .dm])
+        // 마지막은 곁방(`kind: "side"`, 2026-09-14 추가). Swift `RoomKind` 에 아직 case 가 없어 unknown 으로 디코드된다.
+        XCTAssertEqual(team.rooms.map(\.kind), [.group, .dm, .dm, .unknown])
         let group = team.rooms[0]
         XCTAssertNil(group.memberId)
         XCTAssertEqual(group.name, "전체")
         XCTAssertEqual(group.lastSeq, 9)
         XCTAssertNotNil(group.lastMessageAt)
-        XCTAssertEqual(team.rooms.dropFirst().map(\.memberId), team.members.map(\.id))
-        XCTAssertEqual(team.rooms.dropFirst().map(\.name), team.members.map(\.name))
+        let dms = team.rooms.filter { $0.kind == .dm }
+        XCTAssertEqual(dms.map(\.memberId), team.members.map(\.id))
+        XCTAssertEqual(dms.map(\.name), team.members.map(\.name))
         XCTAssertNil(team.rooms[1].lastMessageAt)
         XCTAssertEqual(team.rooms[1].lastSeq, 0)
         XCTAssertNotNil(team.rooms[2].lastMessageAt)

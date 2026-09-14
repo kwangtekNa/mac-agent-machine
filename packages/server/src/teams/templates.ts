@@ -4,7 +4,12 @@ import { newId } from "../ids.js";
 import type { TeamStore } from "./store.js";
 
 /** PROTOCOL 6.1 `TeamSettings` 기본값. */
-export const DEFAULT_TEAM_SETTINGS: TeamSettings = { maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40 };
+export const DEFAULT_TEAM_SETTINGS: TeamSettings = {
+  maxHops: 6,
+  maxConcurrent: 2,
+  contextMaxMessages: 40,
+  sideRoomMaxParticipants: 3,
+};
 
 function nameKey(name: string): string {
   return name.normalize("NFKC").replace(/\s+/g, "").toLowerCase();

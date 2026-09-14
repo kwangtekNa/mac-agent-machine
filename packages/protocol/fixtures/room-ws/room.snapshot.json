@@ -29,7 +29,8 @@
       "createdAt": "2026-09-12T09:00:05Z",
       "work": null,
       "approval": null,
-      "changes": null
+      "changes": null,
+      "sideRoom": null
     },
     {
       "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM2",
@@ -48,7 +49,8 @@
       "createdAt": "2026-09-12T09:10:00Z",
       "work": null,
       "approval": null,
-      "changes": null
+      "changes": null,
+      "sideRoom": null
     },
     {
       "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM3",
@@ -80,7 +82,8 @@
         "costUsd": 0.04
       },
       "approval": null,
-      "changes": null
+      "changes": null,
+      "sideRoom": null
     },
     {
       "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM4",
@@ -130,7 +133,8 @@
         },
         "resolution": null
       },
-      "changes": null
+      "changes": null,
+      "sideRoom": null
     }
   ],
   "pendingApprovals": [

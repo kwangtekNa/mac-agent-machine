@@ -122,6 +122,9 @@ const ROOM_WS: Record<string, { type: string; messageKind?: string; authorKind?:
   "room.message.approval": { type: "room.message", messageKind: "approval", authorKind: "agent" },
   "room.message.changes": { type: "room.message", messageKind: "changes", authorKind: "agent" },
   "room.message.system": { type: "room.message", messageKind: "system", authorKind: "system" },
+  // 2026-09-14 추가분(곁방 연결 카드). 그룹방에 올라가는 system 메시지이며 `sideRoom` 만 다르다.
+  "room.message.side-opened": { type: "room.message", messageKind: "system", authorKind: "system" },
+  "room.message.side-closed": { type: "room.message", messageKind: "system", authorKind: "system" },
   "room.message.updated": { type: "room.message.updated", messageKind: "approval" },
   "room.status": { type: "room.status" },
   "room.error": { type: "room.error" },
@@ -164,6 +167,9 @@ const ADDED_2026_09_12 = [
 
 /** 2026-09-13 추가분(git init, net ports, 문서 변환) 4개. iOS `ProtocolFixturesTests.ADDED_2026_09_13` 과 같은 집합. */
 const ADDED_2026_09_13 = ["rest/git-init", "rest/git-init-dry-run", "rest/net-ports", "rest/fs-render"];
+
+/** 2026-09-14 추가분(곁방 연결 카드) 2개. iOS `ProtocolFixturesTests.ADDED_2026_09_14` 와 같은 집합. */
+const ADDED_2026_09_14 = ["room-ws/room.message.side-opened", "room-ws/room.message.side-closed"];
 
 /** 2026-09-10 추가분(사용량·모델·mkdir). 라운드트립 테스트가 최소한 이 파일들을 반드시 포함해야 한다. */
 const ADDED_2026_09_10 = [
@@ -272,6 +278,11 @@ describe("fixtures ↔ 매핑 테이블 (누락 방지)", () => {
     expect(ADDED_2026_09_13).toHaveLength(4);
     const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
     for (const added of ADDED_2026_09_13) expect(keys.has(added), added).toBe(true);
+  });
+  it("2026-09-14 추가분 2개가 전부 매핑표에 있다", () => {
+    expect(ADDED_2026_09_14).toHaveLength(2);
+    const keys = new Set(allFixtures().map((f) => `${f.dir}/${f.name}`));
+    for (const added of ADDED_2026_09_14) expect(keys.has(added), added).toBe(true);
   });
   it("ws/ 와 client/ 에는 방 이벤트가 없다 (iOS 가 엄격한 enum 으로 디코드한다)", () => {
     for (const name of listFixtures("ws")) expect(name.startsWith("room."), name).toBe(false);
@@ -469,7 +480,29 @@ describe("team fixtures (2026-09-12 추가)", () => {
       expect(m.branch).toBe(`mam/${team.name}/${m.handle}`);
       expect(m.worktreePath).toBe(`/Users/alice/.mam/teams/${team.id}/worktrees/${m.id}`);
     }
-    expect(team.settings).toEqual({ maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40 });
+    expect(team.settings).toEqual({
+      maxHops: 6,
+      maxConcurrent: 2,
+      contextMaxMessages: 40,
+      sideRoomMaxParticipants: 3,
+    });
+  });
+
+  it("team 의 곁방(2026-09-14 추가)은 참가자 집합을 갖고 memberId 가 null 이며 그룹·DM 방은 키를 생략한다", () => {
+    const team = TeamSchema.parse(loadFixture("rest", "team"));
+    const sides = team.rooms.filter((r) => r.kind === "side");
+    expect(sides).toHaveLength(1);
+    const side = sides[0]!;
+    expect(side.memberId).toBeNull();
+    expect(side.participants).toEqual(team.members.map((m) => m.id).sort());
+    expect(side.name).toBe(team.members.map((m) => m.name).join(" ↔ "));
+    for (const room of team.rooms) {
+      if (room.kind === "side") continue;
+      expect(room.participants, room.id).toBeUndefined();
+    }
+    // 원본 JSON 에도 그룹·DM 방에는 키 자체가 없다(구 클라이언트 호환)
+    const raw = loadFixture("rest", "team") as { rooms: Record<string, unknown>[] };
+    expect(raw.rooms.filter((r) => "participants" in r)).toHaveLength(1);
   });
 
   it("teams·team-detail 의 팀은 team.json 과 같고, team-detail 은 running 1·queued 1·changes 1 이다", () => {
@@ -583,6 +616,35 @@ describe("room-ws fixtures", () => {
     expect(user.message.mentions).toHaveLength(1);
     expect(user.message.hop).toBe(0);
     expect(user.message.work).toBeNull();
+  });
+
+  it("곁방 연결 카드(2026-09-14 추가)는 그룹방의 system 메시지이고 opened 는 0건, closed 는 오간 건수를 담는다", () => {
+    const opened = RoomServerEventSchema.parse(loadFixture("room-ws", "room.message.side-opened"));
+    const closed = RoomServerEventSchema.parse(loadFixture("room-ws", "room.message.side-closed"));
+    if (opened.type !== "room.message" || closed.type !== "room.message") throw new Error("type mismatch");
+    const group = RoomDetailResponseSchema.parse(loadFixture("rest", "room")).room;
+    const side = TeamSchema.parse(loadFixture("rest", "team")).rooms.find((r) => r.kind === "side");
+    for (const event of [opened, closed]) {
+      // 카드는 곁방이 아니라 그룹방에 남는다
+      expect(event.message.roomId).toBe(group.id);
+      expect(event.message.kind).toBe("system");
+      expect(event.message.author.kind).toBe("system");
+      expect(event.message.sideRoom?.roomId).toBe(side?.id);
+      expect(event.message.sideRoom?.participants).toEqual(side?.participants);
+    }
+    expect(opened.message.sideRoom?.kind).toBe("opened");
+    expect(opened.message.sideRoom?.messages).toBe(0);
+    expect(closed.message.sideRoom?.kind).toBe("closed");
+    expect(closed.message.sideRoom?.messages).toBe(7);
+    expect(closed.message.text).toContain("결론");
+  });
+
+  it("곁방 카드가 아닌 방 메시지는 sideRoom 이 null 이다", () => {
+    const event = RoomServerEventSchema.parse(loadFixture("room-ws", "room.message.system"));
+    if (event.type !== "room.message") throw new Error("type mismatch");
+    expect(event.message.sideRoom).toBeNull();
+    const detail = RoomDetailResponseSchema.parse(loadFixture("rest", "room"));
+    for (const message of detail.messages) expect(message.sideRoom, message.id).toBeNull();
   });
 
   it("room.message.updated 는 approval 메시지에 resolution 이 채워진 것이고 message.seq 는 원래 값이다", () => {

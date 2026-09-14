@@ -4,7 +4,8 @@
   "settings": {
     "maxHops": 6,
     "maxConcurrent": 2,
-    "contextMaxMessages": 40
+    "contextMaxMessages": 40,
+    "sideRoomMaxParticipants": 3
   },
   "members": [
     {

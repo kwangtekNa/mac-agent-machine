@@ -131,6 +131,8 @@ import type {
   RoomMessageSchema,
   RoomSchema,
   RunningDispatchSchema,
+  SideRoomLinkKindSchema,
+  SideRoomLinkSchema,
   TeamDetailResponseSchema,
   TeamMemberSchema,
   TeamMemberStateSchema,
@@ -305,6 +307,9 @@ export type WorkSummary = z.infer<typeof WorkSummarySchema>;
 export type ChangeSetStatus = z.infer<typeof ChangeSetStatusSchema>;
 export type ChangeSet = z.infer<typeof ChangeSetSchema>;
 export type RoomMessageKind = z.infer<typeof RoomMessageKindSchema>;
+/** 곁방 연결 카드(2026-09-14 추가). */
+export type SideRoomLinkKind = z.infer<typeof SideRoomLinkKindSchema>;
+export type SideRoomLink = z.infer<typeof SideRoomLinkSchema>;
 export type RoomApproval = z.infer<typeof RoomApprovalSchema>;
 export type RoomMessage = z.infer<typeof RoomMessageSchema>;
 export type MergeResult = z.infer<typeof MergeResultSchema>;

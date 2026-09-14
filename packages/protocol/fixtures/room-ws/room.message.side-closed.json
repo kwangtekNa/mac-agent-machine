@@ -1,0 +1,33 @@
+{
+  "type": "room.message",
+  "seq": 12,
+  "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+  "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+  "ts": "2026-09-12T09:36:20Z",
+  "message": {
+    "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM9",
+    "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+    "seq": 12,
+    "author": {
+      "kind": "system"
+    },
+    "kind": "system",
+    "text": "민수 ↔ 지연 곁방 대화 7건 · 결론: 린트 오류 3건을 고쳤습니다",
+    "mentions": [],
+    "hop": 0,
+    "dispatchId": null,
+    "createdAt": "2026-09-12T09:36:20Z",
+    "work": null,
+    "approval": null,
+    "changes": null,
+    "sideRoom": {
+      "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR3",
+      "participants": [
+        "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1",
+        "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+      ],
+      "kind": "closed",
+      "messages": 7
+    }
+  }
+}

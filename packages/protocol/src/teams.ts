@@ -62,25 +62,47 @@ export const TeamMemberSchema = z.object({
   updatedAt: IsoDateSchema,
 });
 
-/** 팀 설정. 기본값 `maxHops` 6, `maxConcurrent` 2, `contextMaxMessages` 40. */
+/** 팀 설정. 기본값 `maxHops` 6, `maxConcurrent` 2, `contextMaxMessages` 40, `sideRoomMaxParticipants` 3. */
 export const TeamSettingsSchema = z.object({
   maxHops: z.int().min(0).max(50),
   maxConcurrent: z.int().min(1).max(8),
   contextMaxMessages: z.int().min(1).max(500),
+  /**
+   * 곁방 참가자 수 상한(기본 3, 2026-09-14 추가). `{작성자} ∪ {멘션 대상}` 이 이 수를 넘으면
+   * 곁방을 만들지 않고 그룹방에 남긴다(공지·브로드캐스트로 본다. `PROTOCOL.md` 6.6).
+   */
+  sideRoomMaxParticipants: z.int().min(2).max(8),
 });
 
-export const RoomKindSchema = z.enum(["group", "dm"]);
+/** `side` 는 에이전트끼리의 대화를 그룹방에서 떼어낸 곁방(2026-09-14 추가). */
+export const RoomKindSchema = z.enum(["group", "dm", "side"]);
 
-export const RoomSchema = z.object({
-  id: RoomIdSchema,
-  teamId: TeamIdSchema,
-  kind: RoomKindSchema,
-  /** DM 방의 상대 팀원. 그룹방은 `null`. */
-  memberId: MemberIdSchema.nullable(),
-  name: z.string(),
-  lastSeq: SeqSchema,
-  lastMessageAt: IsoDateSchema.nullable(),
-});
+export const RoomSchema = z
+  .object({
+    id: RoomIdSchema,
+    teamId: TeamIdSchema,
+    kind: RoomKindSchema,
+    /** DM 방의 상대 팀원. 그룹방과 곁방은 `null`. */
+    memberId: MemberIdSchema.nullable(),
+    /** 그룹방 `전체`, DM 은 팀원 이름, 곁방은 참가자 이름을 `↔` 로 이은 문자열(서버가 만든다). */
+    name: z.string(),
+    lastSeq: SeqSchema,
+    lastMessageAt: IsoDateSchema.nullable(),
+    /**
+     * 곁방의 참가자 집합(2026-09-14 추가). 정렬된 팀원 id 2개 이상이며 이 집합이 곁방의 신원이다
+     * (같은 집합이면 같은 방을 재사용한다. 6.6). `side` 가 아닌 방은 키를 생략한다.
+     * 정렬 여부는 서버가 보장한다(집합 비교는 서버가 정렬해서 한다).
+     */
+    participants: z
+      .array(MemberIdSchema)
+      .min(2)
+      .refine((ids) => new Set(ids).size === ids.length, { message: "participants must be unique" })
+      .optional(),
+  })
+  .refine((room) => (room.kind === "side") === (room.participants !== undefined), {
+    message: "side room requires participants; other rooms omit the key",
+    path: ["participants"],
+  });
 
 export const TeamSchema = z.object({
   id: TeamIdSchema,
@@ -138,6 +160,20 @@ export const ChangeSetSchema = z.object({
 
 export const RoomMessageKindSchema = z.enum(["text", "approval", "changes", "system"]);
 
+export const SideRoomLinkKindSchema = z.enum(["opened", "closed"]);
+
+/**
+ * 곁방 연결 카드(2026-09-14 추가). 곁방이 처음 열릴 때와 대화가 끝났을 때
+ * 그룹방에 한 줄씩 남는 `kind: "system"` 메시지에만 붙는다(`PROTOCOL.md` 6.6).
+ */
+export const SideRoomLinkSchema = z.object({
+  roomId: RoomIdSchema,
+  participants: z.array(MemberIdSchema),
+  kind: SideRoomLinkKindSchema,
+  /** `closed` 면 곁방에서 오간 메시지 수, `opened` 면 0. */
+  messages: z.int().min(0),
+});
+
 /** 방에 미러링된 승인. 실제 응답은 `POST /sessions/:sessionId/approvals/:approvalId`. */
 export const RoomApprovalSchema = z.object({
   memberId: MemberIdSchema,
@@ -167,6 +203,8 @@ export const RoomMessageSchema = z.object({
   approval: RoomApprovalSchema.nullable(),
   /** `kind: "changes"` 일 때만 채운다. */
   changes: ChangeSetSchema.nullable(),
+  /** 곁방 연결 카드(2026-09-14 추가). `kind: "system"` 이고 곁방이 열리거나 닫힐 때만 채운다. 키가 없는 구 레코드는 `null`. */
+  sideRoom: SideRoomLinkSchema.nullable().default(null),
 });
 
 export const MergeResultSchema = z.object({

@@ -1,0 +1,33 @@
+{
+  "type": "room.message",
+  "seq": 11,
+  "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+  "teamId": "team_01J8ZQ4K5N7P9R3S6T8V0W2XT1",
+  "ts": "2026-09-12T09:33:00Z",
+  "message": {
+    "id": "msg_01J8ZQ4K5N7P9R3S6T8V0W2XM8",
+    "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR0",
+    "seq": 11,
+    "author": {
+      "kind": "system"
+    },
+    "kind": "system",
+    "text": "민수 ↔ 지연 곁방을 열었습니다",
+    "mentions": [],
+    "hop": 0,
+    "dispatchId": null,
+    "createdAt": "2026-09-12T09:33:00Z",
+    "work": null,
+    "approval": null,
+    "changes": null,
+    "sideRoom": {
+      "roomId": "room_01J8ZQ4K5N7P9R3S6T8V0W2XR3",
+      "participants": [
+        "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA1",
+        "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"
+      ],
+      "kind": "opened",
+      "messages": 0
+    }
+  }
+}

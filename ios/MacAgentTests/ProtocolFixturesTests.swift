@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import MacAgent
 
-/// 계약 테스트: `packages/protocol/fixtures/` 의 73개 JSON 을 Swift Codable 로 전수 디코딩한다.
+/// 계약 테스트: `packages/protocol/fixtures/` 의 75개 JSON 을 Swift Codable 로 전수 디코딩한다.
 /// TS 쪽 `packages/protocol/test/fixtures.test.ts` 의 매핑표와 대칭이다.
 /// 팀·방(2026-09-12 추가) fixture 는 `Team`/`Room`/`RoomEvent`/`RoomClientMessage` 로 디코드한다. 방 이벤트는 세션 WS 와 별도 enum 이다.
 final class ProtocolFixturesTests: XCTestCase {
@@ -66,12 +66,23 @@ final class ProtocolFixturesTests: XCTestCase {
         for name in roomWsExpectations.keys {
             t["room-ws/\(name).json"] = decode(RoomEvent.self)
         }
+        // 2026-09-14 추가분(곁방 연결 카드) room-ws 2개.
+        // 아직 Swift 에 `SideRoomLink` 타입이 없어 임시로 JSONValue 로만 디코드한다(다음 step 이 실제 타입으로 바꾼다).
+        for name in ADDED_2026_09_14 {
+            t[name] = decode(JSONValue.self)
+        }
         // room-client/ 3개: 전부 RoomClientMessage
         for name in roomClientExpectations.keys {
             t["room-client/\(name).json"] = decode(RoomClientMessage.self)
         }
         return t
     }
+
+    /// TS 쪽 fixtures.test.ts 의 ADDED_2026_09_14 와 같은 집합(곁방 연결 카드 2개).
+    private static let ADDED_2026_09_14: Set<String> = [
+        "room-ws/room.message.side-opened.json",
+        "room-ws/room.message.side-closed.json",
+    ]
 
     /// TS 쪽 fixtures.test.ts 의 ADDED_2026_09_13 과 같은 집합(git init 2개 + net ports 1개 + 문서 변환 1개).
     private static let ADDED_2026_09_13: Set<String> = [
@@ -173,7 +184,7 @@ final class ProtocolFixturesTests: XCTestCase {
         let files = try FixtureLoader.allJSONPaths()
         let keys = Self.table().keys.sorted()
         XCTAssertEqual(files, keys, "fixtures/ 의 파일 목록과 매핑표가 다르다")
-        XCTAssertEqual(files.count, 73)
+        XCTAssertEqual(files.count, 75)
         // TS 쪽 fixtures.test.ts 의 ADDED_2026_09_10 과 같은 집합
         for added in [
             "rest/usage.json", "rest/usage-empty.json", "rest/models-claude.json", "rest/models-codex.json",
@@ -189,6 +200,11 @@ final class ProtocolFixturesTests: XCTestCase {
         // TS 쪽 fixtures.test.ts 의 ADDED_2026_09_13 과 같은 집합(git init 2개 + net ports 1개 + 문서 변환 1개)
         XCTAssertEqual(Self.ADDED_2026_09_13.count, 4)
         for added in Self.ADDED_2026_09_13 {
+            XCTAssertTrue(keys.contains(added), "\(added) 이 매핑표에 없다")
+        }
+        // TS 쪽 fixtures.test.ts 의 ADDED_2026_09_14 와 같은 집합(곁방 연결 카드 2개)
+        XCTAssertEqual(Self.ADDED_2026_09_14.count, 2)
+        for added in Self.ADDED_2026_09_14 {
             XCTAssertTrue(keys.contains(added), "\(added) 이 매핑표에 없다")
         }
         // 방 이벤트는 ws/·client/ 가 아니라 room-ws/·room-client/ 에만 있다(ServerEvent enum 이 깨지지 않도록)

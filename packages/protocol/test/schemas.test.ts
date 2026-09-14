@@ -18,6 +18,7 @@ import {
   RoomAuthorSchema,
   RoomClientMessageSchema,
   RoomMessageSchema,
+  RoomSchema,
   RoomServerEventSchema,
   TeamMemberSchema,
   TeamSchema,
@@ -329,7 +330,7 @@ describe("2026-09-12 추가분 (팀·방)", () => {
     name: "backend",
     cwd: "/Users/alice/work/app",
     baseBranch: "main",
-    settings: { maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40 },
+    settings: { maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40, sideRoomMaxParticipants: 3 },
     members: [member],
     rooms: [{ id: ROOM, teamId: TEAM, kind: "group", memberId: null, name: "전체", lastSeq: 0, lastMessageAt: null }],
     createdAt: TS,
@@ -368,13 +369,69 @@ describe("2026-09-12 추가분 (팀·방)", () => {
   });
 
   it("TeamSettings.maxConcurrent 는 1 이상이다 (0 거부)", () => {
-    const settings = { maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40 };
+    const settings = { maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40, sideRoomMaxParticipants: 3 };
     expect(TeamSettingsSchema.safeParse(settings).success).toBe(true);
     expect(TeamSettingsSchema.safeParse({ ...settings, maxConcurrent: 0 }).success).toBe(false);
     expect(TeamSettingsSchema.safeParse({ ...settings, maxConcurrent: 9 }).success).toBe(false);
     expect(TeamSettingsSchema.safeParse({ ...settings, maxHops: -1 }).success).toBe(false);
     expect(TeamSettingsSchema.safeParse({ ...settings, maxHops: 0 }).success).toBe(true);
     expect(TeamSettingsSchema.safeParse({ ...settings, contextMaxMessages: 0 }).success).toBe(false);
+  });
+
+  it("곁방(2026-09-14 추가)은 참가자가 2명 이상이어야 하고 중복 id 를 거부한다", () => {
+    const AGT2 = "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2";
+    const side = {
+      id: "room_01J8ZQ4K5N7P9R3S6T8V0W2XR3",
+      teamId: TEAM,
+      kind: "side",
+      memberId: null,
+      name: "민수 ↔ 지연",
+      lastSeq: 0,
+      lastMessageAt: null,
+      participants: [AGT, AGT2],
+    };
+    expect(RoomSchema.safeParse(side).success).toBe(true);
+    expect(RoomSchema.safeParse({ ...side, participants: [AGT] }).success).toBe(false);
+    expect(RoomSchema.safeParse({ ...side, participants: [] }).success).toBe(false);
+    // 중복 id 는 집합이 아니므로 스키마에서 막는다(같은 집합이면 같은 방을 재사용한다. 6.6)
+    expect(RoomSchema.safeParse({ ...side, participants: [AGT, AGT] }).success).toBe(false);
+    expect(RoomSchema.safeParse({ ...side, participants: [AGT, SES] }).success).toBe(false);
+  });
+
+  it("participants 는 곁방에만 있다 — side 인데 없거나, 그룹·DM 에 있으면 실패한다", () => {
+    const group = { id: ROOM, teamId: TEAM, kind: "group", memberId: null, name: "전체", lastSeq: 0, lastMessageAt: null };
+    expect(RoomSchema.safeParse(group).success).toBe(true);
+    expect(RoomSchema.safeParse({ ...group, kind: "side" }).success).toBe(false);
+    expect(RoomSchema.safeParse({ ...group, participants: [AGT, "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"] }).success).toBe(false);
+    expect(RoomSchema.safeParse({ ...group, kind: "thread" }).success).toBe(false);
+  });
+
+  it("TeamSettings.sideRoomMaxParticipants 는 2~8 이고 누락을 거부한다", () => {
+    const settings = { maxHops: 6, maxConcurrent: 2, contextMaxMessages: 40, sideRoomMaxParticipants: 3 };
+    expect(TeamSettingsSchema.safeParse(settings).success).toBe(true);
+    expect(TeamSettingsSchema.safeParse({ ...settings, sideRoomMaxParticipants: 1 }).success).toBe(false);
+    expect(TeamSettingsSchema.safeParse({ ...settings, sideRoomMaxParticipants: 9 }).success).toBe(false);
+    expect(TeamSettingsSchema.safeParse({ ...settings, sideRoomMaxParticipants: 2.5 }).success).toBe(false);
+    expect(TeamSettingsSchema.safeParse({ ...settings, sideRoomMaxParticipants: 8 }).success).toBe(true);
+    const { sideRoomMaxParticipants: _omitted, ...without } = settings;
+    expect(TeamSettingsSchema.safeParse(without).success).toBe(false);
+  });
+
+  it("RoomMessage.sideRoom 은 키가 없으면 null 이고 모르는 kind 를 거부한다", () => {
+    const link = {
+      roomId: "room_01J8ZQ4K5N7P9R3S6T8V0W2XR3",
+      participants: [AGT, "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA2"],
+      kind: "opened",
+      messages: 0,
+    };
+    // 구 레코드(키 없음)는 null 로 채운다
+    const { sideRoom: _none, ...legacy } = { ...message, sideRoom: null };
+    expect(RoomMessageSchema.parse(legacy).sideRoom).toBeNull();
+    const card = { ...message, kind: "system", author: { kind: "system" }, sideRoom: link };
+    expect(RoomMessageSchema.safeParse(card).success).toBe(true);
+    expect(RoomMessageSchema.safeParse({ ...card, sideRoom: { ...link, kind: "reopened" } }).success).toBe(false);
+    expect(RoomMessageSchema.safeParse({ ...card, sideRoom: { ...link, messages: -1 } }).success).toBe(false);
+    expect(RoomMessageSchema.safeParse({ ...card, sideRoom: { ...link, roomId: SES } }).success).toBe(false);
   });
 
   it("RoomAuthor 의 모르는 kind 는 실패하고, agent 는 memberId 가 필요하다", () => {
