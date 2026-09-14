@@ -75,7 +75,8 @@ final class ServerConfigStore {
         return url
     }
 
-    /// loopback, RFC 1918 사설 IPv4, `localhost`, `*.local`.
+    /// loopback, RFC 1918 사설 IPv4, tailnet(100.64.0.0/10), `localhost`, `*.local`.
+    /// tailnet 은 인증된 사설 오버레이 네트워크이고(ADR-001) 개발 gateway 는 TLS 가 없으므로 http 를 허용한다.
     static func isLocalOrPrivateHost(_ host: String) -> Bool {
         let h = host.lowercased()
         if h == "localhost" || h == "::1" || h.hasSuffix(".local") || h.hasSuffix(".localhost") { return true }
@@ -85,6 +86,7 @@ final class ServerConfigStore {
         switch (a, b) {
         case (10, _), (127, _), (192, 168): return true
         case (172, 16...31): return true
+        case (100, 64...127): return true
         default: return false
         }
     }

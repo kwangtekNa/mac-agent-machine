@@ -17,12 +17,23 @@ final class ServerConfigStoreTests: XCTestCase {
         XCTAssertEqual(try ServerConfigStore.normalize("http://macmini.local").absoluteString, "http://macmini.local")
     }
 
+    /// tailnet(100.64.0.0/10)은 인증된 사설 오버레이 네트워크다(ADR-001). 개발 gateway 는 TLS 가 없으므로 http 를 허용한다.
+    func testNormalizeAllowsTailnetHTTP() throws {
+        XCTAssertEqual(try ServerConfigStore.normalize("http://100.87.186.44:7777").absoluteString, "http://100.87.186.44:7777")
+        XCTAssertEqual(try ServerConfigStore.normalize("http://100.64.0.1").absoluteString, "http://100.64.0.1")
+        XCTAssertEqual(try ServerConfigStore.normalize("http://100.127.255.254").absoluteString, "http://100.127.255.254")
+    }
+
     func testNormalizeRejectsPublicHTTP() {
         XCTAssertThrowsError(try ServerConfigStore.normalize("http://example.com")) { error in
             XCTAssertEqual(error as? ConfigError, .insecureScheme(host: "example.com"))
         }
-        XCTAssertThrowsError(try ServerConfigStore.normalize("http://100.64.0.1")) { error in
-            XCTAssertEqual(error as? ConfigError, .insecureScheme(host: "100.64.0.1"))
+        // tailnet 대역(100.64~100.127) 밖의 100.x 는 공인 주소다.
+        XCTAssertThrowsError(try ServerConfigStore.normalize("http://100.63.255.255")) { error in
+            XCTAssertEqual(error as? ConfigError, .insecureScheme(host: "100.63.255.255"))
+        }
+        XCTAssertThrowsError(try ServerConfigStore.normalize("http://100.128.0.1")) { error in
+            XCTAssertEqual(error as? ConfigError, .insecureScheme(host: "100.128.0.1"))
         }
         XCTAssertThrowsError(try ServerConfigStore.normalize("http://172.32.0.1")) { error in
             XCTAssertEqual(error as? ConfigError, .insecureScheme(host: "172.32.0.1"))
