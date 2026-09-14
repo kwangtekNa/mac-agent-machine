@@ -28,10 +28,28 @@
     {
       "step": 1,
       "name": "side-rooms-protocol",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-14T15:41:56+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "e949099b-aa86-4809-a76d-527c9bd7d392",
+          "cost_usd": 9.099782499999998,
+          "duration_s": 829.5,
+          "num_turns": 77,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 9.099782,
+      "duration_s": 829.5,
+      "retries": 0,
+      "session_id": "e949099b-aa86-4809-a76d-527c9bd7d392",
+      "summary": "곁방 계약 추가: teams.ts 에 RoomKind \"side\"·Room.participants(optional, 2명 이상·중복 거부·side 전용 refine)·TeamSettings.sideRoomMaxParticipants(2~8, 기본 3)·SideRoomLink(Kind)Schema·RoomMessage.sideRoom(nullable default null), index.ts 타입 export. PROTOCOL.md 6절 인트로/6.1(Room·RoomMessage·SideRoomLink·TeamSettings)/6.4(곁방 분리·곁방 안 라우팅·홉 무관·맥락 방=그룹+DM+참가 곁방)/6.5(변경 카드는 그룹방) 갱신 + 새 6.6 곁방. fixture: team/teams/team-detail 에 곁방 1개(room_…R3, participants [A1,A2], name \"민수 ↔ 지연\")와 sideRoomMaxParticipants 3, 템플릿 2개 설정 추가, 기존 RoomMessage 18건에 \"sideRoom\": null 명시, 새 room-ws/room.message.side-opened|side-closed.json. 테스트: fixtures.test.ts ROOM_WS 2항목+ADDED_2026_09_14+곁방/카드 단언, schemas.test.ts 음수 케이스 4개(참가자 1명·중복·side 전용·설정 범위·sideRoom 모르는 kind), index.test.ts export 2개, iOS ProtocolFixturesTests 파일 수 73→75(임시 JSONValue 디코드)·TeamModelsTests 방 kind 단언 보정(.unknown). 부수: 타입체크 통과를 위해 packages/server 기본값 두 줄만 추가(DEFAULT_TEAM_SETTINGS.sideRoomMaxParticipants: 3, room-manager candidate.sideRoom: null) — 동작 변화 없음, 곁방 로직·마이그레이션은 step 2. AC 전부 통과(typecheck, npm test 856 passed, grep 3건, scripts/test.sh OK 포함 iOS).",
+      "completed_at": "2026-09-14T15:55:48+0900"
     },
     {
       "step": 2,
