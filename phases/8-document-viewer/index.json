@@ -54,10 +54,37 @@
     {
       "step": 2,
       "name": "verify-and-install",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         1
-      ]
+      ],
+      "started_at": "2026-09-14T10:39:55+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": null,
+          "cost_usd": null,
+          "duration_s": 1800.0,
+          "num_turns": null,
+          "exit_code": -1,
+          "timeout": true
+        },
+        {
+          "attempt": 2,
+          "session_id": "aa92f011-5a35-48d3-8f76-1d759d397b51",
+          "cost_usd": 4.625698500000001,
+          "duration_s": 1071.8,
+          "num_turns": 48,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 4.625699,
+      "duration_s": 2871.8,
+      "retries": 1,
+      "session_id": "aa92f011-5a35-48d3-8f76-1d759d397b51",
+      "summary": "문서 뷰어 검증·설치 완료: dev-smoke 에 **24단계**(net/ports 가 23 이라 번호를 밀었다) — 최소 PDF(직접 계산한 xref, 본문 \"MacAgent PDF\")와 최소 HWPX(`zip` spawn, mimetype/Contents/header.xml/section0.xml, \"안녕하세요\")를 `MAM_UI_TEST_REPO` 저장소 안에 만들어 **커밋**(비추적 파일이 있으면 팀 머지가 409)한 뒤 `/fs/download` 200·`application/pdf`·content-length·바이트 동일, `/fs/render` HWPX 200(kind hwpx, 본문 포함), PDF 400, 빈 `.hwp` 501 `agent_unavailable`(이 머신엔 변환기 없음), 101 MiB 희소 파일 415 를 확인 + 신규 `ios/MacAgentUITests/DocumentViewerUITests.swift`(6번째 UI 클래스: 새 세션 cwd=저장소 → 파일 탭 → sample.pdf → `QLPreviewControllerView` + PDF 본문 → 닫기 → sample.hwpx → `app.webViews.staticTexts[\"안녕하세요\"]` → 닫기, 스크린샷 첨부) + 문서(IOS.md 10.10 + 식별자 표, RUNBOOK `## 9. 문서 미리보기`(지원 형식·100 MiB 상한·pyhwp 설치 안내·`MAM_HWP5HTML_BIN`·HWPX 는 변환기 불필요), README UI 테스트 6개·dev-smoke 24단계) + `install-dev-gateway.sh` 가 `MAM_HWP5HTML_BIN` 을 plist 에 전달. 검증: npm ci/typecheck/npm test(837 passed, 10 skipped), dev-smoke 24단계 exit 0, --keep 서버로 MacAgentUITests 전체 exit 0(442s) 후 DocumentViewerUITests 단독 재실행으로 스킵 아님 확인(passed 47.8s), 서버 종료 후 agent-host·gateway 잔여 없음·7777 free, bash scripts/test.sh OK. 설치: iPhone(530EAE6A…) 빌드·install 모두 성공(서명 정상), `process launch` 만 기기 잠금(FBSOpenApplicationErrorDomain error 7 Locked)으로 거절 — 기기 부재·서명 실패는 아님. pyhwp 는 설치하지 않았다(문서 안내만).",
+      "completed_at": "2026-09-14T11:27:47+0900"
     }
   ],
   "created_at": "2026-09-14T10:09:56+0900"
