@@ -5,7 +5,25 @@
     {
       "step": 0,
       "name": "context-filter-own-cards",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-15T12:02:59+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "448298a4-7e2d-42f2-afbe-2e97ea005c33",
+          "cost_usd": 4.694830000000001,
+          "duration_s": 585.8,
+          "num_turns": 49,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 4.69483,
+      "duration_s": 585.8,
+      "retries": 0,
+      "session_id": "448298a4-7e2d-42f2-afbe-2e97ea005c33",
+      "summary": "format.ts `isContextRelevant` 가 승인·변경 카드를 자기 것까지 전부 거르도록 좁혔고(text/system 규칙은 그대로, approvalSummary/changesSummary 는 트리거 렌더용으로 유지 + 주석), PROTOCOL 6.4 턴 입력 문단과 ADR-018(제목·보강 줄·수치) 갱신, format.test.ts(isContextRelevant 표·카드 트리거 케이스·3단 \"맥락 절감 측정\" 재작성)와 team-manager.test.ts(자기 승인·변경 카드가 자기 다음 턴 입력에서 빠지는지) 테스트 추가. 실측: 1,152자(필터 없음) → 533자(2026-09-14 규칙) → 443자(이번 규칙) = 필터 없음 대비 62% 절감, phase 9 대비 17% 절감. AC 전부 통과(npm ci, typecheck, npm test 889 passed/10 skipped, dev-smoke OK — 7777 을 dev.mam.dev-gateway LaunchAgent 가 점유해 MAM_DEV_PORT=7799 사용, scripts/test.sh OK).",
+      "completed_at": "2026-09-15T12:12:45+0900"
     },
     {
       "step": 1,
@@ -23,5 +41,6 @@
         1
       ]
     }
-  ]
+  ],
+  "created_at": "2026-09-15T12:02:59+0900"
 }
