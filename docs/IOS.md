@@ -310,6 +310,8 @@ UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로.
 - **펼치기는 그 자리에서**(인라인 토글, 별도 화면으로 보내지 않는다): 같은 셀 아래에 개별 카드(`RoomApprovalCard`·`ChangesReadyCard`·시스템 행)를 `RoomEntryRow` 로 **기존 뷰 그대로** 세로로 그린다(머지·거절 버튼도 그대로 동작한다). `chevron.up`. 펼침 상태는 `RoomView` 가 그룹 id 의 `Set<String>` 으로 들고 있고 셀은 `isExpanded` + `onToggle` 만 받는 무상태 뷰다.
 - **접근성**: 셀은 `.accessibilityElement(children: .contain)`(안에 버튼이 있다), 머리 줄 라벨 `작업 5건, 명령 2 변경 2 공지 1, 머지 대기 1건`, 힌트 "두 번 탭하면 펼칩니다".
 - 방에 들어가면 최신 메시지가 먼저 보인다(5.3 의 `.defaultScrollAnchor(.bottom)`). 세션 타임라인도 같다.
+- **UI 테스트** `MacAgentUITests/WorkGroupUITests.swift`(`MAM_UI_TEST_SERVER`·`MAM_UI_TEST_REPO` 가 없으면 `XCTSkip`): REST 로 팀(팀장 민수·지연 `full-auto` + 현우 `auto-edit`)을 만들고 그룹방 3턴 + 지연 DM 2턴을 시드해 그룹방 끝에 변경 카드 3장을 쌓는다 → 홈의 팀 행 → `#전체` → 나갔다 다시 들어가면 **맨 아래 작업 셀이 스크롤 없이 화면 안**이고 첫 사용자 메시지는 위로 밀려나 있다 → 셀 라벨 `변경 3건` + `머지 대기 2건`(같은 팀원의 이전 `ready` 는 `stale` 이라 3장 중 2장) → 탭하면 그 자리에서 변경 카드 3장 + `room.merge.*` 가 펼쳐지고 다시 탭하면 접힌다 → `@hyunwoo` 로 만든 **대기 중 승인은 접히지 않고** 그대로 보이며, 배너로 허용하면 그 카드도 작업 셀(`room.workGroup.<승인 메시지 id>`)로 접힌다. 정리는 REST 팀 삭제.
+- 머지 흐름을 누르는 `TeamRoomUITests` 는 변경 카드가 접혀 있으므로 작업 셀을 먼저 펼친 뒤 "main에 병합" 을 누른다(`expandWorkGroups`).
 
 | 식별자 | 위치 |
 |---|---|

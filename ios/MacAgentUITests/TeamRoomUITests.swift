@@ -136,9 +136,9 @@ final class TeamRoomUITests: XCTestCase {
         back.tap()
         XCTAssertTrue(input.waitForExistence(timeout: 10), "방 화면으로 돌아오지 않았습니다")
 
-        // 6. 변경 준비됨 카드 → "main에 병합" → 확인 → "병합됨".
+        // 6. 변경 준비됨 카드는 작업 셀로 접혀 있다(IOS.md 10.12) → 펼치고 → "main에 병합" → 확인 → "병합됨".
         let merge = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'room.merge.'")).firstMatch
-        XCTAssertTrue(waitScrolling(app, for: merge, timeout: 60), "변경 준비됨 카드의 병합 버튼이 없습니다\n\(tree(app))")
+        XCTAssertTrue(expandWorkGroups(app, until: merge, timeout: 90), "변경 준비됨 카드의 병합 버튼이 없습니다\n\(tree(app))")
         XCTAssertEqual(merge.label, "main에 병합")
         capture(app, shots, "7-changes-ready")
         merge.tap()
@@ -298,6 +298,59 @@ final class TeamRoomUITests: XCTestCase {
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count + 2))
         }
         field.typeText(text)
+    }
+
+    /// 승인·변경·공지 카드는 작업 셀(`room.workGroup.*`)로 접혀 있다(IOS.md 10.12). `target` 이 보일 때까지 **뒤에서부터** 셀을 펼친다.
+    /// 인덱스는 스크롤로 렌더 목록이 바뀌면 다른 셀을 가리키므로 식별자로 다시 잡고, 이미 펼친 셀은 다시 누르지 않는다(누르면 접힌다).
+    private func expandWorkGroups(_ app: XCUIApplication, until target: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        var opened: Set<String> = []
+        while Date() < deadline {
+            if target.exists { return true }
+            let groups = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'room.workGroup.'"))
+            let pending = (0..<groups.count).map { groups.element(boundBy: $0).identifier }
+                .filter { $0.hasPrefix("room.workGroup.") && !opened.contains($0) }
+            if let identifier = pending.last {
+                let cell = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+                if makeTappable(app, cell) {
+                    opened.insert(identifier)
+                    cell.tap()
+                }
+            } else {
+                app.swipeUp()
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        }
+        return target.exists
+    }
+
+    /// 요소를 화면 가운데로 끌어온다. 화면 끝(내비게이션 바 아래·컴포저 위)에 걸친 채 탭하면 다른 뷰가 받고,
+    /// `swipeUp()` 은 관성이 붙어 카드 몇 장을 지나치므로 모자란 만큼만 드래그한다(`WorkGroupUITests` 와 같은 패턴).
+    private func makeTappable(_ app: XCUIApplication, _ element: XCUIElement, timeout: TimeInterval = 20) -> Bool {
+        let window = app.windows.firstMatch.frame
+        guard window.height > 0 else { return false }
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            guard element.exists, element.frame.height > 0 else {
+                app.swipeUp()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+                continue
+            }
+            let frame = element.frame
+            if element.isHittable, frame.minY > window.minY + 100, frame.maxY < window.maxY - 60 { return true }
+            let startY = window.midY
+            let endY = min(max(startY - (frame.midY - window.midY), window.minY + 160), window.maxY - 160)
+            guard abs(endY - startY) > 4 else { return element.isHittable }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY / window.height))
+                .press(
+                    forDuration: 0.05,
+                    thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY / window.height))
+                )
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            // 목록 끝이라 더 움직이지 않으면(마지막 셀은 늘 바닥에 붙어 있다) 지금 눌릴 수 있는지로 판단한다.
+            if element.exists, element.frame == frame { return element.isHittable }
+        }
+        return false
     }
 
     /// LazyVStack 은 화면 밖 카드를 트리에 두지 않는다. 기다리다 없으면 아래·위로 스크롤하며 다시 찾는다.
