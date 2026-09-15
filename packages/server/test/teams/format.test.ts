@@ -104,11 +104,11 @@ describe("isContextRelevant", () => {
     return { ...fixture, author: { kind: "agent", memberId }, changes: { ...fixture.changes!, memberId } };
   };
 
-  it("keeps only the member's own approval and change cards, and every conversation but their own text", () => {
+  it("drops every approval and change card (2026-09-15: including the member's own) and keeps every conversation but their own text", () => {
     const cases: [string, RoomMessage, boolean][] = [
-      ["내 승인 카드", approvalCard(MINSU), true],
+      ["내 승인 카드", approvalCard(MINSU), false],
       ["남의 승인 카드", approvalCard(JIYEON), false],
-      ["내 변경 카드", changesCard(MINSU), true],
+      ["내 변경 카드", changesCard(MINSU), false],
       ["남의 변경 카드", changesCard(JIYEON), false],
       ["내 text", msg({ text: "제가 한 말", author: { kind: "agent", memberId: MINSU } }), false],
       ["남의 text", msg({ text: "동료 말", author: { kind: "agent", memberId: JIYEON } }), true],
@@ -123,8 +123,9 @@ describe("isContextRelevant", () => {
   it("is independent of the room: the same rules apply in a DM", () => {
     const mine = { ...approvalCard(MINSU), roomId: DM_MINSU };
     const theirs = { ...approvalCard(JIYEON), roomId: DM_MINSU };
-    expect(isContextRelevant(mine, MINSU)).toBe(true);
+    expect(isContextRelevant(mine, MINSU)).toBe(false);
     expect(isContextRelevant(theirs, MINSU)).toBe(false);
+    expect(isContextRelevant({ ...msg({ text: "머지 충돌을 해결해주세요", author: { kind: "system" }, kind: "system" }), roomId: DM_MINSU }, MINSU)).toBe(true);
   });
 });
 
@@ -192,15 +193,18 @@ describe("buildTurnText", () => {
     expect(r.text).toContain("y".repeat(20_000));
   });
 
-  it("skips the member's own text messages but keeps their cards", () => {
+  it("skips the member's own text messages and their own cards, but keeps system messages", () => {
     const mine = msg({ text: "제가 한 말", author: { kind: "agent", memberId: MINSU } });
     const fixture = fixtureMessage("room.message.changes");
     const card: RoomMessage = { ...fixture, author: { kind: "agent", memberId: MINSU }, changes: { ...fixture.changes!, memberId: MINSU } };
+    const notice = msg({ text: "머지 충돌을 해결해주세요: src/login.ts", author: { kind: "system" }, kind: "system" });
     const other = msg({ text: "동료 말", author: { kind: "agent", memberId: JIYEON } });
-    const { text, omitted } = build({ context: [mine, card, other] });
+    const { text, omitted } = build({ context: [mine, card, notice, other] });
     expect(omitted).toBe(0);
     expect(text).not.toContain("제가 한 말");
-    expect(text).toContain("[#전체] 시스템: 민수의 변경 준비됨: 2개 파일");
+    // 자기가 바꾼 파일은 자기 세션 타임라인에 이미 있다(2026-09-15)
+    expect(text).not.toContain("변경 준비됨");
+    expect(text).toContain("[#전체] 시스템: 머지 충돌을 해결해주세요: src/login.ts");
     expect(text).toContain("[#전체] @지연(개발자): 동료 말");
   });
 
@@ -258,6 +262,21 @@ describe("buildTurnText", () => {
     );
   });
 
+  it("keeps a card trigger as the last context line even though cards are filtered out of the context", () => {
+    // 승인·변경 카드는 맥락에서 전부 빠지지만(2026-09-15) 트리거는 필터와 무관하게 항상 마지막에 들어간다.
+    const approvalFixture = fixtureMessage("room.message.approval");
+    const own: RoomMessage = { ...approvalFixture, author: { kind: "agent", memberId: MINSU }, approval: { ...approvalFixture.approval!, memberId: MINSU } };
+    const { text } = build({ context: [msg({ text: "앞" }), own], trigger: own });
+    const lines = text.split("\n");
+    expect(lines.at(-3)).toBe("[#전체] 시스템: 민수의 승인 요청 'npm test 실행' — 대기 중");
+    expect(lines.filter((l) => l.includes("민수의 승인 요청"))).toHaveLength(1);
+
+    const changesFixture = fixtureMessage("room.message.changes");
+    const ownChanges: RoomMessage = { ...changesFixture, author: { kind: "agent", memberId: MINSU }, changes: { ...changesFixture.changes!, memberId: MINSU } };
+    const r = build({ context: [ownChanges], trigger: ownChanges });
+    expect(r.text.split("\n").at(-3)).toBe("[#전체] 시스템: 민수의 변경 준비됨: 2개 파일");
+  });
+
   it("puts the conflict note first", () => {
     const { text } = build({ context: [msg({ text: "앞" })], conflictNote: "main 을 브랜치에 머지하다 충돌했습니다: src/a.ts" });
     expect(text.startsWith("main 을 브랜치에 머지하다 충돌했습니다: src/a.ts\n\n[#전체] 사용자: 앞\n")).toBe(true);
@@ -273,13 +292,16 @@ describe("buildTurnText", () => {
   });
 });
 
+
 /**
- * 맥락 절감 측정(2026-09-14, Phase `9-side-rooms`, ADR-018). `dev-smoke.sh` 25단계가 만드는 방 로그와 같은 모양으로
- * **곁방에 참가하지 않은 팀원(철수)** 의 턴 입력을 두 번 만든다:
- * - `before` = 이 phase 이전 규칙 — 에이전트끼리의 대화가 전부 그룹방에 있었고(곁방 없음) 남의 승인·변경 카드도 맥락에 들어갔다.
- *   `buildTurnText` 는 이제 항상 `isContextRelevant` 로 거르므로, 카드를 **같은 문구의 system 줄로 바꿔**(렌더 결과가 같다는 것을
- *   아래 첫 케이스가 확인한다) 필터가 아무것도 떨어뜨리지 않게 만든 corpus 로 옛 규칙을 재현한다.
- * - `after` = 지금 규칙 — 곁방 대화는 맥락 방이 아니고(6.6) 남의 카드는 걸러진다(6.4).
+ * 맥락 절감 측정(2026-09-15 갱신. Phase `9-side-rooms` → `10-room-readability`, ADR-018). `dev-smoke.sh` 25단계가 만드는
+ * 방 로그와 같은 모양으로 **곁방에 참가하지 않은 팀원(철수)** 의 턴 입력을 **같은 corpus 로 세 번** 만든다:
+ * - `unfiltered` = phase 9 이전 — 에이전트끼리의 대화가 전부 그룹방에 있었고(곁방 없음) 모든 승인·변경 카드가 맥락에 들어갔다.
+ * - `phase9` = 2026-09-14 규칙 — 곁방 대화는 맥락 방이 아니고(6.6) **남의** 카드만 걸러졌다. 자기 카드는 남았다.
+ * - `now` = 2026-09-15 규칙 — 승인·변경 카드가 **전부** 빠진다(자기 것 포함. 6.4).
+ *
+ * `buildTurnText` 는 언제나 지금의 `isContextRelevant` 를 쓰므로, 옛 규칙은 **카드를 같은 문구의 system 줄로 바꾼**(렌더 결과가
+ * 같다는 것을 아래 첫 케이스가 확인한다) corpus 로 재현한다. 철수 자신의 `text` 는 이 corpus 에 없어서 세 규칙 모두 같다.
  */
 describe("buildTurnText 맥락 절감 측정", () => {
   const CHULSOO = "agt_01J8ZQ4K5N7P9R3S6T8V0W2XA3";
@@ -288,29 +310,38 @@ describe("buildTurnText 맥락 절감 측정", () => {
   const REPLY = "안녕하세요. 요청하신 명령을 실행하겠습니다.";
   const HANDOFF = `${REPLY} @jiyeon 확인 부탁해요.`;
   const SYSTEM_PREFIX = "시스템: ";
+  const LINT = "npx eslint src 2>&1 | tail -30"; // 실제 팀에서 관측된 승인 카드 제목: bash 명령 원문
 
   const cast = [...members, { id: CHULSOO, name: "철수", roleLabel: "코드 리뷰어" }];
   const stage = [...rooms, { id: SIDE_ROOM, kind: "side" as const, name: "민수 ↔ 지연" }];
   const chulsoo = cast.find((m) => m.id === CHULSOO)!;
 
   let cards = 0;
-  function approval(memberId: string, roomId: string): RoomMessage {
+  function approval(memberId: string, roomId: string, title?: string): RoomMessage {
     const fixture = fixtureMessage("room.message.approval");
     cards += 1;
-    return { ...fixture, id: `msg_apr${cards}`, roomId, author: { kind: "agent", memberId }, approval: { ...fixture.approval!, memberId } };
+    return {
+      ...fixture,
+      id: `msg_apr${cards}`,
+      roomId,
+      author: { kind: "agent", memberId },
+      ...(title !== undefined ? { text: title } : {}),
+      approval: { ...fixture.approval!, memberId },
+    };
   }
   function changes(memberId: string, roomId: string): RoomMessage {
     const fixture = fixtureMessage("room.message.changes");
     cards += 1;
     return { ...fixture, id: `msg_chg${cards}`, roomId, author: { kind: "agent", memberId }, changes: { ...fixture.changes!, memberId } };
   }
-  /** 옛 규칙 corpus: 곁방 메시지를 그룹방으로 되돌리고, 카드는 같은 문구의 system 줄로 바꿔 필터를 통과시킨다. */
-  function legacy(message: RoomMessage): RoomMessage {
-    const inGroup: RoomMessage = { ...message, roomId: GROUP_ROOM };
-    if (message.kind !== "approval" && message.kind !== "changes") return inGroup;
-    const line = formatMessageLine(inGroup, cast, stage);
+  const isCard = (m: RoomMessage): boolean => m.kind === "approval" || m.kind === "changes";
+  const isOwnCard = (m: RoomMessage): boolean => m.approval?.memberId === CHULSOO || m.changes?.memberId === CHULSOO;
+  /** 카드를 같은 문구의 system 줄로 바꾼다. 필터를 통과하므로 "그 카드가 맥락에 들어가던 시절" 을 재현한다. */
+  function shadow(message: RoomMessage): RoomMessage {
+    if (!isCard(message)) return message;
+    const line = formatMessageLine(message, cast, stage);
     return {
-      ...inGroup,
+      ...message,
       kind: "system",
       author: { kind: "system" },
       text: line.slice(line.indexOf(SYSTEM_PREFIX) + SYSTEM_PREFIX.length),
@@ -318,6 +349,10 @@ describe("buildTurnText 맥락 절감 측정", () => {
       changes: null,
     };
   }
+  /** phase 9 이전: 곁방 메시지도 그룹방에 있었고 카드는 전부 맥락에 들어갔다. */
+  const unfiltered = (m: RoomMessage): RoomMessage => shadow({ ...m, roomId: GROUP_ROOM });
+  /** phase 9(2026-09-14): 곁방은 분리되고 남의 카드만 빠졌다 — 자기 카드는 남았다. */
+  const phase9 = (m: RoomMessage): RoomMessage => (isOwnCard(m) ? shadow(m) : m);
 
   const group: RoomMessage[] = [
     msg({ text: "@minsu ask @jiyeon에게 확인 좀 부탁해", mentions: [MINSU] }),
@@ -330,6 +365,9 @@ describe("buildTurnText 맥락 절감 측정", () => {
     msg({ text: HANDOFF, author: { kind: "agent", memberId: MINSU } }),
     msg({ text: `민수 ↔ 지연 곁방 대화 5건 · 결론: ${REPLY}`, author: { kind: "system" }, kind: "system" }),
     changes(JIYEON, GROUP_ROOM),
+    // 철수 자신의 앞선 턴이 남긴 카드. 이 팀원의 세션 타임라인에 이미 있는 내용이다.
+    approval(CHULSOO, GROUP_ROOM, LINT),
+    changes(CHULSOO, GROUP_ROOM),
   ];
   const side: RoomMessage[] = [
     msg({ text: HANDOFF, author: { kind: "agent", memberId: MINSU }, roomId: SIDE_ROOM }),
@@ -350,22 +388,41 @@ describe("buildTurnText 맥락 절감 측정", () => {
     buildTurnText({ member: chulsoo, members: cast, rooms: stage, context, trigger, maxMessages: 40, maxChars: 12_000 });
 
   it("renders a shadowed card exactly like the card itself (so the legacy corpus is faithful)", () => {
-    const card = approval(JIYEON, GROUP_ROOM);
-    expect(formatMessageLine(legacy(card), cast, stage)).toBe(formatMessageLine(card, cast, stage));
-    expect(isContextRelevant(legacy(card), CHULSOO)).toBe(true);
-    expect(isContextRelevant(card, CHULSOO)).toBe(false);
+    const theirs = approval(JIYEON, GROUP_ROOM);
+    expect(formatMessageLine(shadow(theirs), cast, stage)).toBe(formatMessageLine(theirs, cast, stage));
+    expect(isContextRelevant(shadow(theirs), CHULSOO)).toBe(true);
+    expect(isContextRelevant(theirs, CHULSOO)).toBe(false);
+    // 2026-09-15: 자기 카드도 맥락에서 뺀다. 그림자(system 줄)만 옛 규칙을 재현한다.
+    const own = approval(CHULSOO, GROUP_ROOM, LINT);
+    expect(isContextRelevant(own, CHULSOO)).toBe(false);
+    expect(isContextRelevant(shadow(own), CHULSOO)).toBe(true);
   });
 
-  it("cuts a non-participant's turn input to 42% of the old rules", () => {
-    const before = measure([...group, ...side].map(legacy));
-    const after = measure(group);
-    expect(before.omitted).toBe(0);
-    expect(after.omitted).toBe(0);
+  it("cuts a non-participant's turn input across the two narrowings", () => {
+    const unfilteredRun = measure([...group, ...side].map(unfiltered));
+    const phase9Run = measure(group.map(phase9));
+    const nowRun = measure(group);
+    expect([unfilteredRun.omitted, phase9Run.omitted, nowRun.omitted]).toEqual([0, 0, 0]);
+
     // 곁방 대화는 참가자가 아닌 팀원에게 아예 보이지 않는다. 그룹방의 연결 카드(요약 한 줄)는 그대로 보인다.
-    expect(before.text).toContain(MARK);
-    expect(after.text).not.toContain(MARK);
-    expect(after.text).toContain("곁방 대화 5건");
-    // 실측(이 corpus 기준): 1,062자 → 443자. 58% 절감. 수치가 바뀌면 ADR-018 도 같이 고친다.
-    expect({ before: before.text.length, after: after.text.length }).toEqual({ before: 1062, after: 443 });
+    expect(unfilteredRun.text).toContain(MARK);
+    expect(phase9Run.text).not.toContain(MARK);
+    expect(nowRun.text).not.toContain(MARK);
+    expect(nowRun.text).toContain("곁방 대화 5건");
+    // 자기 승인 카드(bash 명령 원문)는 phase 9 까지 남아 있었고 이번 규칙에서 빠진다.
+    expect(phase9Run.text).toContain(LINT);
+    expect(nowRun.text).not.toContain(LINT);
+    expect(nowRun.text).not.toContain("승인 요청");
+    expect(nowRun.text).not.toContain("변경 준비됨");
+    // 머지 충돌 지시 같은 system 메시지는 남는다
+    expect(nowRun.text).toContain("[#전체] 시스템: 민수 ↔ 지연 곁방을 열었습니다");
+
+    // 실측(이 corpus 기준): 1,152자 → 533자 → 443자. 필터 없음 대비 62% 절감, phase 9 대비 17% 절감.
+    // 수치가 바뀌면 ADR-018 도 같이 고친다.
+    expect({ unfiltered: unfilteredRun.text.length, phase9: phase9Run.text.length, now: nowRun.text.length }).toEqual({
+      unfiltered: 1152,
+      phase9: 533,
+      now: 443,
+    });
   });
 });

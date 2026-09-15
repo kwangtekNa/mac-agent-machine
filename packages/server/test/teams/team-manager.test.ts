@@ -455,6 +455,38 @@ describe("TeamManager dispatch", () => {
     c.unsubscribe();
   });
 
+  it("keeps the member's own approval and change cards out of their own next turn input", async () => {
+    // 맥락 절감(PROTOCOL 6.4, 2026-09-15): 자기가 실행한 명령과 바꾼 파일은 그 팀원 세션 타임라인에 이미 있다.
+    const { teams, codex, manager, create } = await setup();
+    const team = await create();
+    const group = groupRoom(team);
+    const jiyeon = member(team, "지연");
+    const c = await collectRoom(teams, team.id, group.id);
+    await teams.postUserMessage(team.id, group.id, { text: "@지연 approve write" });
+    await waitUntil(() => c.events.some((e) => e.type === "room.message" && e.message.kind === "approval"));
+    const card = (c.events.find((e) => e.type === "room.message" && e.message.kind === "approval") as { message: RoomMessage }).message;
+    expect(card.approval!.memberId).toBe(jiyeon.id);
+    await manager.respondApproval(jiyeon.sessionId!, card.approval!.approval.approvalId, "allow");
+    await waitUntil(quiet(teams, team.id));
+    await waitUntil(() => teams.listChanges(team.id).length === 1);
+
+    // 방에는 자기 승인·변경 카드가 그대로 남는다(사람이 승인·머지해야 한다)
+    const messages = (await teams.roomDetail(team.id, group.id)).messages;
+    expect(messages.filter((m) => m.kind === "approval")).toHaveLength(1);
+    expect(messages.filter((m) => m.kind === "changes")).toHaveLength(1);
+
+    // 같은 팀원(지연)의 다음 턴 입력에는 자기 승인·변경 줄이 없다
+    await teams.postUserMessage(team.id, group.id, { text: "@지연 status" });
+    await waitUntil(quiet(teams, team.id));
+    expect(codex.sessions[0]!.turns).toHaveLength(2);
+    const turn = codex.sessions[0]!.turns[1]!.text;
+    expect(turn).not.toContain("승인 요청");
+    expect(turn).not.toContain("npm test 실행");
+    expect(turn).not.toContain("변경 준비됨");
+    expect(turn).toContain("[#전체] 사용자: @지연 status");
+    c.unsubscribe();
+  });
+
   it("commits worktree changes after the turn, posts a ready ChangeSet and marks the previous one stale", async () => {
     const { teams, repo, dataDir, create } = await setup();
     const team = await create();
