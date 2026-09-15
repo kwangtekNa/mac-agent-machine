@@ -125,6 +125,13 @@
 - 대안: (a) 맥락을 요약해 줄인다 — 요약 비용·환각이 생기고 원문이 필요한 코드·경로가 뭉개진다. (b) 상한(`contextMaxMessages`)만 낮춘다 — 무관한 줄이 먼저 들어와 필요한 줄을 밀어내는 문제는 그대로다. (c) 에이전트 간 대화를 금지한다 — ADR-017 의 팀 개념(팀장이 팀원을 부른다)을 잃는다.
 - 결과: 프로토콜은 추가만 있고(`kind: "side"`, `participants`, `sideRoom`, `sideRoomMaxParticipants`) 기존 클라이언트는 깨지지 않는다. 재현 가능한 측정은 `packages/server/test/teams/format.test.ts` 의 "맥락 절감 측정" 케이스다 — `scripts/dev-smoke.sh` 25단계와 같은 방 로그에서 곁방에 참가하지 않은 팀원의 턴 입력이 **1,152자(필터 없음) → 533자(2026-09-14 규칙) → 443자(2026-09-15 규칙)**, 즉 필터 없음 대비 **62% 절감**(2026-09-14 규칙 대비 17%)이고, 곁방 대화는 한 줄도 들어가지 않는 대신 연결 카드 요약은 남는다. 대신 방 수가 참가자 조합만큼 늘고(사람이 볼 목록이 길어진다) 그룹방만 읽는 사람은 곁방 카드를 눌러 들어가야 자세한 내용을 본다.
 
+## ADR-019 방 승인 카드의 진실은 세션이다 (시한 없음, 재시작 때 재조정)
+
+- 배경(2026-09-15 실제 팀에서 관측): 방에 미러링된 승인 카드(`RoomMessage.approval`)는 `approval.resolved` 를 **그 세션을 구독 중일 때만** 받아 채운다. 그런데 구독은 턴 동안만 유지되고, 게이트웨이가 재시작하면 `SessionManager.open` 이 모든 세션의 `pendingApprovals` 를 0 으로 되돌린다. 그래서 재시작·팀원 세션 종료 뒤에도 방에는 `resolution: null` 인 노란 "승인 대기" 카드가 영원히 남고 `room.snapshot.pendingApprovals` 에도 계속 들어갔다. 그 카드를 눌러 응답하면 `POST /api/v1/sessions/ses_…/approvals/apr_…` 가 404 `not_found` 를 돌려준다. 사용자는 이것을 "full-auto 로 바꿨는데도 계속 승인을 물어본다" 로 겪었다 — 실제 세션은 `mode: full-auto`, `pendingApprovals: 0` 이었고 모드 변경 **이전**에 생긴 유령 카드가 지워지지 않은 것이었다.
+- 결정: **진실은 세션이다.** 서버가 다시 열릴 때(`TeamManager.open`)와 팀원 세션이 닫힐 때(`resetMember`·`removeMember`) 방의 미해결 승인 카드를 `SessionManager` 의 실제 대기 목록과 대조한다(`reconcileApprovals`). 세션이 없거나 그 `approvalId` 가 대기 중이 아니면 `resolution = { optionId: "abort", by: "system", at }` 로 채운다 — `SessionManager.resolvePendingBySystem` 이 이미 쓰는 것과 **같은 규약**이다. 아직 대기 중인 승인은 건드리지 않는다(같은 프로세스에서 사람을 기다리는 승인을 죽이면 에이전트가 영원히 멈춘다). **승인에 시한은 두지 않는다** — 살아 있는 요청은 사람이 답할 때까지 기다린다. 카드는 지우거나 `kind` 를 바꾸지 않고(방 로그는 기록이다) 정리할 때 추가 시스템 메시지도 남기지 않는다(재시작 공지가 이미 있다).
+- 대안: (a) 미해결 카드를 무조건 전부 정리 — 살아 있는 승인까지 죽인다. (b) 승인 타임아웃(`by: "timeout"`) — 사람이 폰을 늦게 보는 것이 정상인데 그때마다 턴이 취소된다. (c) 카드를 삭제 — 무슨 일이 있었는지 기록이 사라진다.
+- 결과: 프로토콜은 그대로다(`ApprovalResolvedBy` 에 `system` 이 이미 있어 **스키마·fixture 변경 없음**). 유령 카드는 다음 기동에 자동으로 정리되므로 마이그레이션 스크립트가 필요 없다. 클라이언트는 `by: "system"` 으로 채워진 카드를 "취소됨" 으로 그린다. 방 seq 는 계속 `RoomManager` 만 발급한다(CRITICAL 7).
+
 ## 미결 사항
 
 | 항목 | 결정 시점 |

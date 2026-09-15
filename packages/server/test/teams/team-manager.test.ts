@@ -31,9 +31,26 @@ afterEach(async () => {
   for (const d of dirs.splice(0)) await removeTmp(d);
 });
 
+const makeApproval = (at: string): Approval => ({
+  approvalId: newId("apr"),
+  itemId: newId("itm"),
+  kind: "command",
+  title: "npm test 실행",
+  prompt: "run npm test",
+  detail: null,
+  diff: null,
+  options: [
+    { id: "allow", label: "허용", style: "primary" },
+    { id: "deny", label: "거절", style: "destructive" },
+  ],
+  inputFields: [],
+  requestedAt: at,
+});
+
 /**
  * 팀 테스트용 스크립트. 턴 텍스트의 트리거 줄(뒤에서 세 번째 줄: 트리거, 빈 줄, 꼬리말)에 따라 동작한다.
  * "fail" → 복구 불가 오류, "limit" → 한도 오류, "wait" → interrupt 될 때까지 대기, "approve" → 승인 요청,
+ * "ghost" → 승인 요청만 내보내고 기다리지 않는다(턴이 끝나도 세션에 대기 승인이 남는다),
  * "write" → `<cwd>/out.txt` 를 쓰고 file_change, "call jiyeon" → 답변에 `@지연 부탁해`.
  * 답변은 트리거 줄을 되돌리되 `@` 는 지운다(그대로 두면 답변 멘션이 되어 팀원끼리 연쇄가 생긴다).
  */
@@ -71,23 +88,13 @@ const teamScript: FakeScript = async (ctx) => {
     });
   }
   if (trigger.includes("approve")) {
-    const approval: Approval = {
-      approvalId: newId("apr"),
-      itemId: newId("itm"),
-      kind: "command",
-      title: "npm test 실행",
-      prompt: "run npm test",
-      detail: null,
-      diff: null,
-      options: [
-        { id: "allow", label: "허용", style: "primary" },
-        { id: "deny", label: "거절", style: "destructive" },
-      ],
-      inputFields: [],
-      requestedAt: ctx.now(),
-    };
+    const approval = makeApproval(ctx.now());
     ctx.emit({ type: "approval.requested", approval });
     await ctx.requestApproval(approval);
+  }
+  if (trigger.includes("ghost")) {
+    // 응답을 기다리지 않고 턴을 마친다: 세션에는 대기 승인이 남고 방 카드는 resolution: null 로 남는다.
+    ctx.emit({ type: "approval.requested", approval: makeApproval(ctx.now()) });
   }
   emitItem("tool_call", { tool: "bash", name: "Bash", title: "echo", input: {}, output: "ok\n", exitCode: 0, truncated: false });
   if (trigger.includes("write")) {
@@ -147,6 +154,10 @@ const quiet = (teams: TeamManager, teamId: string) => () => {
   return d.dispatch.running.length === 0 && d.dispatch.queued.length === 0 && d.team.members.every((m) => m.state === "idle" || m.state === "error");
 };
 const exists = async (p: string): Promise<boolean> => access(p).then(() => true, () => false);
+
+/** 구독으로 모은 이벤트에서 승인 카드(`room.message`)만 게시 순서대로. */
+const approvalCards = (events: RoomServerEvent[]): RoomMessage[] =>
+  events.flatMap((e) => (e.type === "room.message" && e.message.kind === "approval" ? [e.message] : []));
 
 async function collectRoom(teams: TeamManager, teamId: string, roomId: string) {
   const events: RoomServerEvent[] = [];
@@ -678,5 +689,122 @@ describe("TeamManager lifecycle", () => {
     expect(messages.at(-1)).toMatchObject({ kind: "text", author: { kind: "agent", memberId: member(team, "지연").id } });
     await second.teams.shutdown();
     await second.manager.shutdown();
+  });
+
+  it("reconciles orphaned approval cards on restart and leaves resolved ones untouched", async () => {
+    // 재시작하면 SessionManager 가 모든 세션의 대기 승인을 0 으로 되돌리므로 방의 미해결 카드는 전부 유령이다
+    // (PROTOCOL 6.4 "승인 미러링", ADR-019). 실제 팀에서 이 카드를 누르면 404 가 났다.
+    const first = await setup();
+    const team = await first.create();
+    const group = groupRoom(team);
+    const jiyeon = member(team, "지연");
+    const c = await collectRoom(first.teams, team.id, group.id);
+    // (1) 사용자가 실제로 응답해 by: "client" 로 해결된 카드
+    await first.teams.postUserMessage(team.id, group.id, { text: "@지연 approve" });
+    await waitUntil(() => approvalCards(c.events).length === 1);
+    const answered = approvalCards(c.events)[0]!;
+    await first.manager.respondApproval(jiyeon.sessionId!, answered.approval!.approval.approvalId, "allow");
+    await waitUntil(quiet(first.teams, team.id));
+    // (2) 팀장이 승인을 기다리는 채로 서버가 죽는다
+    await first.teams.postUserMessage(team.id, group.id, { text: "approve" });
+    await waitUntil(() => approvalCards(c.events).length === 2);
+    const ghost = approvalCards(c.events)[1]!;
+    expect((await first.teams.roomPendingApprovals(team.id, group.id)).map((a) => a.approval.approvalId)).toEqual([
+      ghost.approval!.approval.approvalId,
+    ]);
+    c.unsubscribe();
+    await first.teams.shutdown();
+    await first.manager.shutdown();
+
+    const second = await setup({ home: first.home });
+    const messages = (await second.teams.roomDetail(team.id, group.id)).messages;
+    const cleaned = messages.find((m) => m.id === ghost.id)!;
+    // 카드는 지우지 않고 kind·본문·seq 를 유지한 채 resolution 만 채운다
+    expect(cleaned).toMatchObject({ kind: "approval", text: ghost.text, seq: ghost.seq });
+    expect(cleaned.approval!.resolution).toMatchObject({ optionId: "abort", by: "system" });
+    expect(messages.find((m) => m.id === answered.id)!.approval!.resolution).toMatchObject({ optionId: "allow", by: "client" });
+    expect(await second.teams.roomPendingApprovals(team.id, group.id)).toEqual([]);
+    // 정리는 room.message.updated 로 나간다(같은 message.id, message.seq 는 원래 값)
+    const replay = await collectRoom(second.teams, team.id, group.id);
+    const updates = replay.events.filter((e) => e.type === "room.message.updated");
+    const forGhost = updates.filter((e) => e.type === "room.message.updated" && e.message.id === ghost.id);
+    expect(forGhost).toHaveLength(1);
+    const ev = forGhost[0]!;
+    if (ev.type !== "room.message.updated") throw new Error("type");
+    expect(ev.message.seq).toBe(ghost.seq);
+    expect(ev.seq).toBeGreaterThan(ghost.seq);
+    // 이미 해결된 카드는 재조정이 다시 쓰지 않는다(사용자 응답 1건뿐)
+    expect(updates.filter((e) => e.type === "room.message.updated" && e.message.id === answered.id)).toHaveLength(1);
+    replay.unsubscribe();
+    await second.teams.shutdown();
+    await second.manager.shutdown();
+  });
+
+  it("keeps a live approval card when another member is reset", async () => {
+    // 이 step 의 핵심 안전장치: 같은 프로세스에서 사람을 기다리는 승인은 재조정이 죽이지 않는다.
+    const { teams, manager, create } = await setup();
+    const team = await create();
+    const group = groupRoom(team);
+    const minsu = member(team, "민수");
+    const jiyeon = member(team, "지연");
+    const c = await collectRoom(teams, team.id, group.id);
+    await teams.postUserMessage(team.id, group.id, { text: "@지연 approve" });
+    await waitUntil(() => approvalCards(c.events).length === 1);
+    const card = approvalCards(c.events)[0]!;
+
+    await teams.resetMember(team.id, minsu.id);
+    const after = (await teams.roomDetail(team.id, group.id)).messages.find((m) => m.id === card.id)!;
+    expect(after.approval!.resolution).toBeNull();
+    expect(manager.pendingApprovals(jiyeon.sessionId!).map((a) => a.approvalId)).toEqual([card.approval!.approval.approvalId]);
+    expect(await teams.roomPendingApprovals(team.id, group.id)).toHaveLength(1);
+    expect(c.events.filter((e) => e.type === "room.message.updated" && e.message.id === card.id)).toHaveLength(0);
+
+    // 사람이 응답하면 그대로 client 로 해결된다
+    await manager.respondApproval(jiyeon.sessionId!, card.approval!.approval.approvalId, "allow");
+    await waitUntil(quiet(teams, team.id));
+    const resolved = (await teams.roomDetail(team.id, group.id)).messages.find((m) => m.id === card.id)!;
+    expect(resolved.approval!.resolution).toMatchObject({ optionId: "allow", by: "client" });
+    c.unsubscribe();
+  });
+
+  it("clears orphaned approval cards on resetMember and removeMember and fans the update out", async () => {
+    const { teams, manager, create } = await setup();
+    const team = await create();
+    const group = groupRoom(team);
+    const jiyeon = member(team, "지연");
+    const c = await collectRoom(teams, team.id, group.id);
+    // 턴이 끝난 뒤 세션이 닫히면(구독이 이미 끊긴 뒤라 approval.resolved 가 방에 반영되지 않는다) 카드가 유령이 된다
+    await teams.postUserMessage(team.id, group.id, { text: "@지연 ghost" });
+    await waitUntil(() => approvalCards(c.events).length === 1);
+    await waitUntil(quiet(teams, team.id));
+    const card = approvalCards(c.events)[0]!;
+    expect(await teams.roomPendingApprovals(team.id, group.id)).toHaveLength(1);
+    await manager.close(jiyeon.sessionId!);
+    expect((await teams.roomDetail(team.id, group.id)).messages.find((m) => m.id === card.id)!.approval!.resolution).toBeNull();
+
+    await teams.resetMember(team.id, jiyeon.id);
+    const cleaned = (await teams.roomDetail(team.id, group.id)).messages.find((m) => m.id === card.id)!;
+    expect(cleaned).toMatchObject({ kind: "approval", text: card.text, seq: card.seq });
+    expect(cleaned.approval!.resolution).toMatchObject({ optionId: "abort", by: "system" });
+    expect(await teams.roomPendingApprovals(team.id, group.id)).toEqual([]);
+    const updates = c.events.filter((e) => e.type === "room.message.updated" && e.message.id === card.id);
+    expect(updates).toHaveLength(1);
+    const ev = updates[0]!;
+    if (ev.type !== "room.message.updated") throw new Error("type");
+    expect(ev.message.seq).toBe(card.seq);
+    expect(ev.seq).toBeGreaterThan(card.seq);
+
+    // removeMember 도 같은 정리를 한다
+    const next = member(teams.getTeam(team.id), "지연");
+    await teams.postUserMessage(team.id, group.id, { text: "@지연 ghost" });
+    await waitUntil(() => approvalCards(c.events).length === 2);
+    await waitUntil(quiet(teams, team.id));
+    const second = approvalCards(c.events)[1]!;
+    await manager.close(next.sessionId!);
+    await teams.removeMember(team.id, next.id, {});
+    const afterRemove = (await teams.roomDetail(team.id, group.id)).messages.find((m) => m.id === second.id)!;
+    expect(afterRemove.approval!.resolution).toMatchObject({ optionId: "abort", by: "system" });
+    expect(await teams.roomPendingApprovals(team.id, group.id)).toEqual([]);
+    c.unsubscribe();
   });
 });

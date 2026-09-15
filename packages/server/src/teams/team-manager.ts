@@ -221,6 +221,12 @@ export class TeamManager {
         await tm.persist(rt);
       }
       await tm.reconcileChanges(rt);
+      // 재시작 직후에는 모든 세션의 대기 승인이 0 이라 방에 남은 미해결 카드는 전부 유령이다(ADR-019).
+      // 여기서 던진 예외가 기동을 막으면 안 된다.
+      await tm.reconcileApprovals(rt).catch((err) => {
+        tm.logger.warn(`[teams] 승인 카드 재조정 실패 team=${record.id}: ${errorMessage(err)}`);
+        return 0;
+      });
     }
     return tm;
   }
@@ -418,6 +424,7 @@ export class TeamManager {
     await this.interrupt(teamId, memberId);
     rt.queue.removeQueued(memberId);
     await this.closeSession(member);
+    await this.reconcileApprovals(rt);
     if (!opts.keepWorktree) await this.dropWorktree(rt.record, member);
     rt.record.members = rt.record.members.filter((m) => m.id !== memberId);
     this.refreshInstructions(rt);
@@ -433,6 +440,7 @@ export class TeamManager {
     const member = this.requireMember(rt, memberId);
     await this.interrupt(teamId, memberId);
     await this.closeSession(member);
+    await this.reconcileApprovals(rt);
     member.sessionId = null;
     member.state = "idle";
     await this.ensureSession(rt, member);
@@ -1502,6 +1510,43 @@ export class TeamManager {
       }
     }
     if (changed) await this.persistChanges(rt);
+  }
+
+  /**
+   * 방에 미러링된 승인 카드 중 세션에 더 이상 대기 중이 아닌 것을 시스템 취소로 정리한다.
+   * 서버 재시작·팀원 세션 종료 뒤 남는 유령 카드를 없앤다. 정리한 개수를 돌려준다.
+   * 진실은 세션이다(ADR-019): 아직 대기 중인 승인은 건드리지 않고 사람이 답할 때까지 기다린다(시한 없음).
+   * 카드는 지우지 않고 `resolution` 만 채우며, 정리할 때 추가 시스템 메시지는 남기지 않는다.
+   */
+  private async reconcileApprovals(rt: TeamRuntime): Promise<number> {
+    let cleaned = 0;
+    for (const room of rt.record.rooms) {
+      try {
+        for (const m of await rt.rooms.messagesSince(room.id, 0)) {
+          const mirrored = m.approval;
+          if (m.kind !== "approval" || mirrored === null || mirrored.resolution !== null) continue;
+          if (this.approvalIsPending(mirrored.sessionId, mirrored.approval.approvalId)) continue;
+          await rt.rooms.update(room.id, m.id, {
+            approval: { ...mirrored, resolution: { optionId: "abort", by: "system", at: this.iso() } },
+          });
+          cleaned += 1;
+        }
+      } catch (err) {
+        // 방 하나가 실패해도 나머지를 계속한다. 메시지 본문·승인 제목은 로그에 남기지 않는다(CRITICAL 6).
+        this.logger.warn(`[teams] 승인 카드 재조정 실패 team=${rt.record.id} room=${room.id}: ${errorMessage(err)}`);
+      }
+    }
+    return cleaned;
+  }
+
+  /** 그 승인이 세션에 아직 대기 중인가. 세션이 없거나 조회가 실패하면 유령이다(`pendingApprovals` 는 모르는 id 에 던진다). */
+  private approvalIsPending(sessionId: string, approvalId: string): boolean {
+    if (!this.manager.get(sessionId)) return false;
+    try {
+      return this.manager.pendingApprovals(sessionId).some((a) => a.approvalId === approvalId);
+    } catch {
+      return false;
+    }
   }
 }
 
