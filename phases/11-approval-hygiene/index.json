@@ -2,8 +2,39 @@
   "project": "mac-agent-machine",
   "phase": "11-approval-hygiene",
   "steps": [
-    { "step": 0, "name": "orphan-approval-reconcile", "status": "pending" },
-    { "step": 1, "name": "ios-system-resolution-label", "status": "pending" },
-    { "step": 2, "name": "verify-and-install", "status": "pending" }
-  ]
+    {
+      "step": 0,
+      "name": "orphan-approval-reconcile",
+      "status": "completed",
+      "started_at": "2026-09-15T15:37:30+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "c0fded3a-2406-4932-aae7-67894b7c96e1",
+          "cost_usd": 5.851380000000001,
+          "duration_s": 676.1,
+          "num_turns": 44,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 5.85138,
+      "duration_s": 676.1,
+      "retries": 0,
+      "session_id": "c0fded3a-2406-4932-aae7-67894b7c96e1",
+      "summary": "team-manager.ts 에 `reconcileApprovals`(+`approvalIsPending`) 추가 — 방의 미해결 승인 카드를 SessionManager 의 실제 대기 목록과 대조해 유령만 `{optionId:\"abort\", by:\"system\"}` 으로 정리(RoomManager.update 만 사용, 카드 삭제·추가 시스템 메시지 없음). 호출: `TeamManager.open`(reconcileChanges 옆, 기동 막지 않게 catch 방어), `resetMember`·`removeMember`(closeSession 직후). 테스트 3건 추가(재시작 정리+이벤트 전파+해결된 카드 불변 / 살아 있는 승인 보존 — mutation 으로 검증 / ghost 트리거로 만든 진짜 유령의 reset·remove 정리), 테스트 스크립트에 `ghost` 트리거 추가. 문서: PROTOCOL.md 6.4 승인 미러링 (2026-09-15 추가) 두 문장, ADR.md ADR-019. 프로토콜 스키마·fixture 변경 없음. AC 전부 통과(typecheck, 892 tests, dev-smoke MAM_DEV_PORT=7799 OK, scripts/test.sh OK).",
+      "completed_at": "2026-09-15T15:48:46+0900"
+    },
+    {
+      "step": 1,
+      "name": "ios-system-resolution-label",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "verify-and-install",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-09-15T15:37:30+0900"
 }
