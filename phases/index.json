@@ -57,7 +57,8 @@
     },
     {
       "dir": "11-approval-hygiene",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-09-15T16:08:08+0900"
     }
   ]
 }
