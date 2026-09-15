@@ -28,7 +28,25 @@
     {
       "step": 1,
       "name": "ios-system-resolution-label",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-15T15:48:46+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "055cdc2c-c7be-414c-baa3-bc557232425e",
+          "cost_usd": 4.449726999999999,
+          "duration_s": 568.5,
+          "num_turns": 50,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 4.449727,
+      "duration_s": 568.5,
+      "retries": 0,
+      "session_id": "055cdc2c-c7be-414c-baa3-bc557232425e",
+      "summary": "ApprovalCardBody.resolutionText(_:) 추가 — resolution.by 우선(.system→\"시스템이 취소함\", .timeout→\"시간 초과\", .client/미지값→기존 resolutionLabel(optionId)). 타임라인 ApprovalCardBody 본문과 RoomApprovalCardState.resolutionLine 이 같은 함수를 쓰고 resolutionLabel(_ optionId:)·ApprovalCard.resolutionLabel(_:) 는 유지. 테스트: 신규 ApprovalResolutionTextTests(표 + label 잔존), RoomApprovalCardStateTests 에 by:.system 케이스(+client abort 대조), RoomCardsRenderTests 에 렌더 확인(픽셀 배경색으로 노랑 아님 + system/client 픽셀 차이; SwiftUI 가 하위 UIView·접근성 요소를 안 만들어 문구는 순수 규칙으로 검증). 문서: docs/IOS.md 10.3 한 줄. 서버·프로토콜·fixture 무변경. AC 전부 통과(xcodebuild test exit 0, grep 2건, scripts/test.sh OK: TS 892 passed).",
+      "completed_at": "2026-09-15T15:58:15+0900"
     },
     {
       "step": 2,
