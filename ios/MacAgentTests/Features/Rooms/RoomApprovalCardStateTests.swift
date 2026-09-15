@@ -41,6 +41,25 @@ final class RoomApprovalCardStateTests: XCTestCase {
         XCTAssertEqual(state.title, "npm test 실행")
     }
 
+    /// 서버가 유령 카드를 정리한 경우(ADR-019, `by: "system"`). 사람이 누른 "중단됨" 과 구분돼야 한다.
+    func testSystemResolvedApprovalSaysSystemCancelled() throws {
+        let at = Date(timeIntervalSince1970: 1_757_000_000)
+        var cleaned = resolved!
+        cleaned.approval?.resolution = ApprovalResolution(optionId: "abort", by: .system, at: at)
+        let state = RoomApprovalCardState.make(message: cleaned, member: jiyeon)
+        XCTAssertFalse(state.isPending)
+        XCTAssertEqual(state.resolutionLine, "시스템이 취소함 · \(Formatters.clock(at))")
+        XCTAssertEqual(state.title, "npm test 실행")
+
+        var aborted = resolved!
+        aborted.approval?.resolution = ApprovalResolution(optionId: "abort", by: .client, at: at)
+        XCTAssertEqual(
+            RoomApprovalCardState.make(message: aborted, member: jiyeon).resolutionLine,
+            "중단됨 · \(Formatters.clock(at))",
+            "사람이 누른 중단은 그대로다"
+        )
+    }
+
     func testUnknownMemberLeavesSubtitleNil() {
         let state = RoomApprovalCardState.make(message: pending, member: nil)
         XCTAssertNil(state.subtitle)

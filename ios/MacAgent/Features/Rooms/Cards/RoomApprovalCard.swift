@@ -6,7 +6,7 @@ struct RoomApprovalCardState: Equatable {
     let title: String
     /// `🧑‍💻 지연 · 개발자`. 팀원을 모르면 nil.
     let subtitle: String?
-    /// 해결됐으면 `항상 허용됨 · 12:03`.
+    /// 해결됐으면 `항상 허용됨 · 12:03`. 서버가 정리한 카드는 `시스템이 취소함 · 12:03`.
     let resolutionLine: String?
     let isPending: Bool
 
@@ -16,7 +16,7 @@ struct RoomApprovalCardState: Equatable {
             return RoomApprovalCardState(title: message.text, subtitle: subtitle, resolutionLine: nil, isPending: false)
         }
         let resolutionLine = mirrored.resolution.map {
-            "\(ApprovalCardBody.resolutionLabel($0.optionId)) · \(Formatters.clock($0.at))"
+            "\(ApprovalCardBody.resolutionText($0)) · \(Formatters.clock($0.at))"
         }
         return RoomApprovalCardState(
             title: mirrored.approval.title,

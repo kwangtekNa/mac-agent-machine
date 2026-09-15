@@ -198,7 +198,7 @@ iPad(regular): `NavigationSplitView` 3열. 사이드바 = 프로젝트·세션, 
 ### 10.3 카드
 
 - **작업 요약**(`WorkSummaryCard`): 에이전트 답변 바로 아래 한 줄 `도구 7회 · 파일 3개 변경 · 12초`(+ ` · $0.04 추정`, 파일 0개면 "파일 변경 없음"). 전체가 버튼이며 탭하면 그 팀원의 타임라인(`work.sessionId`, compact push / iPad 디테일 열).
-- **승인**(`RoomApprovalCard`): 대기 중은 노란 배경 + `hand.raised.fill` + 팀원 칩 + 타임라인 `ApprovalCard` 와 같은 본문("자세히 보기" → 시트), 해결되면 "허용됨 · 12:03" 한 줄.
+- **승인**(`RoomApprovalCard`): 대기 중은 노란 배경 + `hand.raised.fill` + 팀원 칩 + 타임라인 `ApprovalCard` 와 같은 본문("자세히 보기" → 시트), 해결되면 "허용됨 · 12:03" 한 줄. 문구는 `ApprovalCardBody.resolutionText`(타임라인 카드와 공유)가 `resolution.by` 를 먼저 본다 — 서버가 정리한 카드(`by: "system"`, 재시작·세션 종료. PROTOCOL 6.4, ADR-019)는 "시스템이 취소함 · 12:03", `by: "timeout"` 은 "시간 초과 · 12:03", 그 밖에는 `optionId` 대로 "허용됨 / 항상 허용됨 / 거절됨 / 중단됨" 이다.
 - **변경 준비됨**(`ChangesReadyCard`, `.contain` 접근성): 팀원 칩, `mam/backend/jiyeon → main`, 파일 행(최대 5개 + "외 N개"). `ready` → **"<base>에 병합"**(확인 대화상자 "main에 병합합니다. 프로젝트의 작업 트리가 깨끗해야 합니다." 후 `POST .../merge`) + **"거절"**. `merging`/전송 중 → 진행 표시와 버튼 비활성. `merged` → 초록 체크 "병합됨 · a1b2c3d". `conflict` → 빨간 삼각형 + **충돌 파일** + "충돌이 났습니다. 지연이 worktree 에서 해결하면 새 카드가 올라옵니다"(해결 UI 는 없다. 해결은 팀원 턴이 한다). `dismissed` → "거절됨", `stale` → "새 변경으로 대체됨". 상태 확정은 서버 값(응답 ChangeSet 또는 `room.message.updated`)이며 낙관적 갱신은 없다. 서버 409 문구(더러운 작업 트리·다른 브랜치)는 카드 아래 빨간 캡션.
 
 ### 10.4 iPad

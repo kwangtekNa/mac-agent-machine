@@ -32,7 +32,7 @@ struct ApprovalCardBody: View {
 
     var body: some View {
         if let resolution {
-            Text("\(Self.resolutionLabel(resolution.optionId)) · \(Formatters.clock(resolution.at))")
+            Text("\(Self.resolutionText(resolution)) · \(Formatters.clock(resolution.at))")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         } else {
@@ -54,6 +54,17 @@ struct ApprovalCardBody: View {
         case "deny": return String(localized: "거절됨")
         case "abort": return String(localized: "중단됨")
         default: return optionId
+        }
+    }
+}
+
+extension ApprovalCardBody {
+    /// 해결 문구. 누가 처리했는지가 먼저다: 서버가 정리한 유령 카드(ADR-019)와 사람이 누른 결과를 구분한다.
+    static func resolutionText(_ resolution: ApprovalResolution) -> String {
+        switch resolution.by {
+        case .system: return String(localized: "시스템이 취소함")
+        case .timeout: return String(localized: "시간 초과")
+        case .client, .unknown: return resolutionLabel(resolution.optionId)
         }
     }
 }

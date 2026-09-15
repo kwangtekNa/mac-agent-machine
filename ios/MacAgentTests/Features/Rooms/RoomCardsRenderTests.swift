@@ -29,6 +29,45 @@ final class RoomCardsRenderTests: XCTestCase {
         UIHostingController(rootView: view).sizeThatFits(in: CGSize(width: width, height: 4000)).height
     }
 
+    /// 카드를 제 크기로 창에 붙여 그린다. 배경색을 실제 픽셀로 읽기 위해 라이트 모드로 고정한다.
+    private func renderCard<V: View>(_ view: V, width: CGFloat = 390) -> (image: UIImage, size: CGSize) {
+        let controller = UIHostingController(rootView: view)
+        let size = CGSize(width: width, height: controller.sizeThatFits(in: CGSize(width: width, height: 4000)).height)
+        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        window.overrideUserInterfaceStyle = .light
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        controller.view.frame = CGRect(origin: .zero, size: size)
+        controller.view.layoutIfNeeded()
+        defer { window.isHidden = true }
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { ctx in
+            window.layer.render(in: ctx.cgContext)
+        }
+        return (image, size)
+    }
+
+    /// 그려진 이미지의 한 점 색(0~1). 노란 배경은 파랑 채널만 크게 내려간다.
+    private func color(_ image: UIImage, at point: CGPoint) throws -> (r: CGFloat, g: CGFloat, b: CGFloat) {
+        let cg = try XCTUnwrap(image.cgImage)
+        let scale = image.scale
+        let rect = CGRect(x: (point.x * scale).rounded(.down), y: (point.y * scale).rounded(.down), width: 1, height: 1)
+        let pixelImage = try XCTUnwrap(cg.cropping(to: rect))
+        var pixel: [UInt8] = [0, 0, 0, 0]
+        let context = try XCTUnwrap(
+            pixel.withUnsafeMutableBytes { bytes in
+                CGContext(
+                    data: bytes.baseAddress,
+                    width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                )
+            }
+        )
+        context.draw(pixelImage, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return (CGFloat(pixel[0]) / 255, CGFloat(pixel[1]) / 255, CGFloat(pixel[2]) / 255)
+    }
+
+
     func testChangesReadyCardRendersMergeButtonAndFiles() throws {
         let changes = try message("room.message.changes")
         let ready = ChangesReadyCard(message: changes, member: jiyeon, submit: .idle, onMerge: {}, onDismiss: {})
@@ -69,6 +108,40 @@ final class RoomCardsRenderTests: XCTestCase {
         let resolvedHeight = height(RoomApprovalCard(message: resolved, member: jiyeon, onShowDetail: {}))
         XCTAssertGreaterThan(resolvedHeight, 60)
         XCTAssertLessThan(resolvedHeight, pendingHeight, "해결되면 한 줄 요약만 남는다")
+    }
+
+    /// 서버가 정리한 유령 승인(ADR-019)은 "시스템이 취소함" 으로 그려지고 노란 대기 배경이 아니다.
+    /// SwiftUI 는 하위 `UIView` 를 만들지 않아 문구를 계층에서 읽을 수 없으므로, 그려진 픽셀(배경색)과
+    /// 같은 카드를 사람이 중단한 경우와의 이미지 차이로 본다. 문구 자체는 같은 순수 규칙이 만든다.
+    func testSystemResolvedApprovalCardShowsSystemLabelWithoutPendingBackground() throws {
+        var cleaned = try message("room.message.updated")
+        let at = Date(timeIntervalSince1970: 1_757_000_000)
+        cleaned.approval?.resolution = ApprovalResolution(optionId: "abort", by: .system, at: at)
+        XCTAssertEqual(
+            RoomApprovalCardState.make(message: cleaned, member: jiyeon).resolutionLine,
+            "시스템이 취소함 · \(Formatters.clock(at))"
+        )
+
+        // 배경: 대기 중은 노란 배경(파랑 채널만 내려간다), 해결된 카드는 회색조 카드 배경이다.
+        let pending = try message("room.message.approval")
+        let pendingRender = renderCard(RoomApprovalCard(message: pending, member: jiyeon, onShowDetail: {}))
+        let pendingColor = try color(pendingRender.image, at: CGPoint(x: pendingRender.size.width - 4, y: pendingRender.size.height / 2))
+        XCTAssertGreaterThan(pendingColor.r - pendingColor.b, 0.1, "대기 중은 노란 배경이다")
+
+        let cleanedRender = renderCard(RoomApprovalCard(message: cleaned, member: jiyeon, onShowDetail: {}))
+        let cleanedColor = try color(cleanedRender.image, at: CGPoint(x: cleanedRender.size.width - 4, y: cleanedRender.size.height / 2))
+        XCTAssertLessThan(abs(cleanedColor.r - cleanedColor.b), 0.05, "해결된 카드는 회색조 배경이다")
+        XCTAssertLessThan(cleanedRender.size.height, pendingRender.size.height, "해결되면 한 줄 요약만 남는다")
+
+        // 같은 카드를 사람이 중단한 경우와 다른 픽셀을 그린다(본문이 `by` 를 본다는 뜻).
+        var aborted = cleaned
+        aborted.approval?.resolution = ApprovalResolution(optionId: "abort", by: .client, at: at)
+        let abortedRender = renderCard(RoomApprovalCard(message: aborted, member: jiyeon, onShowDetail: {}))
+        XCTAssertEqual(abortedRender.size, cleanedRender.size, "둘 다 한 줄짜리 해결 카드")
+        XCTAssertNotEqual(
+            cleanedRender.image.pngData(), abortedRender.image.pngData(),
+            "'시스템이 취소함' 과 '중단됨' 이 같게 그려지면 안 된다"
+        )
     }
 
     func testSideRoomCardRendersTitleAndConclusion() async throws {
