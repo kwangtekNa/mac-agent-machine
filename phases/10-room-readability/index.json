@@ -28,10 +28,28 @@
     {
       "step": 1,
       "name": "ios-work-group-cell",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         0
-      ]
+      ],
+      "started_at": "2026-09-15T12:12:45+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "aeb85c5a-bf7a-4c20-80d0-9c7f444d5b8f",
+          "cost_usd": 5.7894330000000025,
+          "duration_s": 706.9,
+          "num_turns": 49,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 5.789433,
+      "duration_s": 706.9,
+      "retries": 0,
+      "session_id": "aeb85c5a-bf7a-4c20-80d0-9c7f444d5b8f",
+      "summary": "방 화면 작업 카드 묶기 구현: 신규 `Features/Rooms/RoomEntryGroup.swift`(순수 `RoomEntryGroup`/`WorkGroupSummary`/`RoomEntryGrouping.group·isGroupable` — 해결된 승인·변경·비곁방 시스템 공지만 연속 묶음, 1건이어도 묶고 그룹 id = 첫 항목 id)와 `Features/Rooms/Cards/WorkGroupCell.swift`(접힘 = ItemCard 한 줄 hammer/tray.full + 제목 + \"명령 2 · 변경 2 · 공지 1\" + 노랑 \"머지 대기 N건\" 캡슐 + chevron, 펼침 = RoomEntryRow 로 기존 카드 인라인, 무상태 isExpanded/onToggle, 식별자 `room.workGroup.<id>`). `RoomView` 는 그룹 ForEach + `@State Set<String>` 펼침 상태 + `.defaultScrollAnchor(.bottom)`, `TimelineView` 는 앵커만 추가(기존 새 메시지 칩·자동 스크롤 무변경). docs/IOS.md 5.3 한 줄 + 10.12 신설. 테스트 신규 `RoomEntryGroupingTests`(12건)·`WorkGroupCellRenderTests`(2건) — 렌더 테스트는 접근성 트리가 비어 있어(VoiceOver 꺼진 테스트 프로세스) 기존 카드 테스트처럼 순수 문구 + 높이 비교로 검증. AC 전부 통과(xcodegen generate, xcodebuild test, 파일·grep, `bash scripts/test.sh` exit 0, TS 889 passed/10 skipped).",
+      "completed_at": "2026-09-15T12:24:32+0900"
     },
     {
       "step": 2,
