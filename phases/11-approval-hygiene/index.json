@@ -51,7 +51,25 @@
     {
       "step": 2,
       "name": "verify-and-install",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-15T15:58:15+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": "7d171ffb-bd90-4715-b8c7-7bc85414a7e2",
+          "cost_usd": 4.396257999999999,
+          "duration_s": 592.2,
+          "num_turns": 57,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 4.396258,
+      "duration_s": 592.2,
+      "retries": 0,
+      "session_id": "7d171ffb-bd90-4715-b8c7-7bc85414a7e2",
+      "summary": "iPhone 설치 성공(530EAE6A, dev.mam.MacAgent 빌드·install·launch 모두 OK). 유령 승인 카드 3건(전체 2 + 머스크↔올트먼↔icml 1, 전부 ses_01M2CXVR7B1H2J75V9VZB2M3B3)은 step 0 AC 로 돌린 dev-smoke 가 새 dist 로 agent-host 를 띄우면서 이미 2026-09-15T06:45:18Z 에 by:\"system\" 으로 정리돼 있었다 — 방 로그 타임스탬프로 3건→0건 전이를 확인했고, 이 step 시작 시 REST 는 그 dev-smoke 가 공용 개발 소켓을 정리해 502 agent_unavailable(ENOENT) 였다(bootout/bootstrap 으로 복구). 재시작 후 REST 재조사: 확언팀 13개 방 전부 미해결 승인 0건(해결된 카드 45+10건 보존), 표본 msg_01M2HCTHG4KQ0Z10TJT6ZMZAQR 의 resolution={\"optionId\":\"abort\",\"by\":\"system\",\"at\":\"2026-09-15T06:45:18.234Z\"}, 그 세션은 idle·full-auto·pendingApprovals 0. 살아 있는 승인은 없어 지워진 것 없음. 게이트: npm ci+typecheck+test 892 passed/10 skipped, iOS 499 passed/1 skipped, dev-smoke exit 0(25단계), agent-host 잔여 없음·7777 free, scripts/test.sh OK. dev.mam.dev-gateway 재기동(pid 27136, tailnet healthz 200, 로그에 listening on http://100.87.186.44:7777). 문서: docs/RUNBOOK.md 6절 \"재시작\" 한 줄(시스템이 취소함/턴 재요청/살아 있는 승인은 시한 없음). 코드·프로토콜 변경 없음. 참고: 기기 빌드에서 step 1 의 ApprovalCardBody.resolutionText(main actor 격리)를 RoomApprovalCardState.resolutionLine(nonisolated)에서 호출하는 Swift 6 동시성 경고가 나온다 — 빌드·테스트는 통과하며 nonisolated 한 단어로 해소 가능, 이 step 범위 밖이라 손대지 않았다.",
+      "completed_at": "2026-09-15T16:08:07+0900"
     }
   ],
   "created_at": "2026-09-15T15:37:30+0900"
