@@ -49,6 +49,10 @@
       "dir": "9-side-rooms",
       "status": "completed",
       "completed_at": "2026-09-14T17:25:33+0900"
+    },
+    {
+      "dir": "10-room-readability",
+      "status": "pending"
     }
   ]
 }
