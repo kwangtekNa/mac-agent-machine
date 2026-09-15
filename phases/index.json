@@ -54,6 +54,10 @@
       "dir": "10-room-readability",
       "status": "completed",
       "completed_at": "2026-09-15T13:38:51+0900"
+    },
+    {
+      "dir": "11-approval-hygiene",
+      "status": "pending"
     }
   ]
 }

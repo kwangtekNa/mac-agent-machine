@@ -1,0 +1,9 @@
+{
+  "project": "mac-agent-machine",
+  "phase": "11-approval-hygiene",
+  "steps": [
+    { "step": 0, "name": "orphan-approval-reconcile", "status": "pending" },
+    { "step": 1, "name": "ios-system-resolution-label", "status": "pending" },
+    { "step": 2, "name": "verify-and-install", "status": "pending" }
+  ]
+}
