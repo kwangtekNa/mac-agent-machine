@@ -54,10 +54,46 @@
     {
       "step": 2,
       "name": "verify-and-install",
-      "status": "pending",
+      "status": "completed",
       "depends_on": [
         1
-      ]
+      ],
+      "started_at": "2026-09-15T12:24:32+0900",
+      "attempts": [
+        {
+          "attempt": 1,
+          "session_id": null,
+          "cost_usd": null,
+          "duration_s": 1800.0,
+          "num_turns": null,
+          "exit_code": -1,
+          "timeout": true
+        },
+        {
+          "attempt": 2,
+          "session_id": null,
+          "cost_usd": null,
+          "duration_s": 1800.0,
+          "num_turns": null,
+          "exit_code": -1,
+          "timeout": true
+        },
+        {
+          "attempt": 3,
+          "session_id": "a52239dd-abac-4ada-95e3-c562a9b082a1",
+          "cost_usd": 2.4240150000000003,
+          "duration_s": 858.3,
+          "num_turns": 42,
+          "exit_code": 0,
+          "timeout": false
+        }
+      ],
+      "cost_usd": 2.424015,
+      "duration_s": 4458.3,
+      "retries": 2,
+      "session_id": "a52239dd-abac-4ada-95e3-c562a9b082a1",
+      "summary": "Step 2 verify-and-install 완료. 신규 ios/MacAgentUITests/WorkGroupUITests.swift(팀 REST 생성 → 그룹방 3턴 + 지연 DM 2턴 시드 → 방 재입장 시 맨 아래 작업 셀이 화면 안·첫 메시지는 화면 밖 → 라벨 \"변경 3건\"+\"머지 대기 2건\" → 탭해 인라인 펼침(변경 카드 3장 + room.merge.*) → 재탭 접힘 → @hyunwoo(auto-edit) 대기 중 승인은 접히지 않음 → 허용 후 room.workGroup.<msgId>로 접힘, teardown 은 REST 팀 삭제)와 TeamRoomUITests 의 expandWorkGroups 헬퍼, docs/IOS.md 10.12 UI 테스트 문단 2줄, docs/RUNBOOK.md \"팀 운영\" 방 읽기 한 줄. 검증: npm ci+typecheck+test 889 passed/10 skipped, dev-smoke.sh exit 0(25단계), UI 테스트 9/9 passed(WorkGroupUITests 49초·TeamRoomUITests 2분13초, xcresult 로 skip 아님 확인), 서버 종료 후 agent-host 잔여 없음·7777 free, bash scripts/test.sh OK. 맥락 절감 재측정(format.test.ts): 1,152자(필터 없음) → 533자(phase 9) → 443자(이번 규칙) = 필터 없음 대비 62%·phase 9 대비 17% 절감. dev.mam.dev-gateway LaunchAgent 재기동 완료(state=running, pid 7136) 및 tailnet http://100.87.186.44:7777/healthz = 200. iPhone(530EAE6A) 빌드·install·launch 전부 성공, dev.mam.MacAgent 1.0(1) 설치 확인.",
+      "completed_at": "2026-09-15T13:38:51+0900"
     }
   ],
   "created_at": "2026-09-15T12:02:59+0900"
