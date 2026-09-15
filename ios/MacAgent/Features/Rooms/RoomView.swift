@@ -40,6 +40,8 @@ struct RoomScreen: View {
     @State private var pushedRoom: RoomRef?
     /// 승인 카드 "자세히 보기" → `ApprovalSheet`(배너와 같은 모델).
     @State private var detailApproval: Approval?
+    /// 펼쳐 둔 작업 셀(그룹 id). 새 메시지가 와서 그룹이 다시 만들어져도 첫 항목 id 가 같으면 펼침이 유지된다(IOS.md 10.12).
+    @State private var expandedGroups: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -161,19 +163,36 @@ struct RoomScreen: View {
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                     }
-                    ForEach(model.entries) { entry in
-                        RoomEntryRow(
-                            entry: entry,
-                            members: model.members,
-                            onReply: reply,
-                            onOpenMember: openMember(sessionId:),
-                            onApprovalDetail: { id in detailApproval = model.pendingApprovals.first { $0.approvalId == id } },
-                            onOpenSideRoom: openSideRoom(roomId:),
-                            mergeSubmit: model.mergeSubmit,
-                            onMerge: { change in Task { await model.requestMerge(change) } },
-                            onDismiss: { change in Task { await model.dismiss(change) } }
-                        )
-                        .id(entry.id)
+                    ForEach(RoomEntryGrouping.group(model.entries, members: model.members)) { group in
+                        switch group {
+                        case .single(let entry):
+                            RoomEntryRow(
+                                entry: entry,
+                                members: model.members,
+                                onReply: reply,
+                                onOpenMember: openMember(sessionId:),
+                                onApprovalDetail: showApprovalDetail(approvalId:),
+                                onOpenSideRoom: openSideRoom(roomId:),
+                                mergeSubmit: model.mergeSubmit,
+                                onMerge: { change in Task { await model.requestMerge(change) } },
+                                onDismiss: { change in Task { await model.dismiss(change) } }
+                            )
+                            .id(entry.id)
+                        case .work(let id, let entries, let summary):
+                            WorkGroupCell(
+                                id: id,
+                                entries: entries,
+                                summary: summary,
+                                members: model.members,
+                                isExpanded: expandedGroups.contains(id),
+                                onToggle: { toggle(groupId: id) },
+                                onApprovalDetail: showApprovalDetail(approvalId:),
+                                mergeSubmit: model.mergeSubmit,
+                                onMerge: { change in Task { await model.requestMerge(change) } },
+                                onDismiss: { change in Task { await model.dismiss(change) } }
+                            )
+                            .id(id)
+                        }
                     }
                     WorkingBubble(members: model.workingMembers, activity: .working)
                     WorkingBubble(members: model.queuedMembers, activity: .queued)
@@ -189,6 +208,7 @@ struct RoomScreen: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
+            .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: model.lastSeq) { _, _ in
                 if isAtBottom {
@@ -223,6 +243,20 @@ struct RoomScreen: View {
     private var subtitle: String {
         guard isSideRoom else { return teamName }
         return String(localized: "에이전트 간 · 참가자 \(model.participants.count)명")
+    }
+
+    /// 작업 셀 머리 줄 탭: 그 자리에서 펼치고 접는다(별도 화면으로 보내지 않는다).
+    private func toggle(groupId: String) {
+        if expandedGroups.contains(groupId) {
+            expandedGroups.remove(groupId)
+        } else {
+            expandedGroups.insert(groupId)
+        }
+    }
+
+    /// 승인 카드 "자세히 보기" → 배너와 같은 `ApprovalSheet`.
+    private func showApprovalDetail(approvalId: String) {
+        detailApproval = model.pendingApprovals.first { $0.approvalId == approvalId }
     }
 
     /// 곁방 연결 카드 탭: compact 는 같은 스택에 push, regular(iPad)는 content 열의 선택을 바꾼다.

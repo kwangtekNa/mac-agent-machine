@@ -188,6 +188,7 @@ private struct TimelineScreen: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
+            .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: model.lastSeq) { _, _ in
                 if isAtBottom {

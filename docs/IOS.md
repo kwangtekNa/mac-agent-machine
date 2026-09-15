@@ -108,7 +108,7 @@ iPad(regular): `NavigationSplitView` 3열. 사이드바 = 프로젝트·세션, 
 
 - 타임라인은 `ScrollView` + `LazyVStack(spacing: 12)`. 카드는 `RoundedRectangle(cornerRadius: 12)`에 `.background(.thinMaterial)` 대신 `Color(.secondarySystemGroupedBackground)`. 그림자 없음.
 - 카드 내부 여백 12pt, 아이콘 열 24pt 고정, 제목·본문은 왼쪽 정렬. 시간은 카드 오른쪽 위 `.caption2 .secondary`.
-- 자동 스크롤: 사용자가 바닥에 있을 때만 새 이벤트를 따라간다. 위로 올라가 있으면 "새 이벤트 ↓" 작은 칩을 하단에 띄운다.
+- 자동 스크롤: 사용자가 바닥에 있을 때만 새 이벤트를 따라간다. 위로 올라가 있으면 "새 이벤트 ↓" 작은 칩을 하단에 띄운다. 방·타임라인은 열릴 때 최신 메시지가 보이도록 `.defaultScrollAnchor(.bottom)`(iOS 17+)을 쓴다.
 - 승인 배너: 컴포저 바로 위에 `.yellow.opacity(0.18)` 배경, 왼쪽 `hand.raised.fill`, 제목(굵게)·prompt 한 줄, 오른쪽에 옵션 버튼(`primary`는 `.borderedProminent`, `secondary`는 `.bordered`, `destructive`는 `.bordered` + `.tint(.red)`). 버튼이 3개를 넘으면 처음 2개 + "더 보기". 도착 시 `UINotificationFeedbackGenerator(.warning)` 햅틱 1회. 배너 등장은 아래에서 올라오는 애니메이션 1회, 그 외 애니메이션 없음.
 - 컴포저: `TextField(axis: .vertical)` 1~6줄, 오른쪽 버튼은 `running`이면 `stop.circle.fill`(중단), 아니면 `arrow.up.circle.fill`(보내기). 연결 끊김이면 비활성 + 위에 "다시 연결 중…" 캡션.
 
@@ -299,6 +299,21 @@ UI 테스트 `MacAgentUITests/TeamRoomUITests.swift` 가 누르는 순서대로.
 | `rooms.side.<roomId>` | 방 목록 "에이전트 간" 섹션의 곁방 행 |
 | `room.sideRoom.<roomId>` | 그룹방의 곁방 연결 카드(탭 → 그 곁방) |
 | `room.composer.caption` | 컴포저 위 캡션(곁방은 "참가자 전원에게 전달됩니다") |
+
+### 10.12 작업 카드 묶기 (2026-09-15, Phase `10-room-readability`)
+
+실제 팀(6명) 그룹방의 최근 42건은 대화 15 · 변경 카드 11 · 시스템 공지 11 · 승인 5 였다. 대화보다 작업 카드가 많아 읽기 어렵고, 같은 팀원이 턴마다 "변경 준비됨" 을 새 카드로 쌓는다. **서버 동작은 그대로 두고 화면에서만 접는다** — 카드는 방 로그·기록에 그대로 남고 프로토콜·`RoomModel` 은 바뀌지 않는다(묶기는 뷰 계층 순수 함수 `RoomEntryGrouping.group(_:members:)`).
+
+- **묶는 것**: 연속된 **해결된 승인 · 변경 · 시스템 공지**. 연속이면 **1건이어도** 무조건 한 셀(`WorkGroupCell`)로 접는다. 그룹 id 는 첫 항목의 메시지 id 라 뒤에 메시지가 붙어도 바뀌지 않는다(펼침 상태가 유지된다).
+- **묶지 않는 것**: **대기 중 승인**(사람이 눌러야 에이전트가 진행하므로 항상 펼쳐 둔다), **곁방 연결 카드**(그 방으로 가는 유일한 입구, 10.11), **대화**(`kind: text`). 이 셋은 그룹을 끊고 지금처럼 그려진다.
+- **접힌 모습**: `ItemCard` 한 줄 — `hammer`(머지 대기가 있으면 `tray.full`) `.secondary` 아이콘 + 제목 `작업 5건`(한 종류면 `명령 3건` · `변경 2건` · `공지 4건`, 팀원이 한 명이면 `지연 명령 3건`) + 수치 `명령 2 · 변경 2 · 공지 1`(한 종류면 없다) + **머지 대기 캡슐** `머지 대기 N건`(`arrow.triangle.merge` + `.yellow.opacity(0.18)`, `status == ready` 인 변경 카드 수) + `chevron.down`. 문구는 순수 `WorkGroupSummary` 가 만든다.
+- **펼치기는 그 자리에서**(인라인 토글, 별도 화면으로 보내지 않는다): 같은 셀 아래에 개별 카드(`RoomApprovalCard`·`ChangesReadyCard`·시스템 행)를 `RoomEntryRow` 로 **기존 뷰 그대로** 세로로 그린다(머지·거절 버튼도 그대로 동작한다). `chevron.up`. 펼침 상태는 `RoomView` 가 그룹 id 의 `Set<String>` 으로 들고 있고 셀은 `isExpanded` + `onToggle` 만 받는 무상태 뷰다.
+- **접근성**: 셀은 `.accessibilityElement(children: .contain)`(안에 버튼이 있다), 머리 줄 라벨 `작업 5건, 명령 2 변경 2 공지 1, 머지 대기 1건`, 힌트 "두 번 탭하면 펼칩니다".
+- 방에 들어가면 최신 메시지가 먼저 보인다(5.3 의 `.defaultScrollAnchor(.bottom)`). 세션 타임라인도 같다.
+
+| 식별자 | 위치 |
+|---|---|
+| `room.workGroup.<id>` | 접힌 작업 셀의 머리 줄(탭 → 그 자리에서 펼침/접힘). `<id>` 는 그룹 첫 항목의 메시지 id |
 
 ## 11. 범위 밖 (Phase 1)
 
