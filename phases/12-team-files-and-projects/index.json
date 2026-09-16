@@ -1,0 +1,10 @@
+{
+  "project": "mac-agent-machine",
+  "phase": "12-team-files-and-projects",
+  "steps": [
+    { "step": 0, "name": "projects-and-session-gc", "status": "pending" },
+    { "step": 1, "name": "ios-team-files", "status": "pending" },
+    { "step": 2, "name": "test-data-isolation", "status": "pending", "depends_on": [0] },
+    { "step": 3, "name": "verify-and-install", "status": "pending", "depends_on": [0, 1, 2] }
+  ]
+}
